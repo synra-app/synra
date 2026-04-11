@@ -1,0 +1,22 @@
+{
+  "name": "mobile",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "copy-web": "esno ./scripts/copy-web.ts",
+    "sync": "vp run copy-web && vp exec cap sync",
+    "sync:android": "vp run copy-web && vp exec cap sync android",
+    "open:android": "vp exec cap open android",
+    "open:ios": "vp exec cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/android": "catalog:",
+    "@capacitor/core": "catalog:",
+    "@capacitor/ios": "catalog:"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "catalog:",
+    "esno": "^4.8.0"
+  }
+}
