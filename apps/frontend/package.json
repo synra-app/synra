@@ -8,8 +8,23 @@
     "build": "tsc && vp build",
     "preview": "vp preview"
   },
+  "dependencies": {
+    "vue": "catalog:",
+    "vue-router": "catalog:"
+  },
   "devDependencies": {
+    "@unocss/preset-attributify": "catalog:",
+    "@unocss/preset-icons": "catalog:",
+    "@unocss/preset-typography": "catalog:",
+    "@unocss/preset-web-fonts": "catalog:",
+    "@unocss/preset-wind3": "catalog:",
+    "@unocss/reset": "catalog:",
+    "@unocss/vite": "catalog:",
+    "@vitejs/plugin-vue": "catalog:",
+    "sass": "catalog:",
     "typescript": "~6.0.2",
+    "uno-colors": "catalog:",
+    "unocss": "catalog:",
     "vite": "catalog:",
     "vite-plus": "catalog:"
   }
