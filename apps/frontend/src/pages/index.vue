@@ -5,5 +5,9 @@
       This page is rendered from <code>src/pages/index.vue</code> and mapped to route
       <code>/</code>.
     </p>
+    <p class="text-gray-600">
+      Try the Electron integration demo:
+      <RouterLink class="text-blue-600 underline" to="/electron-demo">/electron-demo</RouterLink>
+    </p>
   </section>
 </template>

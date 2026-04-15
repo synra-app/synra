@@ -1,0 +1,23 @@
+{
+  "name": "electron",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "vp dev --config vite.config.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@capacitor/core": "catalog:capacitor",
+    "@synra/capacitor-electron": "workspace:*"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "catalog:capacitor",
+    "@types/node": "catalog:types",
+    "electron": "catalog:",
+    "typescript": "catalog:types",
+    "vite-plugin-synra-electron": "workspace:*",
+    "vite-plus": "catalog:vite"
+  }
+}

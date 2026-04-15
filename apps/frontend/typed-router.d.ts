@@ -27,6 +27,13 @@ declare module "vue-router/auto-routes" {
    */
   export interface RouteNamedMap {
     "/": RouteRecordInfo<"/", "/", Record<never, never>, Record<never, never>, never>;
+    "/electron-demo": RouteRecordInfo<
+      "/electron-demo",
+      "/electron-demo",
+      Record<never, never>,
+      Record<never, never>,
+      never
+    >;
   }
 
   /**
@@ -42,6 +49,10 @@ declare module "vue-router/auto-routes" {
   export interface _RouteFileInfoMap {
     "src/pages/index.vue": {
       routes: "/";
+      views: never;
+    };
+    "src/pages/electron-demo.vue": {
+      routes: "/electron-demo";
       views: never;
     };
   }

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Synra Electron</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: Inter, system-ui, sans-serif;
+        padding: 24px;
+      }
+      pre {
+        background: #111827;
+        color: #e5e7eb;
+        padding: 16px;
+        border-radius: 8px;
+        overflow: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Synra Capacitor Electron Bridge</h1>
+    <p>Runtime info from <code>@synra/capacitor-electron</code>:</p>
+    <pre id="runtime">Loading...</pre>
+    <script type="module">
+      const el = document.getElementById("runtime");
+
+      try {
+        const data = await window.__synraCapElectron?.invoke("runtime.getInfo", {});
+        el.textContent = JSON.stringify(data, null, 2);
+      } catch (error) {
+        el.textContent = String(error);
+      }
+    </script>
+  </body>
+</html>

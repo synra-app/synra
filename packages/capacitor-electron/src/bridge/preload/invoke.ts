@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { BridgeError } from "../../shared/errors/bridge-error";
 import { BRIDGE_ERROR_CODES } from "../../shared/errors/codes";
 import {
@@ -25,6 +24,15 @@ export type InvokeOptions = {
   timeoutMs?: number;
   signal?: AbortSignal;
 };
+
+function createRequestId(): string {
+  const webCrypto = globalThis.crypto;
+  if (webCrypto && typeof webCrypto.randomUUID === "function") {
+    return webCrypto.randomUUID();
+  }
+
+  return `req-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
 
 function validatePayload(method: string, payload: unknown): void {
   if (
@@ -63,7 +71,7 @@ export function createPreloadInvoker(ipcInvoke: IpcInvoke) {
 
     const request: BridgeRequest = {
       protocolVersion: BRIDGE_PROTOCOL_VERSION,
-      requestId: randomUUID(),
+      requestId: createRequestId(),
       method: method as BridgeMethod,
       payload,
       meta: {
