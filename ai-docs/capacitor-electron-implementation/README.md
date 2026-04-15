@@ -2,42 +2,55 @@
 
 整理日期：2026-04-15
 
-本文档面向 `packages/capacitor-electron` 的重构与实现工作。目标是在不依赖已停更社区方案的前提下，建立一个可持续演进、类型安全、性能可控的 Capacitor + Electron 对接库。
+本文档集用于从零实现 `@synra/capacitor-electron`，目标是构建一个面向开源长期维护的 Capacitor + Electron 插件宿主层。
 
-## 背景与目标
+## 目标与定位
 
-当前社区仓库 `capacitor-community/electron` 已长期停止维护，且其设计基于较早期 Electron 与 Capacitor 生态。Synra 需要对接最新 Electron 稳定版本，并保持与现有 monorepo（Vite+、Capacitor 工作流）的一致性。
+- 面向 `packages/capacitor-electron` 建立可演进、可测试、可发布的实现方案。
+- 与 Capacitor 插件调用语义对齐（Promise API、稳定错误模型、版本可协商）。
+- 采用安全默认配置（最小暴露桥接、IPC 白名单、输入校验）。
+- 以开源可维护为前提定义兼容矩阵、测试矩阵、版本策略和发布策略。
 
-本方案目标：
+## 从零实现阅读顺序
 
-- 提供面向业务可复用的 `@synra/capacitor-electron` 库。
-- 以现代 TypeScript/Electron 实践重建桥接层，而不是直接复制旧实现。
-- 在“优雅封装”与“执行性能”之间平衡，保证开发体验与运行质量。
+以下顺序直接从架构设计开始：
 
-## 文档阅读顺序
+1. `01-architecture-and-layering.md`：确认分层、进程边界、信任边界与生命周期。
+2. `02-api-and-bridge-design.md`：固化 API/IPC 协议、错误码与版本兼容策略。
+3. `03-modern-stack-and-performance.md`：明确兼容矩阵、工程约束、性能与可观测性策略。
+4. `04-implementation-roadmap.md`：按开源交付节奏执行里程碑（MVP -> Beta -> 1.0）。
+5. `checklist.md`：实现与验收的执行清单。
 
-1. `01-current-state-analysis.md`：先看当前脚手架现状与缺口。
-2. `02-architecture-and-layering.md`：统一分层、职责与边界。
-3. `03-api-and-bridge-design.md`：确定 JS API 与 IPC 协议。
-4. `04-modern-stack-and-performance.md`：锁定技术选型与性能约束。
-5. `05-implementation-roadmap.md`：按里程碑推进落地。
-6. `checklist.md`：执行清单与验收标准。
+## 术语
 
-## 作用范围
+- `Renderer`：Capacitor WebView 渲染进程。
+- `Preload`：渲染进程和主进程之间的受限桥接层。
+- `Main`：Electron 主进程，负责能力调度与安全边界控制。
+- `Service`：宿主能力实现层（文件系统、窗口、系统交互等）。
+- `Adapter`：Electron/Node API 适配层，用于隔离底层版本变化。
+- `Protocol`：跨进程请求/响应模型、错误模型、版本字段与 channel 规范。
 
-本目录仅用于“实现设计与执行指导”，不直接承载运行时代码。所有实现代码后续统一落在：
+## 范围与非范围
 
-- `packages/capacitor-electron`
+范围内：
 
-主流程（跨端通讯、插件运行时、`@synra/*` 包体系）已迁移到 `ai-docs/main`。
+- `@synra/capacitor-electron` 内部架构、API/协议、测试、发布与开源交付要求。
+- Electron 宿主桥接能力的设计与落地标准。
 
-## 外部参考
+范围外：
 
-- 历史社区实现（仅用于调研对比，不直接继承）：[capacitor-community/electron](https://github.com/capacitor-community/electron)
+- 跨端传输、插件运行时编排等 `ai-docs/main` 中已定义主题。
 
-## 设计原则（总览）
+## 开源对齐基线
 
-- 接口先行：先定义 API 合同与数据模型，再实现桥接层。
-- 分层清晰：JS 入口、preload、main、服务层职责分离。
-- 稳定优先：Electron 升级时尽量通过适配层收敛变更面。
-- 性能有预算：关键路径有指标，避免“跑得通但不可扩展”。
+- 参考社区项目：[capacitor-community/electron](https://github.com/capacitor-community/electron)。
+- 策略为“理念对齐 + 现代化重建”，不直接复制旧实现细节。
+- 需要在文档中持续保持四项显式约束：兼容矩阵、安全基线、测试矩阵、版本策略。
+
+## 执行原则
+
+- 接口先行：先冻结协议与错误模型，再实现具体能力。
+- 安全默认：默认拒绝、显式授权，不在 preload 暴露多余对象。
+- 分层单向依赖：上层依赖下层，禁止跨层反向引用。
+- 可观测优先：关键调用必须具备 requestId、耗时、结果状态。
+- 变更可发布：每个里程碑均可验证、可回滚、可说明迁移影响。
