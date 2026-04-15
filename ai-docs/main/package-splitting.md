@@ -1,4 +1,4 @@
-# 08 Packages 拆分方案（@synra 命名空间）
+# Packages 拆分方案（@synra 命名空间）
 
 ## 目标
 
