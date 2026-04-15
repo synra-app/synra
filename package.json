@@ -6,6 +6,7 @@
   "scripts": {
     "ready": "vp fmt && vp lint && vp run -r test && vp run -r build",
     "dev": "vp run frontend#dev",
+    "test": "vp run -r test",
     "lint": "vp lint --fix",
     "prepare": "vp config"
   },
