@@ -1,0 +1,11 @@
+---
+description: Enforce English in code and tests, allow Chinese in docs
+alwaysApply: true
+---
+
+# Language Policy
+
+- Write all code, unit tests, and code comments in English.
+- Do not add Chinese text in source/config files (for example `*.ts`, `*.tsx`, `*.js`, `*.vue`, `*.json`, `*.yml`).
+- Documentation files may use Chinese (for example `*.md` under `ai-docs/`).
+- Keep user-facing data values unchanged when explicitly requested (for example a fixed test input label).
