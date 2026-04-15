@@ -3,36 +3,43 @@ packages:
   - packages/*
   - tools/*
 allowBuilds:
+  "@parcel/watcher": true
   esbuild: true
 
-catalog:
-  "@capacitor/android": ^8.3.0
-  "@capacitor/cli": ^8.3.0
-  "@capacitor/core": ^8.3.0
-  "@capacitor/ios": ^8.3.0
-  "@types/node": ^25.6.0
-  "@unocss/preset-attributify": ^66.6.8
-  "@unocss/preset-icons": ^66.6.8
-  "@unocss/preset-typography": ^66.6.8
-  "@unocss/preset-web-fonts": ^66.6.8
-  "@unocss/preset-wind3": ^66.6.8
-  "@unocss/reset": ^66.6.8
-  "@unocss/vite": ^66.6.8
-  "@vitejs/plugin-vue": ^6.0.6
-  sass: ^1.99.0
-  typescript: ^6.0.2
-  uno-colors: ^0.1.0
-  unocss: ^66.6.8
-  vite: npm:@voidzero-dev/vite-plus-core@0.1.16
-  vite-plus: ^0.1.18
-  vitest: npm:@voidzero-dev/vite-plus-test@0.1.16
-  vue: ^3.5.32
-  vue-router: ^5.0.4
+catalogs:
+  capacitor:
+    "@capacitor/android": ^8.3.0
+    "@capacitor/cli": ^8.3.0
+    "@capacitor/core": ^8.3.0
+    "@capacitor/ios": ^8.3.0
+  types:
+    "@types/node": ^25.6.0
+    typescript: ^6.0.2
+  unocss:
+    "@unocss/preset-attributify": ^66.6.8
+    "@unocss/preset-icons": ^66.6.8
+    "@unocss/preset-typography": ^66.6.8
+    "@unocss/preset-web-fonts": ^66.6.8
+    "@unocss/preset-wind3": ^66.6.8
+    "@unocss/reset": ^66.6.8
+    "@unocss/vite": ^66.6.8
+    unocss: ^66.6.8
+  vue:
+    vue: ^3.5.32
+    vue-router: ^5.0.4
+  vite:
+    "@vitejs/plugin-vue": ^6.0.6
+    vite: npm:@voidzero-dev/vite-plus-core@0.1.16
+    vite-plus: ^0.1.18
+    vitest: npm:@voidzero-dev/vite-plus-test@0.1.16
+  style:
+    sass: ^1.99.0
+    uno-colors: ^0.1.0
 
 catalogMode: prefer
 overrides:
-  vite: "catalog:"
-  vitest: "catalog:"
+  vite: "catalog:vite"
+  vitest: "catalog:vite"
 peerDependencyRules:
   allowAny:
     - vite

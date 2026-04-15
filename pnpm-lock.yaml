@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 catalogs:
-  default:
+  capacitor:
     '@capacitor/android':
       specifier: ^8.3.0
       version: 8.3.0
@@ -18,6 +18,21 @@ catalogs:
     '@capacitor/ios':
       specifier: ^8.3.0
       version: 8.3.0
+  style:
+    sass:
+      specifier: ^1.99.0
+      version: 1.99.0
+    uno-colors:
+      specifier: ^0.1.0
+      version: 0.1.0
+  types:
+    '@types/node':
+      specifier: ^25.6.0
+      version: 25.6.0
+    typescript:
+      specifier: ^6.0.2
+      version: 6.0.2
+  unocss:
     '@unocss/preset-attributify':
       specifier: ^66.6.8
       version: 66.6.8
@@ -39,21 +54,17 @@ catalogs:
     '@unocss/vite':
       specifier: ^66.6.8
       version: 66.6.8
-    '@vitejs/plugin-vue':
-      specifier: ^6.0.6
-      version: 6.0.6
-    sass:
-      specifier: ^1.99.0
-      version: 1.99.0
-    uno-colors:
-      specifier: ^0.1.0
-      version: 0.1.0
     unocss:
       specifier: ^66.6.8
       version: 66.6.8
+  vite:
+    '@vitejs/plugin-vue':
+      specifier: ^6.0.6
+      version: 6.0.6
     vite-plus:
       specifier: ^0.1.18
       version: 0.1.18
+  vue:
     vue:
       specifier: ^3.5.32
       version: 3.5.32
@@ -69,94 +80,168 @@ importers:
 
   .:
     devDependencies:
+      '@types/node':
+        specifier: catalog:types
+        version: 25.6.0
       vite-plus:
-        specifier: 'catalog:'
+        specifier: catalog:vite
         version: 0.1.18(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(typescript@6.0.2)(vite@8.0.8(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(yaml@2.8.3))(yaml@2.8.3)
 
   apps/frontend:
     dependencies:
       vue:
-        specifier: 'catalog:'
+        specifier: catalog:vue
         version: 3.5.32(typescript@6.0.2)
       vue-router:
-        specifier: 'catalog:'
+        specifier: catalog:vue
         version: 5.0.4(@vue/compiler-sfc@3.5.32)(vue@3.5.32(typescript@6.0.2))
     devDependencies:
       '@unocss/preset-attributify':
-        specifier: 'catalog:'
+        specifier: catalog:unocss
         version: 66.6.8
       '@unocss/preset-icons':
-        specifier: 'catalog:'
+        specifier: catalog:unocss
         version: 66.6.8
       '@unocss/preset-typography':
-        specifier: 'catalog:'
+        specifier: catalog:unocss
         version: 66.6.8
       '@unocss/preset-web-fonts':
-        specifier: 'catalog:'
+        specifier: catalog:unocss
         version: 66.6.8
       '@unocss/preset-wind3':
-        specifier: 'catalog:'
+        specifier: catalog:unocss
         version: 66.6.8
       '@unocss/reset':
-        specifier: 'catalog:'
+        specifier: catalog:unocss
         version: 66.6.8
       '@unocss/vite':
-        specifier: 'catalog:'
+        specifier: catalog:unocss
         version: 66.6.8(@voidzero-dev/vite-plus-core@0.1.16(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(typescript@6.0.2)(yaml@2.8.3))
       '@vitejs/plugin-vue':
-        specifier: 'catalog:'
+        specifier: catalog:vite
         version: 6.0.6(@voidzero-dev/vite-plus-core@0.1.16(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(typescript@6.0.2)(yaml@2.8.3))(vue@3.5.32(typescript@6.0.2))
       sass:
-        specifier: 'catalog:'
+        specifier: catalog:style
         version: 1.99.0
       typescript:
         specifier: ~6.0.2
         version: 6.0.2
       uno-colors:
-        specifier: 'catalog:'
+        specifier: catalog:style
         version: 0.1.0
       unocss:
-        specifier: 'catalog:'
+        specifier: catalog:unocss
         version: 66.6.8(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)(@voidzero-dev/vite-plus-core@0.1.16(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(typescript@6.0.2)(yaml@2.8.3))
       vite:
         specifier: npm:@voidzero-dev/vite-plus-core@0.1.16
         version: '@voidzero-dev/vite-plus-core@0.1.16(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(typescript@6.0.2)(yaml@2.8.3)'
       vite-plus:
-        specifier: 'catalog:'
+        specifier: catalog:vite
         version: 0.1.18(@types/node@25.6.0)(@voidzero-dev/vite-plus-core@0.1.16(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(typescript@6.0.2)(yaml@2.8.3))(esbuild@0.27.7)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(typescript@6.0.2)(yaml@2.8.3)
 
   apps/mobile:
     dependencies:
       '@capacitor/android':
-        specifier: 'catalog:'
+        specifier: catalog:capacitor
         version: 8.3.0(@capacitor/core@8.3.0)
       '@capacitor/core':
-        specifier: 'catalog:'
+        specifier: catalog:capacitor
         version: 8.3.0
       '@capacitor/ios':
-        specifier: 'catalog:'
+        specifier: catalog:capacitor
         version: 8.3.0(@capacitor/core@8.3.0)
     devDependencies:
       '@capacitor/cli':
-        specifier: 'catalog:'
+        specifier: catalog:capacitor
         version: 8.3.0
       esno:
         specifier: ^4.8.0
         version: 4.8.0
 
-  packages/utils:
+  packages/capacitor-electron:
     devDependencies:
       '@types/node':
-        specifier: ^25.6.0
+        specifier: catalog:types
+        version: 25.6.0
+      '@typescript/native-preview':
+        specifier: 7.0.0-dev.20260328.1
+        version: 7.0.0-dev.20260328.1
+      bumpp:
+        specifier: ^11.0.1
+        version: 11.0.1
+      typescript:
+        specifier: catalog:types
+        version: 6.0.2
+      vite-plus:
+        specifier: catalog:vite
+        version: 0.1.18(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(typescript@6.0.2)(vite@8.0.8(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(yaml@2.8.3))(yaml@2.8.3)
+
+  packages/plugin-sdk:
+    dependencies:
+      '@synra/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+    devDependencies:
+      '@types/node':
+        specifier: catalog:types
         version: 25.6.0
       bumpp:
         specifier: ^11.0.1
         version: 11.0.1
       typescript:
-        specifier: ^6.0.2
+        specifier: catalog:types
         version: 6.0.2
       vite-plus:
-        specifier: ^0.1.18
+        specifier: catalog:vite
+        version: 0.1.18(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(typescript@6.0.2)(vite@8.0.8(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(yaml@2.8.3))(yaml@2.8.3)
+
+  packages/protocol:
+    devDependencies:
+      '@types/node':
+        specifier: catalog:types
+        version: 25.6.0
+      bumpp:
+        specifier: ^11.0.1
+        version: 11.0.1
+      typescript:
+        specifier: catalog:types
+        version: 6.0.2
+      vite-plus:
+        specifier: catalog:vite
+        version: 0.1.18(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(typescript@6.0.2)(vite@8.0.8(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(yaml@2.8.3))(yaml@2.8.3)
+
+  packages/transport-core:
+    dependencies:
+      '@synra/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+    devDependencies:
+      '@types/node':
+        specifier: catalog:types
+        version: 25.6.0
+      bumpp:
+        specifier: ^11.0.1
+        version: 11.0.1
+      typescript:
+        specifier: catalog:types
+        version: 6.0.2
+      vite-plus:
+        specifier: catalog:vite
+        version: 0.1.18(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(typescript@6.0.2)(vite@8.0.8(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(yaml@2.8.3))(yaml@2.8.3)
+
+  packages/utils:
+    devDependencies:
+      '@types/node':
+        specifier: catalog:types
+        version: 25.6.0
+      bumpp:
+        specifier: ^11.0.1
+        version: 11.0.1
+      typescript:
+        specifier: catalog:types
+        version: 6.0.2
+      vite-plus:
+        specifier: catalog:vite
         version: 0.1.18(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(typescript@6.0.2)(vite@8.0.8(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(yaml@2.8.3))(yaml@2.8.3)
 
 packages:
@@ -1065,6 +1150,45 @@ packages:
 
   '@types/slice-ansi@4.0.0':
     resolution: {integrity: sha512-+OpjSaq85gvlZAYINyzKpLeiFkSC4EsC6IIiT6v6TLSU5k5U83fHGj9Lel8oKEXM0HqgrMVCjXPDPVICtxF7EQ==}
+
+  '@typescript/native-preview-darwin-arm64@7.0.0-dev.20260328.1':
+    resolution: {integrity: sha512-BmJGDWC0bSQ2w5O/E+Mw9eTv9RklJ3vjshu7UdD92bUMxc4V4dkBhYj5r0qxbl4f+VFNX7fXvcDDI+9o+Kb6yw==}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@typescript/native-preview-darwin-x64@7.0.0-dev.20260328.1':
+    resolution: {integrity: sha512-osc0XQn+AV4X/Vz4hehMm9YtwjZU8VN57FBx4/bsoZ2Z3H1KCA2vbrPQx1hxobrA/+LxkTEk/i6L+z1XwI3RTw==}
+    cpu: [x64]
+    os: [darwin]
+
+  '@typescript/native-preview-linux-arm64@7.0.0-dev.20260328.1':
+    resolution: {integrity: sha512-UdPWbxynH/yu54Bx9SSmUsdBQVcKeB8hVLXWiF6qKGDQxwUmqo04xa+PUdxryUXxYzjedbqKMhDLL/W0AlbUMQ==}
+    cpu: [arm64]
+    os: [linux]
+
+  '@typescript/native-preview-linux-arm@7.0.0-dev.20260328.1':
+    resolution: {integrity: sha512-869rJ0Clw7aQTApV1dts2bKV+V6E0qNFJae3SNRo+4TPmrwlmYct3ouGrsQsDCat6XIaCdul8YOBzmj4QUzuMw==}
+    cpu: [arm]
+    os: [linux]
+
+  '@typescript/native-preview-linux-x64@7.0.0-dev.20260328.1':
+    resolution: {integrity: sha512-0ZPwzToIRV4r2L/wZUwTD9DvZsVnezrc7x5xwZedGvuRifUKMAAwI+rGaKHqHq5nE5Y1gQA/wwMPPJ4xq6hzVw==}
+    cpu: [x64]
+    os: [linux]
+
+  '@typescript/native-preview-win32-arm64@7.0.0-dev.20260328.1':
+    resolution: {integrity: sha512-iCgWfPDIbs0xB+zkVu5IFfcco3II3b7DhatIa1hQiTFH4vGs0A4/LskLbSYyWOId4j5WEkCKK5T0KNnEYfbg1g==}
+    cpu: [arm64]
+    os: [win32]
+
+  '@typescript/native-preview-win32-x64@7.0.0-dev.20260328.1':
+    resolution: {integrity: sha512-k1/yoqrELzkm6eOFaYm9x+M7mDOlArO1P0YvEgEmcdnL6Igm+0ZmGy6eDmhk9pshPb0GfL1knN6c+5sJA7YReA==}
+    cpu: [x64]
+    os: [win32]
+
+  '@typescript/native-preview@7.0.0-dev.20260328.1':
+    resolution: {integrity: sha512-e2f1LaETJ1wFIZSZAJwsAumWixGaRslUjESf0nSrZGUensq3ZwXddoDJPPoDLkSAr/Fa3v5aff+dJ39UbNfbNQ==}
+    hasBin: true
 
   '@unocss/cli@66.6.8':
     resolution: {integrity: sha512-dJ4AmrhCtQwEDJtpFG7AgJ4Qi4GWnNgWWlLWq4DhKBOCcvldr9k98mscdhs3MOwph25DIxU5MdLRAg/OS1JryQ==}
@@ -2852,6 +2976,37 @@ snapshots:
       undici-types: 7.19.2
 
   '@types/slice-ansi@4.0.0': {}
+
+  '@typescript/native-preview-darwin-arm64@7.0.0-dev.20260328.1':
+    optional: true
+
+  '@typescript/native-preview-darwin-x64@7.0.0-dev.20260328.1':
+    optional: true
+
+  '@typescript/native-preview-linux-arm64@7.0.0-dev.20260328.1':
+    optional: true
+
+  '@typescript/native-preview-linux-arm@7.0.0-dev.20260328.1':
+    optional: true
+
+  '@typescript/native-preview-linux-x64@7.0.0-dev.20260328.1':
+    optional: true
+
+  '@typescript/native-preview-win32-arm64@7.0.0-dev.20260328.1':
+    optional: true
+
+  '@typescript/native-preview-win32-x64@7.0.0-dev.20260328.1':
+    optional: true
+
+  '@typescript/native-preview@7.0.0-dev.20260328.1':
+    optionalDependencies:
+      '@typescript/native-preview-darwin-arm64': 7.0.0-dev.20260328.1
+      '@typescript/native-preview-darwin-x64': 7.0.0-dev.20260328.1
+      '@typescript/native-preview-linux-arm': 7.0.0-dev.20260328.1
+      '@typescript/native-preview-linux-arm64': 7.0.0-dev.20260328.1
+      '@typescript/native-preview-linux-x64': 7.0.0-dev.20260328.1
+      '@typescript/native-preview-win32-arm64': 7.0.0-dev.20260328.1
+      '@typescript/native-preview-win32-x64': 7.0.0-dev.20260328.1
 
   '@unocss/cli@66.6.8':
     dependencies:

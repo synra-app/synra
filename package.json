@@ -10,7 +10,8 @@
     "prepare": "vp config"
   },
   "devDependencies": {
-    "vite-plus": "catalog:"
+    "@types/node": "catalog:types",
+    "vite-plus": "catalog:vite"
   },
   "engines": {
     "node": ">=22.12.0"

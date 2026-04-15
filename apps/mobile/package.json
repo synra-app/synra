@@ -11,12 +11,12 @@
     "open:ios": "vp exec cap open ios"
   },
   "dependencies": {
-    "@capacitor/android": "catalog:",
-    "@capacitor/core": "catalog:",
-    "@capacitor/ios": "catalog:"
+    "@capacitor/android": "catalog:capacitor",
+    "@capacitor/core": "catalog:capacitor",
+    "@capacitor/ios": "catalog:capacitor"
   },
   "devDependencies": {
-    "@capacitor/cli": "catalog:",
+    "@capacitor/cli": "catalog:capacitor",
     "esno": "^4.8.0"
   }
 }

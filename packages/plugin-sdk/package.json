@@ -1,17 +1,8 @@
 {
-  "name": "utils",
+  "name": "@synra/plugin-sdk",
   "version": "0.0.0",
-  "description": "A starter for creating a TypeScript package.",
-  "homepage": "https://github.com/author/library#readme",
-  "bugs": {
-    "url": "https://github.com/author/library/issues"
-  },
+  "description": "Plugin contracts for Synra cross-device runtime.",
   "license": "MIT",
-  "author": "Author Name <author.name@mail.com>",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/author/library.git"
-  },
   "files": [
     "dist"
   ],
@@ -32,6 +23,9 @@
     "test": "vp test",
     "check": "vp check",
     "prepublishOnly": "vp run build"
+  },
+  "dependencies": {
+    "@synra/protocol": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "catalog:types",
