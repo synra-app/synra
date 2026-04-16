@@ -267,6 +267,7 @@ export function synraElectronPlugin(options: SynraElectronPluginOptions = {}): P
   let restartInFlight: Promise<void> | null = null;
   let commandLineInterface: ReadlineInterface | null = null;
   let firstSuccessfulBuildReady = false;
+  let requestQuit: (() => void) | null = null;
 
   async function restartElectronRuntime(reason: "initial" | "rebuild"): Promise<void> {
     if (restartInFlight) {
@@ -297,6 +298,22 @@ export function synraElectronPlugin(options: SynraElectronPluginOptions = {}): P
         },
         "electron",
       );
+
+      const currentRuntimeProcess = electronRuntimeProcess;
+      currentRuntimeProcess.once("exit", (code, signal) => {
+        if (quitting || currentRuntimeProcess !== electronRuntimeProcess) {
+          return;
+        }
+
+        logWithTag(
+          "info",
+          `electron runtime exited (code=${String(code)}, signal=${String(signal)}), shutting down dev runner`,
+        );
+        quitting = true;
+        teardownInteractiveCommands();
+        cleanup();
+        requestQuit?.();
+      });
     })()
       .catch((error) => {
         logWithTag("error", String(error), "stderr");
@@ -392,7 +409,7 @@ export function synraElectronPlugin(options: SynraElectronPluginOptions = {}): P
       }
 
       started = true;
-      setupInteractiveCommands(() => {
+      requestQuit = () => {
         const exitProcess = () => {
           setTimeout(() => {
             process.exit(0);
@@ -405,6 +422,9 @@ export function synraElectronPlugin(options: SynraElectronPluginOptions = {}): P
         if (!server.httpServer) {
           exitProcess();
         }
+      };
+      setupInteractiveCommands(() => {
+        requestQuit?.();
       });
 
       void (async () => {
