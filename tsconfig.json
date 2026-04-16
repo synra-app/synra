@@ -17,5 +17,5 @@
     "verbatimModuleSyntax": true,
     "skipLibCheck": true
   },
-  "exclude": ["packages/*/vite.config.ts", "scripts/vite/**/*.ts"]
+  "exclude": ["apps/*/vite.config.ts", "packages/*/vite.config.ts", "scripts/vite/**/*.ts"]
 }
