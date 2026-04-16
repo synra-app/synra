@@ -6,7 +6,9 @@
   "scripts": {
     "ready": "vp fmt && vp lint && vp run -r test && vp run -r build",
     "dev": "vp run frontend#dev",
+    "dev:android": "vp exec esno ./scripts/mobile/dev-android.ts",
     "dev:electron": "vp run electron#dev",
+    "dev:ios": "vp exec esno ./scripts/mobile/dev-ios.ts",
     "test": "vp run -r test",
     "lint": "vp lint --fix",
     "check": "vp check --fix",
@@ -14,6 +16,7 @@
   },
   "devDependencies": {
     "@types/node": "catalog:types",
+    "esno": "^4.8.0",
     "vite-plus": "catalog:vite"
   },
   "engines": {
