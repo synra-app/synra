@@ -5,6 +5,9 @@ import {
 import { createShellAdapter, type ShellAdapter } from "../../host/adapters/electron-shell.adapter";
 import { createExternalLinkService } from "../../host/services/external-link.service";
 import { createFileService } from "../../host/services/file.service";
+import { createGitHubOpenPlugin } from "../../host/plugins/github-open.plugin";
+import { createPluginCatalogService } from "../../host/services/plugin-catalog.service";
+import { createPluginRuntimeService } from "../../host/services/plugin-runtime.service";
 import { createRuntimeInfoService } from "../../host/services/runtime-info.service";
 import type { BridgeLogger } from "../../shared/observability/logger";
 import { createMainDispatcher } from "./dispatch";
@@ -35,11 +38,16 @@ export function setupBridgeMainRuntime(
   const fileService = createFileService(fileSystemAdapter, {
     allowedRoots: options.allowedFileRoots,
   });
+  const pluginRuntimeService = createPluginRuntimeService();
+  pluginRuntimeService.register(createGitHubOpenPlugin(externalLinkService));
+  const pluginCatalogService = createPluginCatalogService(pluginRuntimeService);
 
   const handlers = createBridgeHandlers({
     runtimeInfoService,
     externalLinkService,
     fileService,
+    pluginRuntimeService,
+    pluginCatalogService,
   });
 
   const dispatch = createMainDispatcher(handlers, { logger: options.logger });

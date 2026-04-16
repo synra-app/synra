@@ -24,6 +24,24 @@ function createHandlers() {
     fileService: {
       readFile: vi.fn(async () => ({ content: "ok", encoding: "utf-8" as BufferEncoding })),
     },
+    pluginRuntimeService: {
+      register: vi.fn(),
+      unregister: vi.fn(),
+      listPlugins: vi.fn(() => []),
+      resolveActions: vi.fn(async () => ({ candidates: [] })),
+      executeSelected: vi.fn(async () => ({
+        messages: [],
+        receipt: {
+          ok: true as const,
+          actionId: "a1",
+          handledBy: "test-plugin",
+          durationMs: 1,
+        },
+      })),
+    },
+    pluginCatalogService: {
+      getCatalog: vi.fn(async () => ({ plugins: [] })),
+    },
   });
 }
 
@@ -82,6 +100,24 @@ describe("bridge/main/dispatch", () => {
       externalLinkService: { openExternal: vi.fn(async () => ({ success: true as const })) },
       fileService: {
         readFile: vi.fn(async () => ({ content: "", encoding: "utf-8" as BufferEncoding })),
+      },
+      pluginRuntimeService: {
+        register: vi.fn(),
+        unregister: vi.fn(),
+        listPlugins: vi.fn(() => []),
+        resolveActions: vi.fn(async () => ({ candidates: [] })),
+        executeSelected: vi.fn(async () => ({
+          messages: [],
+          receipt: {
+            ok: true as const,
+            actionId: "a1",
+            handledBy: "test-plugin",
+            durationMs: 1,
+          },
+        })),
+      },
+      pluginCatalogService: {
+        getCatalog: vi.fn(async () => ({ plugins: [] })),
       },
     });
     const dispatch = createMainDispatcher(slowHandlers, { defaultTimeoutMs: 1 });

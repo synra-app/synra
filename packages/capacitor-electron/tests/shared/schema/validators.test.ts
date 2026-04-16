@@ -4,6 +4,8 @@ import {
   isBridgeResponse,
   isSupportedMethod,
   isSupportedProtocolVersion,
+  validateResolveActionsPayload,
+  validateRuntimeExecutePayload,
   validateExternalOpenPayload,
   validateReadFilePayload,
 } from "../../../src/shared/schema/validators";
@@ -33,6 +35,8 @@ describe("shared/schema/validators", () => {
     expect(isSupportedProtocolVersion(BRIDGE_PROTOCOL_VERSION)).toBe(true);
     expect(isSupportedProtocolVersion("9.9")).toBe(false);
     expect(isSupportedMethod(BRIDGE_METHODS.fileRead)).toBe(true);
+    expect(isSupportedMethod(BRIDGE_METHODS.runtimeResolveActions)).toBe(true);
+    expect(isSupportedMethod(BRIDGE_METHODS.runtimeExecute)).toBe(true);
     expect(isSupportedMethod("unknown.method")).toBe(false);
   });
 
@@ -41,5 +45,25 @@ describe("shared/schema/validators", () => {
     expect(validateExternalOpenPayload({ url: "" })).toBe(false);
     expect(validateReadFilePayload({ path: "a.txt" })).toBe(true);
     expect(validateReadFilePayload({})).toBe(false);
+  });
+
+  test("validates runtime payloads", () => {
+    expect(
+      validateResolveActionsPayload({ input: { type: "url", raw: "https://github.com/synra" } }),
+    ).toBe(true);
+    expect(validateResolveActionsPayload({ input: { type: "url" } })).toBe(false);
+    expect(
+      validateRuntimeExecutePayload({
+        sessionId: "session-1",
+        input: { type: "url", raw: "https://github.com/synra" },
+        action: {
+          actionId: "a1",
+          pluginId: "github-open",
+          actionType: "external.open-url",
+          label: "Open in browser",
+          requiresConfirm: true,
+        },
+      }),
+    ).toBe(true);
   });
 });

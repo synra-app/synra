@@ -4,8 +4,13 @@ import type {
   MethodPayloadMap,
   MethodResultMap,
   OpenExternalOptions,
+  PluginCatalogResult,
   ReadFileOptions,
   ReadFileResult,
+  ResolveRuntimeActionsOptions,
+  ResolveRuntimeActionsResult,
+  RuntimeExecuteOptions,
+  RuntimeExecuteResult,
   RuntimeInfo,
 } from "../shared/protocol/types";
 import { API_METHODS } from "./methods";
@@ -18,6 +23,18 @@ export type BridgeInvoke = <TMethod extends keyof MethodPayloadMap>(
 
 export interface ElectronBridgePlugin {
   getRuntimeInfo(options?: { timeoutMs?: number; signal?: AbortSignal }): Promise<RuntimeInfo>;
+  resolveRuntimeActions(
+    options: ResolveRuntimeActionsOptions,
+    invokeOptions?: { timeoutMs?: number; signal?: AbortSignal },
+  ): Promise<ResolveRuntimeActionsResult>;
+  executeRuntimeAction(
+    options: RuntimeExecuteOptions,
+    invokeOptions?: { timeoutMs?: number; signal?: AbortSignal },
+  ): Promise<RuntimeExecuteResult>;
+  getPluginCatalog(options?: {
+    timeoutMs?: number;
+    signal?: AbortSignal;
+  }): Promise<PluginCatalogResult>;
   openExternal(
     options: OpenExternalOptions,
     invokeOptions?: { timeoutMs?: number; signal?: AbortSignal },
@@ -47,6 +64,25 @@ export function createElectronBridgePlugin(invoke: BridgeInvoke): ElectronBridge
     ): Promise<{ success: true }> {
       ensureObject(options, "openExternal options must be an object.");
       return invoke(API_METHODS.openExternal, options, invokeOptions);
+    },
+    async resolveRuntimeActions(
+      options: ResolveRuntimeActionsOptions,
+      invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {},
+    ): Promise<ResolveRuntimeActionsResult> {
+      ensureObject(options, "resolveRuntimeActions options must be an object.");
+      return invoke(API_METHODS.resolveRuntimeActions, options, invokeOptions);
+    },
+    async executeRuntimeAction(
+      options: RuntimeExecuteOptions,
+      invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {},
+    ): Promise<RuntimeExecuteResult> {
+      ensureObject(options, "executeRuntimeAction options must be an object.");
+      return invoke(API_METHODS.executeRuntimeAction, options, invokeOptions);
+    },
+    async getPluginCatalog(
+      options: { timeoutMs?: number; signal?: AbortSignal } = {},
+    ): Promise<PluginCatalogResult> {
+      return invoke(API_METHODS.getPluginCatalog, {}, options);
     },
     async readFile(
       options: ReadFileOptions,

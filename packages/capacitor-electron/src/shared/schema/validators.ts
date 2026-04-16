@@ -56,8 +56,49 @@ export function isSupportedProtocolVersion(protocolVersion: string): boolean {
 export function isSupportedMethod(method: string): boolean {
   return (
     method === BRIDGE_METHODS.runtimeGetInfo ||
+    method === BRIDGE_METHODS.runtimeResolveActions ||
+    method === BRIDGE_METHODS.runtimeExecute ||
+    method === BRIDGE_METHODS.pluginCatalogGet ||
     method === BRIDGE_METHODS.externalOpen ||
     method === BRIDGE_METHODS.fileRead
+  );
+}
+
+export function validateResolveActionsPayload(
+  payload: unknown,
+): payload is { input: { type: string; raw: string } } {
+  return (
+    isObject(payload) &&
+    isObject(payload.input) &&
+    typeof payload.input.type === "string" &&
+    typeof payload.input.raw === "string"
+  );
+}
+
+export function validateRuntimeExecutePayload(payload: unknown): payload is {
+  sessionId: string;
+  input: { type: string; raw: string };
+  action: {
+    actionId: string;
+    pluginId: string;
+    actionType: string;
+    label: string;
+    requiresConfirm: boolean;
+  };
+} {
+  return (
+    isObject(payload) &&
+    typeof payload.sessionId === "string" &&
+    payload.sessionId.length > 0 &&
+    isObject(payload.input) &&
+    typeof payload.input.type === "string" &&
+    typeof payload.input.raw === "string" &&
+    isObject(payload.action) &&
+    typeof payload.action.actionId === "string" &&
+    typeof payload.action.pluginId === "string" &&
+    typeof payload.action.actionType === "string" &&
+    typeof payload.action.label === "string" &&
+    typeof payload.action.requiresConfirm === "boolean"
   );
 }
 

@@ -26,6 +26,20 @@ export type DeviceTransport = {
   getStatus(): Promise<TransportStatus>;
 };
 
+export type TransportErrorCode = "TRANSPORT_DISCONNECTED" | "TRANSPORT_UNREACHABLE";
+
+export class TransportSendError extends Error {
+  public readonly code: TransportErrorCode;
+  public readonly retryable: boolean;
+
+  public constructor(code: TransportErrorCode, message: string, retryable: boolean = true) {
+    super(message);
+    this.name = "TransportSendError";
+    this.code = code;
+    this.retryable = retryable;
+  }
+}
+
 export const DEFAULT_RETRY_POLICY: RetryPolicy = {
   maxRetries: 3,
   baseDelayMs: 500,
@@ -66,4 +80,87 @@ export class MessageDeduper {
       }
     }
   }
+}
+
+type MessageHandler = (message: SynraCrossDeviceMessage) => void | Promise<void>;
+
+export type LoopbackTransportOptions = {
+  dedupeWindowMs?: number;
+};
+
+export class LoopbackDeviceTransport implements DeviceTransport {
+  private readonly deduper: MessageDeduper;
+  private messageHandler: MessageHandler | null = null;
+  private peerTransport: LoopbackDeviceTransport | null = null;
+  private status: TransportStatus = {
+    state: "disconnected",
+    mode: "offline",
+  };
+
+  public constructor(options: LoopbackTransportOptions = {}) {
+    this.deduper = new MessageDeduper(options.dedupeWindowMs);
+  }
+
+  public attachPeer(peerTransport: LoopbackDeviceTransport): void {
+    this.peerTransport = peerTransport;
+    this.status = {
+      state: "connected",
+      mode: "lan",
+    };
+  }
+
+  public detachPeer(): void {
+    this.peerTransport = null;
+    this.status = {
+      state: "disconnected",
+      mode: "offline",
+      lastError: "Peer not attached.",
+    };
+  }
+
+  public async send(message: SynraCrossDeviceMessage): Promise<void> {
+    if (!this.peerTransport) {
+      throw new TransportSendError(
+        "TRANSPORT_DISCONNECTED",
+        "Cannot send message while transport is disconnected.",
+      );
+    }
+
+    if (!this.peerTransport.messageHandler) {
+      throw new TransportSendError(
+        "TRANSPORT_UNREACHABLE",
+        "Cannot send message because peer listener is unavailable.",
+      );
+    }
+
+    if (this.peerTransport.deduper.has(message.messageId)) {
+      return;
+    }
+
+    this.peerTransport.deduper.remember(message.messageId);
+    await Promise.resolve(this.peerTransport.messageHandler(message));
+  }
+
+  public onMessage(handler: MessageHandler): () => void {
+    this.messageHandler = handler;
+    return () => {
+      if (this.messageHandler === handler) {
+        this.messageHandler = null;
+      }
+    };
+  }
+
+  public async getStatus(): Promise<TransportStatus> {
+    return { ...this.status };
+  }
+}
+
+export function createLoopbackTransportPair(
+  options: LoopbackTransportOptions = {},
+): [LoopbackDeviceTransport, LoopbackDeviceTransport] {
+  const first = new LoopbackDeviceTransport(options);
+  const second = new LoopbackDeviceTransport(options);
+  first.attachPeer(second);
+  second.attachPeer(first);
+  return [first, second];
 }

@@ -8,6 +8,9 @@ export const BRIDGE_CHANNEL_WHITELIST = [BRIDGE_INVOKE_CHANNEL] as const;
 
 export const BRIDGE_METHODS = {
   runtimeGetInfo: "runtime.getInfo",
+  runtimeResolveActions: "runtime.resolveActions",
+  runtimeExecute: "runtime.execute",
+  pluginCatalogGet: "plugin.catalog.get",
   externalOpen: "external.open",
   fileRead: "file.read",
 } as const;

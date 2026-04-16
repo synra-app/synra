@@ -205,6 +205,13 @@ importers:
         version: 4.8.0
 
   packages/capacitor-electron:
+    dependencies:
+      '@synra/plugin-sdk':
+        specifier: workspace:*
+        version: link:../plugin-sdk
+      '@synra/protocol':
+        specifier: workspace:*
+        version: link:../protocol
     devDependencies:
       '@types/node':
         specifier: catalog:types

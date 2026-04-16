@@ -14,6 +14,8 @@ import type {
 } from "../../shared/protocol/types";
 import {
   isBridgeResponse,
+  validateResolveActionsPayload,
+  validateRuntimeExecutePayload,
   validateExternalOpenPayload,
   validateReadFilePayload,
 } from "../../shared/schema/validators";
@@ -47,6 +49,20 @@ function validatePayload(method: string, payload: unknown): void {
 
   if (method === BRIDGE_METHODS.externalOpen && !validateExternalOpenPayload(payload)) {
     throw new BridgeError(BRIDGE_ERROR_CODES.invalidParams, "external.open expects { url }.");
+  }
+
+  if (method === BRIDGE_METHODS.runtimeResolveActions && !validateResolveActionsPayload(payload)) {
+    throw new BridgeError(
+      BRIDGE_ERROR_CODES.invalidParams,
+      "runtime.resolveActions expects { input: { type, raw } }.",
+    );
+  }
+
+  if (method === BRIDGE_METHODS.runtimeExecute && !validateRuntimeExecutePayload(payload)) {
+    throw new BridgeError(
+      BRIDGE_ERROR_CODES.invalidParams,
+      "runtime.execute expects { sessionId, input, action }.",
+    );
   }
 
   if (method === BRIDGE_METHODS.fileRead && !validateReadFilePayload(payload)) {

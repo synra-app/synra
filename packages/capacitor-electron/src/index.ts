@@ -32,6 +32,17 @@ export {
   type ExternalLinkService,
 } from "./host/services/external-link.service";
 export {
+  createPluginRuntimeService,
+  type ExecuteSelectedOptions,
+  type PluginRuntimeService,
+  type RuntimeMessageEmitter,
+} from "./host/services/plugin-runtime.service";
+export {
+  createPluginCatalogService,
+  type PluginCatalogService,
+} from "./host/services/plugin-catalog.service";
+export { createGitHubOpenPlugin } from "./host/plugins/github-open.plugin";
+export {
   createFileService,
   type FileService,
   type FileServiceOptions,
@@ -60,9 +71,15 @@ export type {
   MethodPayloadMap,
   MethodResultMap,
   OpenExternalOptions,
+  PluginCatalogResult,
   OperationResult,
   ReadFileOptions,
   ReadFileResult,
+  ResolveRuntimeActionsOptions,
+  ResolveRuntimeActionsResult,
+  RuntimeActionCandidate,
+  RuntimeExecuteOptions,
+  RuntimeExecuteResult,
   RuntimeInfo,
 } from "./shared/protocol/types";
 export {
@@ -70,6 +87,8 @@ export {
   isBridgeResponse,
   isSupportedMethod,
   isSupportedProtocolVersion,
+  validateResolveActionsPayload,
+  validateRuntimeExecutePayload,
   validateExternalOpenPayload,
   validateReadFilePayload,
 } from "./shared/schema/validators";

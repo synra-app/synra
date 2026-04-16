@@ -38,6 +38,67 @@ describe("api/plugin", () => {
     });
   });
 
+  test("resolves runtime actions through invoke", async () => {
+    const invoke: BridgeInvoke = async (method) => {
+      expect(method).toBe(BRIDGE_METHODS.runtimeResolveActions);
+      return {
+        candidates: [],
+      } as unknown as MethodResultMap[typeof method];
+    };
+    const plugin = createElectronBridgePlugin(invoke);
+    const result = await plugin.resolveRuntimeActions({
+      input: { type: "url", raw: "https://github.com/synra" },
+    });
+    expect(result.candidates).toEqual([]);
+  });
+
+  test("executes runtime action through invoke", async () => {
+    const invoke: BridgeInvoke = async (method) => {
+      expect(method).toBe(BRIDGE_METHODS.runtimeExecute);
+      return {
+        messages: [],
+        receipt: {
+          ok: true,
+          actionId: "a1",
+          handledBy: "github-open",
+          durationMs: 1,
+        },
+      } as unknown as MethodResultMap[typeof method];
+    };
+    const plugin = createElectronBridgePlugin(invoke);
+    const result = await plugin.executeRuntimeAction({
+      sessionId: "session-1",
+      input: { type: "url", raw: "https://github.com/synra" },
+      action: {
+        actionId: "a1",
+        pluginId: "github-open",
+        actionType: "external.open-url",
+        label: "Open in browser",
+        requiresConfirm: true,
+        payload: { url: "https://github.com/synra" },
+      },
+    });
+    expect(result.receipt.ok).toBe(true);
+  });
+
+  test("gets plugin catalog through invoke", async () => {
+    const invoke: BridgeInvoke = async (method) => {
+      expect(method).toBe(BRIDGE_METHODS.pluginCatalogGet);
+      return {
+        plugins: [
+          {
+            pluginId: "github-open",
+            version: "0.1.0",
+            displayName: "github-open",
+          },
+        ],
+      } as MethodResultMap[typeof method];
+    };
+    const plugin = createElectronBridgePlugin(invoke);
+    const result = await plugin.getPluginCatalog();
+    expect(result.plugins).toHaveLength(1);
+  });
+
   test("throws when preload bridge is missing on global", async () => {
     expect(() => createElectronBridgePluginFromGlobal({})).toThrow(
       "Preload bridge is not available",

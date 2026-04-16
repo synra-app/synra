@@ -20,7 +20,14 @@ export function createRuntimeInfoService(options: RuntimeInfoServiceOptions = {}
         electronVersion: options.electronVersion ?? process.versions.electron ?? "unknown",
         nodeVersion: process.versions.node,
         platform: process.platform,
-        capabilities: options.capabilities ?? ["runtime.getInfo", "external.open", "file.read"],
+        capabilities: options.capabilities ?? [
+          "runtime.getInfo",
+          "runtime.resolveActions",
+          "runtime.execute",
+          "plugin.catalog.get",
+          "external.open",
+          "file.read",
+        ],
       };
     },
   };
