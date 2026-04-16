@@ -1,6 +1,28 @@
 import { join, resolve } from "node:path";
+import { styleText } from "node:util";
 import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { setupBridgeMainRuntime } from "@synra/capacitor-electron";
+
+const TAG_STYLES: Readonly<Record<string, Parameters<typeof styleText>[0]>> = {
+  "electron-main": "blue",
+  "renderer:0": "green",
+  "renderer:1": "yellow",
+  "renderer:2": "red",
+  "renderer:3": "magenta",
+};
+
+function styleTag(tag: string): string {
+  const style = TAG_STYLES[tag] ?? "cyan";
+  return styleText(style, `[${tag}]`);
+}
+
+function logWithTag(tag: string, ...args: unknown[]): void {
+  console.log(styleTag(tag), ...args);
+}
+
+function errorWithTag(tag: string, ...args: unknown[]): void {
+  console.error(styleTag(tag), ...args);
+}
 
 function createMainWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
@@ -22,22 +44,22 @@ function createMainWindow(): BrowserWindow {
   }
 
   mainWindow.webContents.on("preload-error", (_event, preloadPath, error) => {
-    console.error("[electron-main] preload-error:", preloadPath, error);
+    errorWithTag("electron-main", "preload-error:", preloadPath, error);
   });
 
   mainWindow.webContents.on("did-finish-load", () => {
     void mainWindow.webContents
       .executeJavaScript("Boolean(window.__synraCapElectron && window.__synraCapElectron.invoke)")
       .then((available) => {
-        console.log("[electron-main] bridge available:", available);
+        logWithTag("electron-main", "bridge available:", available);
       })
       .catch((error) => {
-        console.error("[electron-main] bridge probe failed:", error);
+        errorWithTag("electron-main", "bridge probe failed:", error);
       });
   });
 
   mainWindow.webContents.on("console-message", (_event, level, message) => {
-    console.log(`[renderer:${level}] ${message}`);
+    logWithTag(`renderer:${String(level)}`, message);
   });
 
   return mainWindow;
