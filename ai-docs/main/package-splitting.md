@@ -2,7 +2,8 @@
 
 ## 目标
 
-围绕“跨端协议 + 通讯 + 插件运行时 + Electron 宿主”进行完全模块化拆分，降低耦合并支持独立发布。
+围绕“跨端协议 + 通讯 + 插件运行时 + Electron 宿主”进行完全模块化拆分，降低耦合并支持独立发布。  
+首版即按插件标准拆分，不采用“先写主包、后续再拆”的过渡路径。
 
 ## 命名规范
 
@@ -15,6 +16,7 @@
 
 - 定义跨端消息协议、错误码、schema、事件类型。
 - 被 transport、plugin runtime、electron host 共同依赖。
+- 固化 namespaced 消息类型与 `runtime.finished.status` 契约。
 
 ## 2) `@synra/transport-core`
 
@@ -40,11 +42,61 @@
 
 - 插件注册中心、匹配编排、冲突处理、执行回执。
 - 依赖 `@synra/plugin-sdk`、`@synra/protocol`。
+- 提供隔离执行调度（Worker/子进程托管）。
+- 提供 PC 侧插件目录与规则服务接口（供其他设备拉取）。
 
 ## 7) `@synra/capacitor-electron`
 
 - Electron 宿主适配：preload/main bridge、PC 动作执行 adapter。
 - 依赖 `@synra/protocol`、`@synra/plugin-runtime`、`@synra/transport-core`。
+- 作为 PC server 承载插件分发入口（catalog/bundle/rules）。
+
+## MVP 约束对包边界的影响
+
+- `@synra/transport-relay`：保留包设计但不进入 MVP 实现范围。
+- `@synra/plugin-sdk`：动作 `payload` 首版采用 `unknown`（opaque）模型。
+- `@synra/plugin-runtime`：固定“每次用户选择动作”，不实现默认动作记忆。
+- `@synra/protocol`：首版消息头最小字段，错误码采用“分组 + 关键细码”。
+- `@synra/protocol`：messageType 固定为 `runtime.request/received/started/finished/error`。
+
+## 各包导出契约草案（MVP）
+
+### `@synra/protocol`
+
+- 核心导出：
+  - `ProtocolMessageType`
+  - `RuntimeFinishedStatus`
+  - `ProtocolErrorCode`
+  - `ProtocolEnvelope<TType, TPayload>`
+  - `SynraRuntimeMessage`
+  - `SynraPluginSyncMessage`
+  - `SynraProtocolMessage`
+
+### `@synra/plugin-sdk`
+
+- 核心导出：
+  - `ShareInput`
+  - `PluginMatchResult`
+  - `PluginAction`
+  - `ExecuteContext`
+  - `PluginExecutionResult`
+  - `SynraPlugin`
+
+### `@synra/plugin-runtime`
+
+- 核心导出：
+  - `PluginRuntime`
+  - `PluginActionCandidate`
+  - `RuntimeMessageBridge`
+  - `createPluginRuntime(...)`
+
+### `@synra/transport-core`
+
+- 核心导出：
+  - `DeviceTransport`
+  - `TransportState`
+  - `SessionState`
+  - `send(message: SynraRuntimeMessage)`
 
 ## package.json `name` 与导入示例
 
@@ -67,30 +119,33 @@ import { createPluginRuntime } from "@synra/plugin-runtime";
 import { createElectronHost } from "@synra/capacitor-electron";
 ```
 
-## 依赖方向
+## 依赖方向（依赖者 -> 被依赖者）
 
 ```mermaid
 flowchart LR
-  protocolPkg[SynraProtocol] --> transportCorePkg[TransportCore]
-  protocolPkg --> pluginSdkPkg[PluginSdk]
-  transportCorePkg --> transportLanPkg[TransportLan]
-  transportCorePkg --> transportRelayPkg[TransportRelay]
-  pluginSdkPkg --> pluginRuntimePkg[PluginRuntime]
-  protocolPkg --> pluginRuntimePkg
-  pluginRuntimePkg --> capacitorElectronPkg[CapacitorElectron]
-  protocolPkg --> capacitorElectronPkg
-  transportCorePkg --> capacitorElectronPkg
+  transportCorePkg[TransportCore] --> protocolPkg[SynraProtocol]
+  transportLanPkg[TransportLan] --> transportCorePkg
+  transportLanPkg --> protocolPkg
+  transportRelayPkg[TransportRelay] --> transportCorePkg
+  transportRelayPkg --> protocolPkg
+  pluginSdkPkg[PluginSdk] --> protocolPkg
+  pluginRuntimePkg[PluginRuntime] --> pluginSdkPkg
+  pluginRuntimePkg --> protocolPkg
+  capacitorElectronPkg[CapacitorElectron] --> pluginRuntimePkg
+  capacitorElectronPkg --> transportCorePkg
+  capacitorElectronPkg --> protocolPkg
 ```
 
 ## 发布策略建议
 
 - 首次发布顺序：`protocol` -> `transport-core` -> `plugin-sdk` -> `plugin-runtime` -> `transport-*` -> `capacitor-electron`
 - 语义化版本管理：协议库与运行时库分开升版，避免无意义联动发布。
+- 协议版本采用严格同 major 策略，`@synra/protocol` major 变更需联动评估所有下游包。
 
-## 最小化落地顺序
+## 最小化落地顺序（MVP）
 
 1. 先落地 `@synra/protocol`（统一契约）。
-2. 再落地 `@synra/plugin-sdk` + `@synra/plugin-runtime`（业务编排）。
-3. 再落地 `@synra/transport-core` + `@synra/transport-lan`（先跑直连）。
-4. 然后补 `@synra/transport-relay`（回落能力）。
-5. 最后在 `@synra/capacitor-electron` 集成。
+2. 落地 `@synra/transport-core` + `@synra/transport-lan`（仅 LAN）。
+3. 落地 `@synra/plugin-sdk` + `@synra/plugin-runtime`（匹配与执行编排）。
+4. 在 `@synra/capacitor-electron` 集成端到端链路。
+5. 将 `@synra/transport-relay` 作为后续里程碑扩展。
