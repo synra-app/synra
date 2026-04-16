@@ -9,6 +9,7 @@
     "dev:electron": "vp run electron#dev",
     "test": "vp run -r test",
     "lint": "vp lint --fix",
+    "check": "vp check --fix",
     "prepare": "vp config"
   },
   "devDependencies": {
