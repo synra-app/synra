@@ -16,6 +16,7 @@
     "@capacitor/cli": "catalog:capacitor",
     "@types/node": "catalog:types",
     "electron": "catalog:",
+    "esbuild": "catalog:build",
     "typescript": "catalog:types",
     "vite-plugin-synra-electron": "workspace:*",
     "vite-plus": "catalog:vite"

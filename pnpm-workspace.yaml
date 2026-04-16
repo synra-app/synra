@@ -12,6 +12,8 @@ catalog:
 catalogMode: prefer
 
 catalogs:
+  build:
+    esbuild: ^0.27.7
   capacitor:
     "@capacitor/android": ^8.3.0
     "@capacitor/cli": ^8.3.0
@@ -22,7 +24,10 @@ catalogs:
     uno-colors: ^0.1.0
   types:
     "@types/node": ^25.6.0
+    "@typescript/native-preview": 7.0.0-dev.20260328.1
     typescript: ^6.0.2
+  release:
+    bumpp: ^11.0.1
   unocss:
     "@unocss/preset-attributify": ^66.6.8
     "@unocss/preset-icons": ^66.6.8

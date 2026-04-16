@@ -5,6 +5,10 @@ settings:
   excludeLinksFromLockfile: false
 
 catalogs:
+  build:
+    esbuild:
+      specifier: ^0.27.7
+      version: 0.27.7
   capacitor:
     '@capacitor/android':
       specifier: ^8.3.0
@@ -22,6 +26,10 @@ catalogs:
     electron:
       specifier: ^41.2.0
       version: 41.2.0
+  release:
+    bumpp:
+      specifier: ^11.0.1
+      version: 11.0.1
   style:
     sass:
       specifier: ^1.99.0
@@ -33,6 +41,9 @@ catalogs:
     '@types/node':
       specifier: ^25.6.0
       version: 25.6.0
+    '@typescript/native-preview':
+      specifier: 7.0.0-dev.20260328.1
+      version: 7.0.0-dev.20260328.1
     typescript:
       specifier: ^6.0.2
       version: 6.0.2
@@ -109,6 +120,9 @@ importers:
       electron:
         specifier: 'catalog:'
         version: 41.2.0
+      esbuild:
+        specifier: catalog:build
+        version: 0.27.7
       typescript:
         specifier: catalog:types
         version: 6.0.2
@@ -196,11 +210,14 @@ importers:
         specifier: catalog:types
         version: 25.6.0
       '@typescript/native-preview':
-        specifier: 7.0.0-dev.20260328.1
+        specifier: catalog:types
         version: 7.0.0-dev.20260328.1
       bumpp:
-        specifier: ^11.0.1
+        specifier: catalog:release
         version: 11.0.1
+      esbuild:
+        specifier: catalog:build
+        version: 0.27.7
       typescript:
         specifier: catalog:types
         version: 6.0.2
