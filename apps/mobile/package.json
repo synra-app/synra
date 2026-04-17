@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "cap": "esno ./scripts/cap.ts",
     "copy-web": "esno ./scripts/copy-web.ts",
     "sync": "vp run copy-web && vp exec cap sync",
     "sync:android": "vp run copy-web && vp exec cap sync android",

@@ -33,6 +33,11 @@ const vpCommand = "vp";
 
 const steps: Array<{ title: string; command: string; args: string[] }> = [
   {
+    title: "Build frontend web assets",
+    command: vpCommand,
+    args: ["run", "frontend#build"],
+  },
+  {
     title: "Sync Android project",
     command: vpCommand,
     args: ["run", "mobile#sync:android"],

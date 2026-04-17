@@ -1,17 +1,38 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 
 const loading = ref(false);
 const runtimeInfo = ref<string>("Not loaded.");
 const errorMessage = ref<string>("");
+const hasElectronBridge = computed(() => Boolean(window.__synraCapElectron?.invoke));
+
+type CapacitorWindow = Window & {
+  Capacitor?: {
+    getPlatform?: () => string;
+    isNativePlatform?: () => boolean;
+  };
+};
 
 async function loadRuntimeInfo(): Promise<void> {
   loading.value = true;
   errorMessage.value = "";
 
   try {
-    if (!window.__synraCapElectron?.invoke) {
-      throw new Error("Electron bridge is not available. Open this page in the Electron app.");
+    if (!hasElectronBridge.value) {
+      const capacitorWindow = window as CapacitorWindow;
+      const platform = capacitorWindow.Capacitor?.getPlatform?.() ?? "web";
+      const isNative = capacitorWindow.Capacitor?.isNativePlatform?.() ?? false;
+      runtimeInfo.value = JSON.stringify(
+        {
+          bridge: "web-fallback",
+          platform,
+          isNativePlatform: isNative,
+          userAgent: navigator.userAgent,
+        },
+        null,
+        2,
+      );
+      return;
     }
 
     const result = await window.__synraCapElectron.invoke("runtime.getInfo", {});
@@ -25,13 +46,13 @@ async function loadRuntimeInfo(): Promise<void> {
 }
 
 async function openSynraWebsite(): Promise<void> {
-  if (!window.__synraCapElectron?.invoke) {
-    errorMessage.value = "Electron bridge is not available.";
-    return;
-  }
-
   try {
-    await window.__synraCapElectron.invoke("external.open", { url: "https://synra.dev" });
+    if (hasElectronBridge.value) {
+      await window.__synraCapElectron.invoke("external.open", { url: "https://synra.dev" });
+      return;
+    }
+
+    window.open("https://synra.dev", "_blank", "noopener,noreferrer");
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     errorMessage.value = message;
@@ -42,7 +63,12 @@ async function openSynraWebsite(): Promise<void> {
 <template>
   <section class="space-y-4">
     <h1 class="text-3xl font-bold">Capacitor Electron Demo</h1>
-    <p class="text-gray-600">Minimal demo page for validating the Electron bridge integration.</p>
+    <p class="text-gray-600">
+      Minimal demo page for validating bridge behavior across Electron and Capacitor.
+    </p>
+    <p v-if="!hasElectronBridge" class="text-sm text-amber-700">
+      Running without Electron bridge. Using web fallback behavior.
+    </p>
 
     <div class="flex gap-3">
       <button
