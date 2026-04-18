@@ -2,9 +2,15 @@
   "name": "electron",
   "version": "0.0.0",
   "private": true,
+  "description": "Synra desktop application package.",
+  "author": "Synra Team",
   "type": "module",
+  "main": "dist/src/main.cjs",
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "package:windows": "vp run build && vp exec electron-builder --win nsis --publish never --config.directories.output=release/windows",
+    "package:linux": "vp run build && vp exec electron-builder --linux AppImage --publish never --config.directories.output=release/linux",
+    "package:macos": "vp run build && vp exec electron-builder --mac dmg --publish never --config.directories.output=release/macos",
     "dev": "vp dev --config vite.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
@@ -16,9 +22,36 @@
     "@capacitor/cli": "catalog:capacitor",
     "@types/node": "catalog:types",
     "electron": "catalog:",
+    "electron-builder": "catalog:",
     "esbuild": "catalog:build",
     "typescript": "catalog:types",
     "vite-plugin-synra-electron": "workspace:*",
     "vite-plus": "catalog:vite"
+  },
+  "build": {
+    "appId": "com.synra.app",
+    "productName": "Synra",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "www/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false
+    }
   }
 }

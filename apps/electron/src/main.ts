@@ -40,7 +40,7 @@ function createMainWindow(): BrowserWindow {
   if (devServerUrl) {
     void mainWindow.loadURL(devServerUrl);
   } else {
-    void mainWindow.loadFile(join(process.cwd(), "www", "index.html"));
+    void mainWindow.loadFile(join(app.getAppPath(), "www", "index.html"));
   }
 
   mainWindow.webContents.on("preload-error", (_event, preloadPath, error) => {
@@ -72,7 +72,7 @@ function registerCapacitorElectronBridge(): void {
         await shell.openExternal(url);
       },
     },
-    allowedFileRoots: [process.cwd()],
+    allowedFileRoots: [app.getAppPath()],
     capacitorVersion: "8.x",
     electronVersion: process.versions.electron,
   });

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "ready": "vp fmt && vp lint && vp run -r test && vp run -r build",
+    "build": "vp exec esno ./scripts/build.ts",
     "dev": "vp run frontend#dev",
     "dev:android": "vp exec esno ./scripts/mobile/dev-android.ts",
     "dev:mac": "vp run electron#dev",

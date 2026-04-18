@@ -9,6 +9,7 @@ allowBuilds:
 catalog:
   "@inquirer/prompts": ^8.4.1
   electron: ^41.2.0
+  electron-builder: ^26.8.1
 
 catalogMode: prefer
 
