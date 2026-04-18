@@ -44,20 +44,6 @@ async function loadRuntimeInfo(): Promise<void> {
     loading.value = false;
   }
 }
-
-async function openSynraWebsite(): Promise<void> {
-  try {
-    if (hasElectronBridge.value) {
-      await window.__synraCapElectron.invoke("external.open", { url: "https://synra.dev" });
-      return;
-    }
-
-    window.open("https://synra.dev", "_blank", "noopener,noreferrer");
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    errorMessage.value = message;
-  }
-}
 </script>
 
 <template>
@@ -77,9 +63,6 @@ async function openSynraWebsite(): Promise<void> {
         @click="loadRuntimeInfo"
       >
         {{ loading ? "Loading..." : "Get Runtime Info" }}
-      </button>
-      <button class="rounded border border-gray-300 px-4 py-2" @click="openSynraWebsite">
-        Open synra.dev
       </button>
     </div>
 
