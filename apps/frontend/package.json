@@ -10,6 +10,8 @@
     "preview": "vp preview"
   },
   "dependencies": {
+    "@capacitor/core": "catalog:capacitor",
+    "@synra/capacitor-electron": "workspace:*",
     "vue": "catalog:vue",
     "vue-router": "catalog:vue"
   },

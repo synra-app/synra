@@ -156,6 +156,12 @@ importers:
 
   apps/frontend:
     dependencies:
+      '@capacitor/core':
+        specifier: catalog:capacitor
+        version: 8.3.1
+      '@synra/capacitor-electron':
+        specifier: workspace:*
+        version: link:../../packages/capacitor-electron
       vue:
         specifier: catalog:vue
         version: 3.5.32(typescript@6.0.3)

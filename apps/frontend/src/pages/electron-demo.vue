@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Capacitor } from "@capacitor/core";
 import { computed, ref } from "vue";
 
 const loading = ref(false);
@@ -6,22 +7,14 @@ const runtimeInfo = ref<string>("Not loaded.");
 const errorMessage = ref<string>("");
 const hasElectronBridge = computed(() => Boolean(window.__synraCapElectron?.invoke));
 
-type CapacitorWindow = Window & {
-  Capacitor?: {
-    getPlatform?: () => string;
-    isNativePlatform?: () => boolean;
-  };
-};
-
 async function loadRuntimeInfo(): Promise<void> {
   loading.value = true;
   errorMessage.value = "";
 
   try {
     if (!hasElectronBridge.value) {
-      const capacitorWindow = window as CapacitorWindow;
-      const platform = capacitorWindow.Capacitor?.getPlatform?.() ?? "web";
-      const isNative = capacitorWindow.Capacitor?.isNativePlatform?.() ?? false;
+      const platform = Capacitor.getPlatform();
+      const isNative = Capacitor.isNativePlatform();
       runtimeInfo.value = JSON.stringify(
         {
           bridge: "web-fallback",

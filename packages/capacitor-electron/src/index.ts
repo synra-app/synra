@@ -97,3 +97,9 @@ export {
   type BridgeLogRecord,
   type BridgeLogger,
 } from "./shared/observability/logger";
+export {
+  hasElectronBridge,
+  installElectronCapacitor,
+  type CapacitorContract,
+  type CapacitorWindow,
+} from "./capacitor";

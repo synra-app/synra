@@ -1,27 +1,12 @@
 <script setup lang="ts">
+import { Capacitor } from "@capacitor/core";
 import { computed } from "vue";
 
-type CapacitorWindow = Window & {
-  Capacitor?: {
-    getPlatform?: () => string;
-    isNativePlatform?: () => boolean;
-  };
-};
-
-const runtime = window as CapacitorWindow;
-const platform = runtime.Capacitor?.getPlatform?.() ?? "web";
-const isNative = runtime.Capacitor?.isNativePlatform?.() ?? false;
+const platform = Capacitor.getPlatform();
+const isNative = Capacitor.isNativePlatform();
 const hasElectronBridge = Boolean(window.__synraCapElectron?.invoke);
 
-const platformLabel = computed(() => {
-  if (hasElectronBridge) {
-    return "electron";
-  }
-  if (isNative) {
-    return platform;
-  }
-  return "web";
-});
+const platformLabel = computed(() => platform);
 </script>
 
 <template>
