@@ -9,7 +9,7 @@
 - 落地左侧菜单壳层：`Home`、`Plugins`、`Devices`、`Settings`。
 - 支持侧栏收缩/展开与 CSS 动画。
 - 移动端导航降级为抽屉模式。
-- 同步统一页面文件命名为 `pages/_xxx/index.vue`（`_home/_plugins/_devices/_settings`）。
+- 同步统一页面文件命名为 `pages/xxx/index.vue`（`home/plugins/devices/settings`）。
 
 验收：
 

@@ -20,7 +20,7 @@
   - `Plugins`：插件列表卡片 + 搜索 + 图标回退规则。
   - `Devices`：连接配对能力页（产品化文案）。
   - `Settings`：诊断与关于。
-- 页面文件命名约定：内置页面统一采用 `pages/_xxx/index.vue`（如 `pages/_home/index.vue`、`pages/_plugins/index.vue`），减少与插件动态路由冲突。
+- 页面文件命名约定：内置页面统一采用 `pages/xxx/index.vue`（如 `pages/home/index.vue`、`pages/plugins/index.vue`）。
 
 ## 核心术语
 

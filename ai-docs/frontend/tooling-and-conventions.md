@@ -32,13 +32,13 @@
 
 ## 页面路由命名规范
 
-- 应用内置页面统一使用 `pages/_xxx/index.vue` 文件命名，避免与插件动态页面命名冲突。
-- 推荐映射：
-  - `pages/_home/index.vue` -> `/home`
-  - `pages/_plugins/index.vue` -> `/plugins`
-  - `pages/_devices/index.vue` -> `/devices`
-  - `pages/_settings/index.vue` -> `/settings`
-- 插件页面不进入应用内置 `pages/_xxx/index.vue` 命名空间，由插件生命周期在运行时注册路由。
+- 应用内置页面统一使用 `pages/xxx/index.vue` 文件命名。
+- 目录约定：
+  - `pages/home/index.vue`
+  - `pages/plugins/index.vue`
+  - `pages/devices/index.vue`
+  - `pages/settings/index.vue`
+- 插件页面不进入应用内置页面目录，由插件生命周期在运行时注册路由。
 
 ## 示例配置（说明性）
 

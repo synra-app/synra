@@ -64,11 +64,11 @@ flowchart TD
 ## 路由语义要求
 
 - 顶层路由固定四项：`home`、`plugins`、`devices`、`settings`。
-- 前端页面文件命名统一为 `pages/_xxx/index.vue`，避免与插件动态页面冲突：
-  - `pages/_home/index.vue` -> `/home`
-  - `pages/_plugins/index.vue` -> `/plugins`
-  - `pages/_devices/index.vue` -> `/devices`
-  - `pages/_settings/index.vue` -> `/settings`
+- 前端页面文件命名统一为 `pages/xxx/index.vue`：
+  - `pages/home/index.vue`
+  - `pages/plugins/index.vue`
+  - `pages/devices/index.vue`
+  - `pages/settings/index.vue`
 - 插件路由由插件机制动态扩展，不写死在应用静态页面列表中。
 - 插件动态路由统一加 `plugin-` 前缀：`/plugin-${pluginId}/${pageKey}`（例如 `/plugin-chat/home`）。
 - 插件页面进入/退出时的路由注册和注销由插件生命周期驱动（详见后续插件机制文档）。
