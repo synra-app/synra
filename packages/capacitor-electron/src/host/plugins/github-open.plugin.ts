@@ -63,9 +63,24 @@ function createFailureReceipt(
 }
 
 export function createGitHubOpenPlugin(externalLinkService: ExternalLinkService): SynraPlugin {
-  return {
+  const plugin: SynraPlugin & {
+    meta: {
+      packageName: string;
+      displayName: string;
+      builtin: boolean;
+      defaultPage: string;
+      icon: string;
+    };
+  } = {
     id: PLUGIN_ID,
     version: "0.1.0",
+    meta: {
+      packageName: "synra-plugin-github-open",
+      displayName: "GitHub Open",
+      builtin: true,
+      defaultPage: "home",
+      icon: "i-lucide-github",
+    },
     async supports(input: ShareInput) {
       const url = normalizeGitHubUrl(input);
       return {
@@ -125,4 +140,6 @@ export function createGitHubOpenPlugin(externalLinkService: ExternalLinkService)
       }
     },
   };
+
+  return plugin;
 }

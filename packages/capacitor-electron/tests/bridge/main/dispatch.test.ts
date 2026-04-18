@@ -40,7 +40,7 @@ function createHandlers() {
       })),
     },
     pluginCatalogService: {
-      getCatalog: vi.fn(async () => ({ plugins: [] })),
+      getCatalog: vi.fn(async () => ({ plugins: [], generatedAt: Date.now() })),
     },
     deviceDiscoveryService: {
       startDiscovery: vi.fn(async () => ({
@@ -156,7 +156,7 @@ describe("bridge/main/dispatch", () => {
         })),
       },
       pluginCatalogService: {
-        getCatalog: vi.fn(async () => ({ plugins: [] })),
+        getCatalog: vi.fn(async () => ({ plugins: [], generatedAt: Date.now() })),
       },
       deviceDiscoveryService: {
         startDiscovery: vi.fn(async () => ({

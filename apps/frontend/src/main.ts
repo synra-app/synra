@@ -12,7 +12,7 @@ installElectronCapacitor({ capacitor: Capacitor });
 
 const router = createRouter({
   history: createWebHistory(),
-  routes,
+  routes: [{ path: "/", redirect: "/home" }, ...routes],
 });
 
 createApp(App).use(createPinia()).use(router).mount("#app");

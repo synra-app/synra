@@ -1,6 +1,7 @@
 import { storeToRefs } from "pinia";
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
+import { openPluginPage } from "../plugins/host";
 import { useLanDiscoveryStore } from "../stores/lan-discovery";
 
 function parseManualTargets(value: string): string[] {
@@ -88,10 +89,7 @@ export function useConnectPage() {
   }
 
   function openMessagePage(sessionId: string): void {
-    void router.push({
-      path: "/messages",
-      query: { sessionId },
-    });
+    void openPluginPage(router, "chat", "/home", { sessionId });
   }
 
   onMounted(async () => {

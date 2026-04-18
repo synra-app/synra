@@ -1,5 +1,9 @@
 import { expect, test } from "vite-plus/test";
-import { toActionSelectedMessage } from "../src/index.ts";
+import {
+  normalizePluginPagePath,
+  parsePluginIdFromPackageName,
+  toActionSelectedMessage,
+} from "../src/index.ts";
 
 test("toActionSelectedMessage should enforce action.selected type", () => {
   const message = toActionSelectedMessage({
@@ -15,11 +19,24 @@ test("toActionSelectedMessage should enforce action.selected type", () => {
       actionId: "a1",
       pluginId: "github-open",
       actionType: "openInBrowser",
-      label: "在电脑浏览器打开",
+      label: "Open in desktop browser",
       requiresConfirm: true,
       payload: { url: "https://github.com/imba97/smserialport" },
     },
   });
 
   expect(message.type).toBe("action.selected");
+});
+
+test("parsePluginIdFromPackageName supports scoped and unscoped names", () => {
+  expect(parsePluginIdFromPackageName("@synra-plugin/chat")).toBe("chat");
+  expect(parsePluginIdFromPackageName("synra-plugin-my-tool")).toBe("my-tool");
+  expect(parsePluginIdFromPackageName("@foo/chat")).toBeNull();
+  expect(parsePluginIdFromPackageName("@synra-plugin/Chat")).toBeNull();
+});
+
+test("normalizePluginPagePath always returns normalized absolute path", () => {
+  expect(normalizePluginPagePath("home")).toBe("/home");
+  expect(normalizePluginPagePath("/home")).toBe("/home");
+  expect(normalizePluginPagePath("//home//index")).toBe("/home/index");
 });

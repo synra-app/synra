@@ -30,6 +30,8 @@
     "typescript": "catalog:types",
     "uno-colors": "catalog:style",
     "unocss": "catalog:unocss",
+    "unplugin-auto-import": "catalog:",
+    "unplugin-vue-components": "catalog:",
     "vite": "catalog:vite",
     "vite-plus": "catalog:vite"
   }

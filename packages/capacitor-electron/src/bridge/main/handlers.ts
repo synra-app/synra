@@ -39,7 +39,8 @@ export function createBridgeHandlers(deps: BridgeHandlerDependencies): BridgeHan
         traceId: request.payload.traceId,
         timeoutMs: request.payload.timeoutMs,
       }),
-    [BRIDGE_METHODS.pluginCatalogGet]: async () => deps.pluginCatalogService.getCatalog(),
+    [BRIDGE_METHODS.pluginCatalogGet]: async (request) =>
+      deps.pluginCatalogService.getCatalog(request.payload),
     [BRIDGE_METHODS.externalOpen]: async (request) =>
       deps.externalLinkService.openExternal(request.payload.url),
     [BRIDGE_METHODS.fileRead]: async (request) =>

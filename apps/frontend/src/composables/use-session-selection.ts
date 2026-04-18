@@ -26,7 +26,7 @@ export function useSessionSelection(activeSessions: ComputedRef<ConnectedSession
   function openSession(sessionId: string): void {
     selectedSessionId.value = sessionId;
     void router.replace({
-      path: "/messages",
+      path: route.path,
       query: { sessionId },
     });
   }

@@ -48,6 +48,7 @@ export interface ElectronBridgePlugin {
     invokeOptions?: { timeoutMs?: number; signal?: AbortSignal },
   ): Promise<RuntimeExecuteResult>;
   getPluginCatalog(options?: {
+    knownPluginIds?: string[];
     timeoutMs?: number;
     signal?: AbortSignal;
   }): Promise<PluginCatalogResult>;
@@ -136,9 +137,19 @@ export function createElectronBridgePlugin(invoke: BridgeInvoke): ElectronBridge
       return invoke(API_METHODS.executeRuntimeAction, options, invokeOptions);
     },
     async getPluginCatalog(
-      options: { timeoutMs?: number; signal?: AbortSignal } = {},
+      options: {
+        knownPluginIds?: string[];
+        timeoutMs?: number;
+        signal?: AbortSignal;
+      } = {},
     ): Promise<PluginCatalogResult> {
-      return invoke(API_METHODS.getPluginCatalog, {}, options);
+      return invoke(
+        API_METHODS.getPluginCatalog,
+        {
+          knownPluginIds: options.knownPluginIds,
+        },
+        options,
+      );
     },
     async readFile(
       options: ReadFileOptions,

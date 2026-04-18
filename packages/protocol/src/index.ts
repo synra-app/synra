@@ -118,6 +118,12 @@ export type PluginCatalogItem = {
   pluginId: string;
   version: string;
   displayName: string;
+  status?: "installed" | "available";
+  builtin?: boolean;
+  defaultPage?: string;
+  icon?: string;
+  logoPath?: string;
+  packageName?: string;
 };
 
 export type PluginCatalogResponsePayload = {

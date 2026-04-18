@@ -25,6 +25,12 @@ export default defineConfig({
   theme: {
     colors: unoColors({
       primary: "#64cc96",
+      success: "#22c55e",
+      warning: "#f59e0b",
+      error: "#ef4444",
+      info: "#0ea5e9",
+      surface: "#ffffff",
+      muted: "#475569",
     }),
     breakpoints,
   },

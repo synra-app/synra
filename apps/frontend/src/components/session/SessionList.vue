@@ -26,14 +26,14 @@ const emit = defineEmits<{
             <p class="font-semibold">
               {{ session.deviceId ?? session.remote ?? session.sessionId }}
             </p>
-            <p class="text-gray-600">Session: {{ session.sessionId }}</p>
-            <p class="text-gray-500">
+            <p class="text-muted-6">Session: {{ session.sessionId }}</p>
+            <p class="text-muted-5">
               Direction: {{ session.direction }} | Last Active: {{ session.lastActiveAt }}
             </p>
           </div>
           <button
             v-if="mode === 'connect'"
-            class="rounded-md bg-gray-900 px-3 py-2 text-white"
+            class="rounded-md bg-primary px-3 py-2 text-white"
             @click="emit('openMessages', session.sessionId)"
           >
             Open Messages
@@ -43,8 +43,8 @@ const emit = defineEmits<{
             class="rounded-md px-3 py-2 text-sm"
             :class="
               selectedSessionId === session.sessionId
-                ? 'bg-gray-900 text-white'
-                : 'border border-gray-300 bg-white text-gray-700'
+                ? 'bg-primary text-white'
+                : 'border border-surface-5 bg-surface text-muted-6'
             "
             @click="emit('select', session.sessionId)"
           >
@@ -53,11 +53,11 @@ const emit = defineEmits<{
         </div>
       </li>
     </ul>
-    <p v-else class="text-gray-600">
+    <p v-else class="text-muted-5">
       {{
         mode === "connect"
           ? "No active sessions yet."
-          : "No active session. Go to Connection page first."
+          : "No active session. Open a device session first."
       }}
     </p>
   </PanelCard>

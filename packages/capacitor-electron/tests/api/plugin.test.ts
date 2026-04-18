@@ -92,6 +92,7 @@ describe("api/plugin", () => {
             displayName: "github-open",
           },
         ],
+        generatedAt: Date.now(),
       } as MethodResultMap[typeof method];
     };
     const plugin = createElectronBridgePlugin(invoke);

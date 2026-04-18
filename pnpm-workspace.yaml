@@ -13,6 +13,8 @@ catalog:
   electron: ^41.2.0
   electron-builder: ^26.8.1
   unconfig: ^7.5.0
+  unplugin-auto-import: ^21.0.0
+  unplugin-vue-components: ^32.0.0
 
 catalogMode: prefer
 

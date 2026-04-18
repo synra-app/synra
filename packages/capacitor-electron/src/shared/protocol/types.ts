@@ -1,5 +1,10 @@
 import type { PluginAction, ShareInput } from "@synra/plugin-sdk";
-import type { PluginCatalogItem, SynraActionReceipt, SynraRuntimeMessage } from "@synra/protocol";
+import type {
+  PluginCatalogItem,
+  PluginCatalogRequestPayload,
+  SynraActionReceipt,
+  SynraRuntimeMessage,
+} from "@synra/protocol";
 import type { BridgeErrorCode } from "../errors/codes";
 import type { BridgeMethod } from "./constants";
 
@@ -96,6 +101,7 @@ export type RuntimeExecuteResult = {
 
 export type PluginCatalogResult = {
   plugins: PluginCatalogItem[];
+  generatedAt: number;
 };
 
 export type DiscoverySource = "mdns" | "probe" | "manual";
@@ -231,7 +237,7 @@ export type MethodPayloadMap = {
   "runtime.getInfo": Record<string, never>;
   "runtime.resolveActions": ResolveRuntimeActionsOptions;
   "runtime.execute": RuntimeExecuteOptions;
-  "plugin.catalog.get": Record<string, never>;
+  "plugin.catalog.get": PluginCatalogRequestPayload;
   "external.open": OpenExternalOptions;
   "file.read": ReadFileOptions;
   "discovery.start": DeviceDiscoveryStartOptions;

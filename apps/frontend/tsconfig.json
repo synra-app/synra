@@ -18,5 +18,5 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src", "typed-router.d.ts", "vite.config.ts"]
+  "include": ["src", ".auto-generated/**/*.d.ts", "typed-router.d.ts", "vite.config.ts"]
 }

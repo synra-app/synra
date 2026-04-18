@@ -19,6 +19,7 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./api/plugin": "./src/api/plugin.ts",
     "./capacitor": "./src/capacitor/index.ts",
     "./package.json": "./package.json"
   },
@@ -26,6 +27,7 @@
     "access": "public",
     "exports": {
       ".": "./dist/index.mjs",
+      "./api/plugin": "./dist/api/plugin.mjs",
       "./capacitor": "./dist/capacitor/index.mjs",
       "./package.json": "./package.json"
     }
