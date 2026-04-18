@@ -5,12 +5,13 @@
   "type": "module",
   "scripts": {
     "ready": "vp fmt && vp lint && vp run -r test && vp run -r build",
-    "build": "vp exec esno ./scripts/build.ts",
+    "build": "vp exec esno ./scripts/tasks/build.ts",
     "dev": "vp run frontend#dev",
     "dev:android": "vp exec esno ./scripts/mobile/dev-android.ts",
     "dev:mac": "vp run electron#dev",
     "dev:electron": "vp run electron#dev",
     "dev:ios": "vp exec esno ./scripts/mobile/dev-ios.ts",
+    "sync:app-config": "vp exec esno ./scripts/tasks/sync-app-config.ts",
     "cap": "vp run mobile#cap",
     "test": "vp run -r test",
     "lint": "vp lint --fix",
@@ -21,6 +22,7 @@
     "@inquirer/prompts": "catalog:",
     "@types/node": "catalog:types",
     "esno": "^4.8.0",
+    "unconfig": "catalog:",
     "vite-plus": "catalog:vite"
   },
   "engines": {

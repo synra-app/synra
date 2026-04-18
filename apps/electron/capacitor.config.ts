@@ -2,7 +2,7 @@ import type { CapacitorConfig } from "@capacitor/cli";
 
 const config: CapacitorConfig = {
   appId: "com.synra.electron",
-  appName: "Synra Electron",
+  appName: "Synra",
   webDir: "www",
 };
 

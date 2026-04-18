@@ -32,6 +32,9 @@ catalogs:
     electron-builder:
       specifier: ^26.8.1
       version: 26.8.1
+    unconfig:
+      specifier: ^7.5.0
+      version: 7.5.0
   release:
     bumpp:
       specifier: ^11.0.1
@@ -110,6 +113,9 @@ importers:
       esno:
         specifier: ^4.8.0
         version: 4.8.0
+      unconfig:
+        specifier: 'catalog:'
+        version: 7.5.0
       vite-plus:
         specifier: catalog:vite
         version: 0.1.18(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(typescript@6.0.3)(vite@8.0.8(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(yaml@2.8.3))(yaml@2.8.3)
@@ -185,7 +191,7 @@ importers:
         specifier: catalog:style
         version: 1.99.0
       typescript:
-        specifier: ~6.0.3
+        specifier: catalog:types
         version: 6.0.3
       uno-colors:
         specifier: catalog:style
