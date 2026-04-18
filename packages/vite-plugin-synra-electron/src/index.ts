@@ -227,6 +227,33 @@ function stopProcess(child: ChildProcessWithoutNullStreams | null): void {
   }, 1500).unref();
 }
 
+async function stopProcessAndWait(
+  child: ChildProcessWithoutNullStreams | null,
+  timeoutMs = 5000,
+): Promise<void> {
+  if (!child) {
+    return;
+  }
+  if (child.killed || child.exitCode !== null) {
+    return;
+  }
+
+  await new Promise<void>((resolve) => {
+    const timeoutId = setTimeout(() => {
+      child.removeListener("exit", onExit);
+      resolve();
+    }, timeoutMs);
+
+    const onExit = () => {
+      clearTimeout(timeoutId);
+      resolve();
+    };
+
+    child.once("exit", onExit);
+    stopProcess(child);
+  });
+}
+
 export function synraElectronPlugin(options: SynraElectronPluginOptions = {}): Plugin {
   const workspaceRoot = options.workspaceRoot ?? process.cwd();
   const electronCwd = options.electronCwd ?? process.cwd();
@@ -268,6 +295,7 @@ export function synraElectronPlugin(options: SynraElectronPluginOptions = {}): P
   let commandLineInterface: ReadlineInterface | null = null;
   let firstSuccessfulBuildReady = false;
   let requestQuit: (() => void) | null = null;
+  let cleanupPromise: Promise<void> | null = null;
 
   async function restartElectronRuntime(reason: "initial" | "rebuild"): Promise<void> {
     if (restartInFlight) {
@@ -335,21 +363,36 @@ export function synraElectronPlugin(options: SynraElectronPluginOptions = {}): P
     }, restartDebounceMs);
   }
 
-  function cleanup(): void {
-    if (restartTimer) {
-      clearTimeout(restartTimer);
-      restartTimer = null;
+  function cleanup(): Promise<void> {
+    if (cleanupPromise) {
+      return cleanupPromise;
     }
 
-    stopProcess(electronRuntimeProcess);
-    stopProcess(buildWatchProcess);
-    stopProcess(frontendProcess);
-    dependencyBuildProcesses.forEach((processItem) => stopProcess(processItem));
-    electronRuntimeProcess = null;
-    buildWatchProcess = null;
-    frontendProcess = null;
-    dependencyBuildProcesses.length = 0;
-    started = false;
+    cleanupPromise = (async () => {
+      if (restartTimer) {
+        clearTimeout(restartTimer);
+        restartTimer = null;
+      }
+
+      const processesToStop: Array<ChildProcessWithoutNullStreams | null> = [
+        electronRuntimeProcess,
+        buildWatchProcess,
+        frontendProcess,
+        ...dependencyBuildProcesses,
+      ];
+
+      await Promise.all(processesToStop.map((processItem) => stopProcessAndWait(processItem)));
+
+      electronRuntimeProcess = null;
+      buildWatchProcess = null;
+      frontendProcess = null;
+      dependencyBuildProcesses.length = 0;
+      started = false;
+    })().finally(() => {
+      cleanupPromise = null;
+    });
+
+    return cleanupPromise;
   }
 
   function teardownInteractiveCommands(): void {
@@ -395,8 +438,9 @@ export function synraElectronPlugin(options: SynraElectronPluginOptions = {}): P
       quitting = true;
       logWithTag("info", "quit requested, shutting down child processes");
       teardownInteractiveCommands();
-      cleanup();
-      onQuit();
+      void cleanup().finally(() => {
+        onQuit();
+      });
     });
   }
 
@@ -416,12 +460,14 @@ export function synraElectronPlugin(options: SynraElectronPluginOptions = {}): P
           }, 200).unref();
         };
 
-        server.httpServer?.close(() => {
-          exitProcess();
+        void cleanup().finally(() => {
+          server.httpServer?.close(() => {
+            exitProcess();
+          });
+          if (!server.httpServer) {
+            exitProcess();
+          }
         });
-        if (!server.httpServer) {
-          exitProcess();
-        }
       };
       setupInteractiveCommands(() => {
         requestQuit?.();
@@ -465,14 +511,22 @@ export function synraElectronPlugin(options: SynraElectronPluginOptions = {}): P
           buildWatchProcess.stderr.on("data", handleBuildOutput);
         } catch (error) {
           logWithTag("error", String(error), "stderr");
-          cleanup();
+          void cleanup();
         }
       })();
 
-      server.httpServer?.once("close", cleanup);
-      process.once("SIGINT", cleanup);
-      process.once("SIGTERM", cleanup);
-      process.once("exit", cleanup);
+      server.httpServer?.once("close", () => {
+        void cleanup();
+      });
+      process.once("SIGINT", () => {
+        void cleanup();
+      });
+      process.once("SIGTERM", () => {
+        void cleanup();
+      });
+      process.once("exit", () => {
+        void cleanup();
+      });
     },
   };
 }
