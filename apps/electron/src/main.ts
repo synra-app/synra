@@ -25,9 +25,12 @@ function errorWithTag(tag: string, ...args: unknown[]): void {
 }
 
 function createMainWindow(): BrowserWindow {
+  const startupBeginAt = Date.now();
   const mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    show: false,
+    backgroundColor: "#0f172a",
     webPreferences: {
       preload: join(resolve(__dirname), "preload.cjs"),
       contextIsolation: true,
@@ -52,11 +55,36 @@ function createMainWindow(): BrowserWindow {
       .executeJavaScript("Boolean(window.__synraCapElectron && window.__synraCapElectron.invoke)")
       .then((available) => {
         logWithTag("electron-main", "bridge available:", available);
+        logWithTag(
+          "electron-main",
+          "renderer load completed in",
+          `${Date.now() - startupBeginAt}ms`,
+        );
       })
       .catch((error) => {
         errorWithTag("electron-main", "bridge probe failed:", error);
       });
   });
+
+  mainWindow.once("ready-to-show", () => {
+    logWithTag("electron-main", "window ready-to-show in", `${Date.now() - startupBeginAt}ms`);
+    if (!mainWindow.isDestroyed()) {
+      mainWindow.show();
+    }
+  });
+
+  mainWindow.webContents.on(
+    "did-fail-load",
+    (_event, errorCode, errorDescription, validatedURL) => {
+      errorWithTag(
+        "electron-main",
+        "did-fail-load:",
+        `code=${String(errorCode)}`,
+        errorDescription,
+        validatedURL,
+      );
+    },
+  );
 
   mainWindow.webContents.on("console-message", (_event, level, message) => {
     logWithTag(`renderer:${String(level)}`, message);

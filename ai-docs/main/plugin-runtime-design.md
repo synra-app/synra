@@ -1,25 +1,27 @@
-# 插件运行时设计（MVP）
+# 插件运行时设计（重构版）
 
-## 目标
+## 目标（当前）
 
-在不修改 `app.md` 愿景的前提下，把插件执行链路收敛为可实现的 MVP 规则：  
-`输入分享 -> 插件匹配 -> 用户选择动作 -> PC 执行 -> 三阶段回执回传`。
+将插件系统收敛为可扩展且可隔离的执行模型：  
+`输入 -> 插件宿主调度 -> Worker/回退执行 -> 跨端事件回传`。
 
-## 设计约束
+## 设计约束（当前）
 
 - 不内置业务动作，动作语义由插件定义。
-- 不做“记住默认动作”，每次都由用户选择。
-- 不做插件显式权限声明，由运行时统一管控。
-- 插件执行必须隔离，单插件卡住不得影响主进程。
+- 不保留旧宿主重复定义，统一由宿主外观编排。
+- 插件执行默认走 Worker 代理，可降级到主线程回退。
+- 能力访问统一走 `HostCapabilityPort`。
 
-## 角色划分
+## 角色划分（代码映射）
 
 - `@synra/plugin-sdk`
-  - 定义插件接口、动作模型、执行回执模型。
-- `@synra/plugin-runtime`
-  - 插件注册、匹配编排、用户选择编排、超时控制、回执聚合。
+  - 定义插件接口、动作模型、Worker 运行时抽象、能力端口抽象。
+- `apps/frontend/src/plugins/host.ts`
+  - `PluginHostFacade`、`PluginRegistry`、`PluginLifecycleManager`、`PluginRouteBinder`。
 - `@synra/capacitor-electron`
-  - PC 侧受控执行适配器（打开浏览器、打开文件等）。
+  - PC 侧运行时与 discovery 传输能力。
+- `apps/frontend/src/plugins/capability-port.ts`
+  - Capacitor 能力适配实现（`CapacitorCapabilityPortAdapter`）。
 
 ## PC 作为插件服务端
 
@@ -36,7 +38,7 @@ flowchart LR
   runtimeStore --> isolatedExec[IsolatedPluginWorkers]
 ```
 
-## 插件契约（MVP）
+## 插件契约（当前）
 
 ```ts
 export interface SynraPlugin {
@@ -44,69 +46,49 @@ export interface SynraPlugin {
   version: string;
   supports(input: ShareInput): Promise<PluginMatchResult>;
   buildActions(input: ShareInput): Promise<PluginAction[]>;
-  execute(action: PluginAction, context: ExecuteContext): Promise<PluginExecutionResult>;
+  execute(action: PluginAction, context: ExecuteContext): Promise<SynraActionReceipt>;
 }
 
-export interface PluginAction {
-  actionId: string;
-  actionType: string;
-  payload: unknown; // Opaque payload, validated by plugin/runtime bridge
-}
+export type PluginAction = SynraActionRequest & { label: string; requiresConfirm: boolean };
 ```
 
-## `@synra/plugin-sdk` 类型草案（MVP）
+## Worker 运行时（新增）
 
 ```ts
-export interface ShareInput {
-  kind: "text" | "link" | "file";
-  raw: unknown;
-  sourceApp?: string;
-}
+export type PluginWorkerTaskRequest = {
+  requestId: string;
+  pluginId: string;
+  taskType: string;
+  payload: unknown;
+  timeoutMs?: number;
+};
 
-export interface PluginMatchResult {
-  matched: boolean;
-  score?: number;
-  reason?: string;
-}
-
-export interface ExecuteContext {
-  messageId: string;
-  sessionId: string;
-  timestamp: number;
-  timeoutMs: number;
-  role: "sender" | "receiver";
-}
-
-export interface PluginExecutionResult {
+export type PluginWorkerTaskResult = {
+  requestId: string;
   ok: boolean;
-  data?: unknown;
-  error?: {
-    code: string;
-    message: string;
-  };
+  result?: unknown;
+  error?: { code: string; message: string; details?: unknown };
+};
+
+export interface PluginWorkerRuntime {
+  executeTask(request: PluginWorkerTaskRequest): Promise<PluginWorkerTaskResult>;
 }
 ```
 
-## 运行时流程
+## 宿主与运行时流程
 
 ```mermaid
 flowchart LR
-  roleSelect[RoleSelect_sender_receiver] --> inputData[ShareInput]
-  inputData --> pluginRuntime[PluginRuntime]
-  pluginRuntime --> supportsPhase[SupportsPhase]
-  supportsPhase --> actionBuildPhase[BuildActionsPhase]
-  actionBuildPhase --> userSelectPhase[UserSelectPhase]
-  userSelectPhase --> isolatedExec[IsolatedWorkerExecute]
-  isolatedExec --> receiptStages[RECEIVED_STARTED_FINISHED]
+  inputData[ShareInput] --> pluginHost[PluginHostFacade]
+  pluginHost --> lifecycleMgr[PluginLifecycleManager]
+  pluginHost --> routeBinder[PluginRouteBinder]
+  pluginHost --> workerRuntime[WorkerProxyRuntime]
+  workerRuntime --> fallbackRuntime[FallbackWorkerRuntime]
+  pluginHost --> capabilityPort[HostCapabilityPort]
+  capabilityPort --> capacitorAdapter[CapacitorCapabilityPortAdapter]
 ```
 
-## 冲突与选择策略
-
-- 多插件命中时，统一聚合候选动作。
-- 首版固定策略：每次用户选择，不自动落默认。
-- 用户取消选择时，返回可解释取消结果，不触发执行。
-
-## 执行与回执模型
+## 执行与回执模型（保持）
 
 ### 三阶段回执映射
 
@@ -125,67 +107,21 @@ flowchart LR
 - 由运行时统一设置执行超时。
 - 超时直接生成 `EXECUTION_TIMEOUT` 并返回 `FINISHED` 失败结果。
 
-## 隔离模型
+## 隔离模型（当前）
 
-- 调度层统一在 `@synra/plugin-runtime`。
-- 每个插件动作在独立 Worker/子进程执行。
-- 调度层负责健康探测、超时中断、结果回传。
+- 调度层统一在宿主外观层，Worker 运行时仅负责任务执行。
+- 每个插件任务可由 Worker 执行，失败时回退本地执行器。
+- 任务请求必须带 `requestId`，并支持超时回收。
 
-## `@synra/plugin-runtime` 对接接口草案（MVP）
+## 能力端口接口（新增）
 
 ```ts
-import type { SynraRuntimeMessage } from "@synra/protocol";
-
-export interface PluginRuntime {
-  register(plugin: SynraPlugin): void;
-  unregister(pluginId: string): void;
-  listPlugins(): string[];
-
-  resolveActions(input: ShareInput): Promise<PluginActionCandidate[]>;
-  executeSelected(
-    candidate: PluginActionCandidate,
-    context: ExecuteContext,
-  ): Promise<PluginExecutionResult>;
-}
-
-export interface PluginActionCandidate {
-  pluginId: string;
-  action: PluginAction;
-  matchScore: number;
-  explain?: string;
-}
-
-export interface RuntimeMessageBridge {
-  emit(message: SynraRuntimeMessage): Promise<void>;
-}
-
-export interface PluginCatalogService {
-  listInstalled(): Promise<InstalledPluginInfo[]>;
-  fetchBundle(pluginId: string, version: string): Promise<PluginBundleRef>;
-  getRules(pluginId: string): Promise<PluginRuleConfig>;
-}
-
-export interface InstalledPluginInfo {
-  pluginId: string;
-  version: string;
-  displayName: string;
-  sdkRange: string;
-  checksum?: string;
-}
-
-export interface PluginBundleRef {
-  pluginId: string;
-  version: string;
-  downloadUrl?: string;
-  inlineBundleBase64?: string;
-  checksum?: string;
-}
-
-export interface PluginRuleConfig {
-  pluginId: string;
-  enabled: boolean;
-  ruleVersion: number;
-  rules: Record<string, unknown>;
+export interface HostCapabilityPort {
+  sendCrossDeviceMessage(message: SynraCrossDeviceMessage): Promise<void>;
+  subscribeCrossDeviceMessage(
+    type: SynraMessageType,
+    handler: (message: SynraCrossDeviceMessage) => void | Promise<void>,
+  ): () => void | Promise<void>;
 }
 ```
 
@@ -198,12 +134,10 @@ export interface PluginRuleConfig {
 - 设备请求插件清单/规则时，PC 必须返回当前已安装版本与规则版本。
 - 设备请求插件包时，PC 返回可校验的包引用（`checksum`）。
 
-### 插件同步约束
+### 插件同步约束（当前）
 
-- 连接建立后，设备先拉取插件清单，再按需拉取缺失插件包与规则。
-- 插件规则以 PC 为准，设备可本地缓存但不可擅自改写主版本。
-- 若插件版本不兼容，设备保留元信息但标记为不可执行。
-- 进入插件后先选择当前角色（`sender` 或 `receiver`），再加载对应页面与动作流程。
+- 不保留旧接口双写，宿主与协议一次性切换到新事件语义。
+- 前端插件页不直接处理原生消息，统一消费 store/能力端口事件。
 
 ## 错误语义（与传输层对齐）
 

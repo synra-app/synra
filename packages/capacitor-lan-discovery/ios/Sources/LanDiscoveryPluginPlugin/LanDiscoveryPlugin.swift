@@ -10,6 +10,10 @@ import Network
     private var devices: [String: DeviceRecord] = [:]
     private var sessionState = SessionState()
     private var connection: NWConnection?
+    public var onMessageReceived: (([String: Any]) -> Void)?
+    public var onMessageAck: (([String: Any]) -> Void)?
+    public var onSessionClosed: (([String: Any]) -> Void)?
+    public var onTransportError: (([String: Any]) -> Void)?
 
     @objc public func startDiscovery(
         includeLoopback: Bool,
@@ -210,7 +214,7 @@ import Network
 
     @objc public func sendMessage(
         sessionId: String,
-        type: String,
+        messageType: String,
         payload: Any,
         messageId: String?
     ) -> [String: Any]? {
@@ -221,8 +225,8 @@ import Network
 
         let targetMessageId = messageId ?? UUID().uuidString
         let envelope: [String: Any] = [
-            "type": type,
-            "value": payload,
+            "messageType": messageType,
+            "payload": payload,
         ]
         let messageFrame = frame(
             type: "message",
@@ -483,7 +487,33 @@ import Network
             if frame["type"] as? String == "close" {
                 self.sessionState.state = "closed"
                 self.sessionState.closedAt = self.now()
+                self.onSessionClosed?([
+                    "sessionId": frame["sessionId"] as Any,
+                    "reason": "peer-closed",
+                ])
                 return
+            }
+            if frame["type"] as? String == "message" {
+                let payload = frame["payload"] as? [String: Any]
+                self.onMessageReceived?([
+                    "sessionId": frame["sessionId"] as Any,
+                    "messageId": frame["messageId"] as Any,
+                    "messageType": payload?["messageType"] as? String ?? "transport.message.received",
+                    "payload": payload?["payload"] as Any,
+                    "timestamp": frame["timestamp"] as? Int ?? self.now(),
+                ])
+            } else if frame["type"] as? String == "ack" {
+                self.onMessageAck?([
+                    "sessionId": frame["sessionId"] as Any,
+                    "messageId": frame["messageId"] as Any,
+                    "timestamp": frame["timestamp"] as? Int ?? self.now(),
+                ])
+            } else if frame["type"] as? String == "error" {
+                self.onTransportError?([
+                    "sessionId": frame["sessionId"] as Any,
+                    "code": "TRANSPORT_IO_ERROR",
+                    "message": frame["error"] as? String ?? "Unknown transport error",
+                ])
             }
             self.startReceiveLoop()
         }

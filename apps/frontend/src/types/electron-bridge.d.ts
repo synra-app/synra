@@ -2,10 +2,17 @@ declare global {
   type SynraHostEvent = {
     id: number;
     timestamp: number;
-    type: "clientConnected" | "clientClosed" | "messageReceived";
+    type:
+      | "transport.session.opened"
+      | "transport.session.closed"
+      | "transport.message.received"
+      | "transport.message.ack"
+      | "transport.error";
     remote: string;
     sessionId?: string;
     messageId?: string;
+    messageType?: string;
+    code?: string;
     payload?: unknown;
   };
 

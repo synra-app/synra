@@ -1,4 +1,5 @@
 import type { PluginListenerHandle } from "@capacitor/core";
+import type { SynraMessageType } from "@synra/protocol";
 
 export type DiscoverySource = "mdns" | "probe" | "manual";
 
@@ -104,8 +105,8 @@ export type CloseSessionResult = {
 
 export type SendMessageOptions = {
   sessionId: string;
-  type: string;
-  payload: string | Record<string, unknown>;
+  messageType: SynraMessageType;
+  payload: unknown;
   messageId?: string;
 };
 
@@ -124,10 +125,17 @@ export type GetSessionStateResult = SessionSnapshot;
 export type HostEvent = {
   id: number;
   timestamp: number;
-  type: "clientConnected" | "clientClosed" | "messageReceived";
+  type:
+    | "transport.session.opened"
+    | "transport.session.closed"
+    | "transport.message.received"
+    | "transport.message.ack"
+    | "transport.error";
   remote: string;
   sessionId?: string;
   messageId?: string;
+  messageType?: SynraMessageType;
+  code?: string;
   payload?: unknown;
 };
 
@@ -155,7 +163,7 @@ export type SessionClosedEvent = {
 export type MessageReceivedEvent = {
   sessionId: string;
   messageId?: string;
-  type: string;
+  messageType: SynraMessageType;
   payload: unknown;
   timestamp: number;
 };

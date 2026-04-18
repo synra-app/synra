@@ -219,12 +219,12 @@ public class LanDiscoveryPluginPlugin extends Plugin {
     @PluginMethod
     public void sendMessage(PluginCall call) {
         String sessionId = call.getString("sessionId");
-        String type = call.getString("type");
+        String messageType = call.getString("messageType");
         Object payload = call.getData().opt("payload");
         String messageId = call.getString("messageId", UUID.randomUUID().toString());
 
-        if (sessionId == null || type == null) {
-            call.reject("sessionId/type are required.");
+        if (sessionId == null || messageType == null) {
+            call.reject("sessionId/messageType are required.");
             return;
         }
 
@@ -236,8 +236,8 @@ public class LanDiscoveryPluginPlugin extends Plugin {
 
             try {
                 JSObject envelope = new JSObject();
-                envelope.put("type", type);
-                envelope.put("value", payload);
+                envelope.put("messageType", messageType);
+                envelope.put("payload", payload);
                 writeFrame(sessionOutput, frame("message", sessionId, messageId, envelope));
 
                 JSObject result = new JSObject();
@@ -295,6 +295,13 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         call.resolve(result);
     }
 
+    @PluginMethod
+    public void pullHostEvents(PluginCall call) {
+        JSObject response = new JSObject();
+        response.put("events", new JSONArray());
+        call.resolve(response);
+    }
+
     @Override
     protected void handleOnDestroy() {
         closeSessionSocket();
@@ -318,11 +325,15 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                     JSONObject frame = readFrame(sessionInput);
                     String type = frame.optString("type");
                     if ("message".equals(type)) {
+                        JSONObject payload = frame.optJSONObject("payload");
                         JSObject event = new JSObject();
                         event.put("sessionId", frame.optString("sessionId"));
                         event.put("messageId", frame.optString("messageId"));
-                        event.put("type", "message");
-                        event.put("payload", frame.opt("payload"));
+                        event.put(
+                            "messageType",
+                            payload == null ? "transport.message.received" : payload.optString("messageType", "transport.message.received")
+                        );
+                        event.put("payload", payload == null ? null : payload.opt("payload"));
                         event.put("timestamp", frame.optLong("timestamp", System.currentTimeMillis()));
                         notifyListeners("messageReceived", event);
                     } else if ("ack".equals(type)) {

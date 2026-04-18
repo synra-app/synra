@@ -14,7 +14,16 @@ export type LegacySynraMessageType =
   | "action.completed"
   | "action.failed";
 
-export type SynraMessageType = LegacySynraMessageType;
+export type TransportMessageType =
+  | "transport.session.opened"
+  | "transport.session.closed"
+  | "transport.message.received"
+  | "transport.message.ack"
+  | "transport.error";
+
+export type CustomMessageType = `custom.${string}`;
+
+export type SynraMessageType = LegacySynraMessageType | TransportMessageType | CustomMessageType;
 
 export type RuntimeMessageType =
   | "runtime.request"
@@ -27,12 +36,106 @@ export type PluginSyncMessageType = "plugin.catalog.request" | "plugin.catalog.r
 
 export type ProtocolMessageType = RuntimeMessageType | PluginSyncMessageType;
 
-export type SynraCrossDeviceMessage<TPayload = unknown> = {
+export type ShareDetectedPayload = {
+  inputType: "text" | "url" | "file";
+  raw: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type ActionProposedPayload = {
+  actionId: ActionId;
+  pluginId: string;
+  actionType: string;
+  label: string;
+  requiresConfirm: boolean;
+  payload: unknown;
+};
+
+export type ActionExecutingPayload = {
+  actionId: ActionId;
+  pluginId: string;
+  startedAt: number;
+};
+
+export type ActionCompletedPayload = {
+  actionId: ActionId;
+  pluginId: string;
+  finishedAt: number;
+  output?: unknown;
+};
+
+export type ActionFailedPayload = {
+  actionId: ActionId;
+  pluginId: string;
+  finishedAt: number;
+  code: SynraErrorCode;
+  message: string;
+  retryable: boolean;
+  details?: unknown;
+};
+
+export type TransportSessionOpenedPayload = {
+  sessionId: SessionId;
+  deviceId?: DeviceId;
+  host?: string;
+  port?: number;
+  openedAt: number;
+};
+
+export type TransportSessionClosedPayload = {
+  sessionId: SessionId;
+  closedAt: number;
+  reason?: string;
+};
+
+export type TransportMessageReceivedPayload = {
+  sessionId: SessionId;
+  messageId?: MessageId;
+  messageType: SynraMessageType;
+  payload: unknown;
+  timestamp: number;
+  remote?: string;
+};
+
+export type TransportMessageAckPayload = {
+  sessionId: SessionId;
+  messageId: MessageId;
+  timestamp: number;
+};
+
+export type TransportErrorPayload = {
+  sessionId?: SessionId;
+  code: SynraErrorCode | "TRANSPORT_IO_ERROR";
+  message: string;
+  retryable?: boolean;
+  details?: unknown;
+};
+
+export type SynraCrossDevicePayloadByType = {
+  "share.detected": ShareDetectedPayload;
+  "action.proposed": ActionProposedPayload;
+  "action.selected": SynraActionRequest;
+  "action.executing": ActionExecutingPayload;
+  "action.completed": ActionCompletedPayload;
+  "action.failed": ActionFailedPayload;
+  "transport.session.opened": TransportSessionOpenedPayload;
+  "transport.session.closed": TransportSessionClosedPayload;
+  "transport.message.received": TransportMessageReceivedPayload;
+  "transport.message.ack": TransportMessageAckPayload;
+  "transport.error": TransportErrorPayload;
+} & {
+  [K in CustomMessageType]: unknown;
+};
+
+export type SynraCrossDeviceMessage<
+  TType extends SynraMessageType = SynraMessageType,
+  TPayload = SynraCrossDevicePayloadByType[TType],
+> = {
   protocolVersion: typeof PROTOCOL_VERSION;
   messageId: MessageId;
   sessionId: SessionId;
   traceId: TraceId;
-  type: SynraMessageType;
+  type: TType;
   sentAt: number;
   ttlMs: number;
   fromDeviceId: DeviceId;
@@ -181,8 +284,17 @@ export type SynraActionReceipt =
     };
 
 export function createMessage<TPayload>(
-  input: Omit<SynraCrossDeviceMessage<TPayload>, "protocolVersion">,
-): SynraCrossDeviceMessage<TPayload> {
+  input: Omit<SynraCrossDeviceMessage<SynraMessageType, TPayload>, "protocolVersion">,
+): SynraCrossDeviceMessage<SynraMessageType, TPayload> {
+  return {
+    ...input,
+    protocolVersion: PROTOCOL_VERSION,
+  };
+}
+
+export function createTypedMessage<TType extends SynraMessageType>(
+  input: Omit<SynraCrossDeviceMessage<TType>, "protocolVersion">,
+): SynraCrossDeviceMessage<TType> {
   return {
     ...input,
     protocolVersion: PROTOCOL_VERSION,

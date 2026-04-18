@@ -2,6 +2,7 @@ import type { PluginAction, ShareInput } from "@synra/plugin-sdk";
 import type {
   PluginCatalogItem,
   PluginCatalogRequestPayload,
+  SynraMessageType,
   SynraActionReceipt,
   SynraRuntimeMessage,
 } from "@synra/protocol";
@@ -204,8 +205,8 @@ export type DeviceSessionCloseResult = {
 
 export type DeviceSessionSendMessageOptions = {
   sessionId: string;
-  type: string;
-  payload: string | Record<string, unknown>;
+  messageType: SynraMessageType;
+  payload: unknown;
   messageId?: string;
 };
 
@@ -222,10 +223,17 @@ export type DeviceSessionGetStateOptions = {
 export type DeviceDiscoveryHostEvent = {
   id: number;
   timestamp: number;
-  type: "clientConnected" | "clientClosed" | "messageReceived";
+  type:
+    | "transport.session.opened"
+    | "transport.session.closed"
+    | "transport.message.received"
+    | "transport.message.ack"
+    | "transport.error";
   remote: string;
   sessionId?: string;
   messageId?: string;
+  messageType?: SynraMessageType;
+  code?: string;
   payload?: unknown;
 };
 

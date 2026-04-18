@@ -1,15 +1,15 @@
-# 跨端通讯设计（MVP：LAN 直连）
+# 跨端通讯设计（重构实现）
 
 ## 目标
 
 提供平台无关、可观测、可失败解释的跨设备通讯底层，支撑“手机触发 -> PC 执行 -> 手机回传结果”的闭环。
 
-## MVP 范围
+## 当前范围
 
 - 仅支持 LAN 直连。
 - 支持扫码、配对码、主动发现后手动确认三种配对入口。
-- 支持三阶段回执：`RECEIVED -> STARTED -> FINISHED`。
-- 支持在线保守重试，不支持离线补偿队列。
+- 支持运行时三阶段回执：`runtime.received -> runtime.started -> runtime.finished`。
+- Discovery 发送链路已加入基础重试（短退避）与 socket 背压队列。
 - 发送前不可达时直接失败并返回细分错误码。
 
 ## 非 MVP（明确后置）
@@ -18,16 +18,16 @@
 - 离线消息持久化队列。
 - 强制消息签名校验（MVP 暂不启用）。
 
-## 模块边界
+## 模块边界（代码落点）
 
 - `@synra/transport-core`
   - `DeviceTransport` 抽象。
   - 传输层/会话层双状态机。
-  - 重试与去重策略。
-- `@synra/transport-lan`
-  - LAN 发现、握手、心跳、断线检测。
+  - 重试与去重策略工具。
+- `@synra/capacitor-electron` `device-discovery.service.ts`
+  - LAN 发现、握手、会话、收发、ACK、host event 推送。
 - `@synra/protocol`
-  - 消息模型、错误码、版本协商规则。
+  - 消息模型、错误码、`type -> payload` 映射。
 
 ## 协议与版本策略
 
@@ -53,7 +53,7 @@
 - `timestamp`：Unix 毫秒时间戳（`number`）。
 - `type`：使用 namespaced 命名（如 `runtime.request`）。
 
-### messageType 枚举（MVP）
+### messageType 枚举（当前）
 
 执行链路：
 
@@ -63,14 +63,17 @@
 - `runtime.finished`：执行已结束。
 - `runtime.error`：协议级或运行时级即时错误（无法进入正常执行闭环）。
 
-插件同步链路（PC 作为 server）：
+传输链路：
 
-- `plugin.catalog.request`：设备请求 PC 返回插件清单。
-- `plugin.catalog.response`：PC 返回已安装插件清单。
-- `plugin.bundle.request`：设备请求指定插件包。
-- `plugin.bundle.response`：PC 返回插件包引用或内联包内容。
-- `plugin.rules.request`：设备请求插件规则配置。
-- `plugin.rules.response`：PC 返回插件规则配置。
+- `transport.session.opened`
+- `transport.session.closed`
+- `transport.message.received`
+- `transport.message.ack`
+- `transport.error`
+
+扩展链路：
+
+- `custom.${string}`
 
 ### `runtime.finished` 负载约束
 
@@ -125,11 +128,11 @@ flowchart LR
 - 规则配置携带 `ruleVersion`，设备仅做缓存和比对。
 - 插件包建议返回 `checksum`，设备侧做完整性校验。
 
-### 重试策略（保守）
+### 重试与背压（已落地）
 
-- 仅对“等待 `RECEIVED` 超时”执行小次数重试。
-- 重试使用短指数退避，超过上限快速失败。
-- 重复消息由 `messageId` 去重，禁止重复执行。
+- 仅对等待 ACK 超时执行重试（默认 3 次）。
+- socket 写入走串行队列，`write()` 返回 `false` 时等待 `drain`。
+- 单帧大小设上限（`MAX_FRAME_BYTES`），超限直接拒绝。
 
 ### 离线与断联处理
 
@@ -179,23 +182,24 @@ type ProtocolError = {
 
 > 约束：用户主动取消不走错误码，统一通过 `runtime.finished` + `status=cancelled` 表达。
 
-## `@synra/protocol` TypeScript 类型草案（MVP）
+## `@synra/protocol` TypeScript（当前实现）
 
 ```ts
 export type ProtocolVersion = `${number}.${number}.${number}`;
 
-export type ProtocolMessageType =
-  | "runtime.request"
-  | "runtime.received"
-  | "runtime.started"
-  | "runtime.finished"
-  | "runtime.error"
-  | "plugin.catalog.request"
-  | "plugin.catalog.response"
-  | "plugin.bundle.request"
-  | "plugin.bundle.response"
-  | "plugin.rules.request"
-  | "plugin.rules.response";
+export type SynraMessageType =
+  | "share.detected"
+  | "action.proposed"
+  | "action.selected"
+  | "action.executing"
+  | "action.completed"
+  | "action.failed"
+  | "transport.session.opened"
+  | "transport.session.closed"
+  | "transport.message.received"
+  | "transport.message.ack"
+  | "transport.error"
+  | `custom.${string}`;
 
 export type RuntimeFinishedStatus = "success" | "failed" | "cancelled";
 
@@ -221,13 +225,18 @@ export interface ProtocolError {
   message: string;
 }
 
-export interface ProtocolEnvelope<TType extends ProtocolMessageType, TPayload> {
-  messageId: string; // UUID v4
-  sessionId: string; // Pair-level session id
-  timestamp: number; // Unix ms
+export type SynraCrossDeviceMessage<TType extends SynraMessageType = SynraMessageType> = {
+  protocolVersion: "1.0";
+  messageId: string;
+  sessionId: string;
+  traceId: string;
   type: TType;
-  payload: TPayload;
-}
+  sentAt: number;
+  ttlMs: number;
+  fromDeviceId: string;
+  toDeviceId: string;
+  payload: unknown;
+};
 
 export interface RuntimeRequestPayload {
   pluginId: string;
@@ -352,7 +361,7 @@ flowchart LR
 }
 ```
 
-## 双状态机设计
+## 双状态机设计（保留）
 
 ```mermaid
 flowchart TD
@@ -380,9 +389,9 @@ flowchart TD
 - 决策事件：插件匹配与冲突选择结果。
 - 交互事件：用户确认、取消、错误提示、重试点击。
 
-## 测试基线（MVP）
+## 测试基线（当前）
 
-- 功能闭环：手机触发到 PC 执行再到手机回传全链路打通。
-- 可靠性：重试后无重复执行，失败有明确错误码。
+- 功能闭环：移动端发送 -> PC ACK -> 事件回传 -> 前端日志更新。
+- 可靠性：ACK 重试、写队列背压、超限帧防护可观察。
 - 配对流程：三种入口均可完成绑定。
 - 断联场景：发送前失败语义正确，UI 可解释。

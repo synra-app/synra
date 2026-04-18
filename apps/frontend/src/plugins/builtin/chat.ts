@@ -1,4 +1,4 @@
-import type { SynraUiPlugin } from "../host";
+import type { SynraUiPlugin } from "@synra/plugin-sdk";
 
 export const builtinChatPlugin: SynraUiPlugin = {
   pluginId: "chat",

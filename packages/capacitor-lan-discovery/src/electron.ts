@@ -154,16 +154,42 @@ export class LanDiscoveryElectron extends WebPlugin implements LanDiscoveryPlugi
     }
     subscribe((event) => {
       this.notifyListeners("hostEvent", event);
-      if (event.type === "messageReceived") {
+      if (event.type === "transport.message.received" && event.sessionId) {
         this.notifyListeners("messageReceived", {
-          sessionId: event.sessionId ?? "unknown",
+          sessionId: event.sessionId,
           messageId: event.messageId,
-          type: "host.message",
-          payload: {
-            remote: event.remote,
-            payload: event.payload,
-          },
+          messageType: event.messageType ?? "transport.message.received",
+          payload: event.payload ?? null,
           timestamp: event.timestamp,
+        });
+      } else if (event.type === "transport.message.ack" && event.sessionId && event.messageId) {
+        this.notifyListeners("messageAck", {
+          sessionId: event.sessionId,
+          messageId: event.messageId,
+          timestamp: event.timestamp,
+        });
+      } else if (event.type === "transport.session.opened" && event.sessionId) {
+        this.notifyListeners("sessionOpened", {
+          sessionId: event.sessionId,
+        });
+      } else if (event.type === "transport.session.closed") {
+        this.notifyListeners("sessionClosed", {
+          sessionId: event.sessionId,
+          reason: "peer-closed",
+        });
+      } else if (event.type === "transport.error") {
+        const message =
+          typeof event.payload === "string"
+            ? event.payload
+            : event.payload && typeof event.payload === "object" && "message" in event.payload
+              ? JSON.stringify(
+                  (event.payload as { message?: unknown }).message ?? "Transport error",
+                )
+              : "Transport error";
+        this.notifyListeners("transportError", {
+          sessionId: event.sessionId,
+          code: event.code,
+          message,
         });
       }
     });
@@ -268,11 +294,6 @@ export class LanDiscoveryElectron extends WebPlugin implements LanDiscoveryPlugi
   async sendMessage(options: SendMessageOptions): Promise<SendMessageResult> {
     this.ensureHostEventSubscription();
     const result = await this.invokeBridge("discovery.sendMessage", options);
-    this.notifyListeners("messageAck", {
-      sessionId: result.sessionId,
-      messageId: result.messageId,
-      timestamp: Date.now(),
-    });
     return result;
   }
 

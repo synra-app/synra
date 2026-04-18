@@ -2,6 +2,7 @@ import type {
   SynraActionReceipt,
   SynraActionRequest,
   SynraCrossDeviceMessage,
+  SynraMessageType,
 } from "@synra/protocol";
 
 export type ShareInputType = "text" | "url" | "file";
@@ -77,12 +78,25 @@ export type SynraUiPlugin = {
   onPluginExit(registry: PluginPageRegistry): void | Promise<void>;
 };
 
+export type HostCapabilityPort = {
+  sendCrossDeviceMessage<TType extends SynraMessageType>(
+    message: SynraCrossDeviceMessage<TType>,
+  ): Promise<void>;
+  subscribeCrossDeviceMessage<TType extends SynraMessageType>(
+    type: TType,
+    handler: (message: SynraCrossDeviceMessage<TType>) => void | Promise<void>,
+  ): () => void | Promise<void>;
+};
+
 export function toActionSelectedMessage(
-  input: Omit<SynraCrossDeviceMessage<PluginAction>, "type">,
-): SynraCrossDeviceMessage<PluginAction> {
+  input: Omit<SynraCrossDeviceMessage<"action.selected">, "type" | "payload"> & {
+    payload: PluginAction;
+  },
+): SynraCrossDeviceMessage<"action.selected"> {
   return {
     ...input,
     type: "action.selected",
+    payload: input.payload,
   };
 }
 
@@ -110,3 +124,12 @@ export function normalizePluginPagePath(pagePath: string): string {
   const normalized = pagePath.startsWith("/") ? pagePath : `/${pagePath}`;
   return normalized.replace(/\/+/g, "/");
 }
+
+export type {
+  PluginWorkerRuntime,
+  PluginWorkerTaskRequest,
+  PluginWorkerTaskResult,
+  LocalTaskExecutor,
+  WorkerRuntimeOptions,
+} from "./worker-runtime";
+export { FallbackWorkerRuntime, WorkerProxyRuntime } from "./worker-runtime";

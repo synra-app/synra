@@ -22,6 +22,13 @@ const breakpoints = {
 };
 
 export default defineConfig({
+  content: {
+    filesystem: ["src/**/*.{vue,ts,tsx,js,jsx,html,css,scss}", "index.html"],
+    pipeline: {
+      include: [/[\\/]src[\\/].*\.(vue|ts|tsx|js|jsx|html|css|scss)($|\?)/, /[\\/]index\.html$/],
+      exclude: [/[\\/]node_modules[\\/]/, /[\\/]\.auto-generated[\\/]/, /[\\/]dist[\\/]/],
+    },
+  },
   theme: {
     colors: unoColors({
       primary: "#64cc96",

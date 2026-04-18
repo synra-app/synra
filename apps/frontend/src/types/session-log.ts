@@ -6,7 +6,6 @@ export type SessionLogEntry = {
     | "messageSent"
     | "messageReceived"
     | "messageAck"
-    | "hostEvent"
     | "transportError";
   payload: unknown;
   timestamp: number;

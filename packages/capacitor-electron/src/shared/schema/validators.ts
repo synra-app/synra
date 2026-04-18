@@ -216,8 +216,8 @@ export function validateDiscoveryOpenSessionPayload(payload: unknown): payload i
 
 export function validateDiscoverySendMessagePayload(payload: unknown): payload is {
   sessionId: string;
-  type: string;
-  payload: string | Record<string, unknown>;
+  messageType: string;
+  payload: unknown;
   messageId?: string;
 } {
   if (!isObject(payload)) {
@@ -228,14 +228,11 @@ export function validateDiscoverySendMessagePayload(payload: unknown): payload i
     return false;
   }
 
-  if (typeof payload.type !== "string" || payload.type.length === 0) {
+  if (typeof payload.messageType !== "string" || payload.messageType.length === 0) {
     return false;
   }
 
-  if (
-    typeof payload.payload !== "string" &&
-    (typeof payload.payload !== "object" || payload.payload === null)
-  ) {
+  if (payload.payload === undefined) {
     return false;
   }
 

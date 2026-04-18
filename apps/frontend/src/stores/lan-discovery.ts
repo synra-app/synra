@@ -5,21 +5,23 @@ import {
   type GetSessionStateResult,
   type MessageAckEvent,
   type MessageReceivedEvent,
-  type HostEvent,
   type OpenSessionOptions,
   type SessionClosedEvent,
   type SessionOpenedEvent,
   type SendMessageOptions,
   type TransportErrorEvent,
 } from "@synra/capacitor-lan-discovery";
+import type { SynraMessageType } from "@synra/protocol";
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
+import { CapacitorCapabilityPortAdapter } from "../plugins/capability-port";
 
 function sortDevices(devices: DiscoveredDevice[]): DiscoveredDevice[] {
   return [...devices].sort((left, right) => right.lastSeenAt - left.lastSeenAt);
 }
 
 const MAX_EVENT_LOGS = 200;
+const capabilityPort = new CapacitorCapabilityPortAdapter();
 
 type ConnectionDirection = "inbound" | "outbound";
 type ConnectionStatus = "connecting" | "open" | "closed";
@@ -56,7 +58,6 @@ export const useLanDiscoveryStore = defineStore("lan-discovery", () => {
         | "messageSent"
         | "messageReceived"
         | "messageAck"
-        | "hostEvent"
         | "transportError";
       payload: unknown;
       timestamp: number;
@@ -241,6 +242,7 @@ export const useLanDiscoveryStore = defineStore("lan-discovery", () => {
       appendEventLog("messageSent", {
         sessionId: options.sessionId,
         messageId: options.messageId,
+        messageType: options.messageType,
         payload: options.payload,
       });
       upsertConnectedSession({
@@ -251,7 +253,18 @@ export const useLanDiscoveryStore = defineStore("lan-discovery", () => {
         status: "open",
         lastActiveAt: Date.now(),
       });
-      await LanDiscovery.sendMessage(options);
+      await capabilityPort.sendCrossDeviceMessage({
+        protocolVersion: "1.0",
+        messageId: options.messageId ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        sessionId: options.sessionId,
+        traceId: `trace-${Date.now()}`,
+        type: options.messageType,
+        sentAt: Date.now(),
+        ttlMs: 60_000,
+        fromDeviceId: "client",
+        toDeviceId: "host",
+        payload: options.payload,
+      });
       error.value = null;
     } catch (unknownError) {
       error.value =
@@ -278,7 +291,6 @@ export const useLanDiscoveryStore = defineStore("lan-discovery", () => {
       | "messageSent"
       | "messageReceived"
       | "messageAck"
-      | "hostEvent"
       | "transportError",
     payload: unknown,
   ): void {
@@ -355,26 +367,6 @@ export const useLanDiscoveryStore = defineStore("lan-discovery", () => {
     await LanDiscovery.addListener("messageAck", (event: MessageAckEvent) => {
       appendEventLog("messageAck", event);
     });
-    await LanDiscovery.addListener("hostEvent", (event: HostEvent) => {
-      appendEventLog("hostEvent", event);
-      if (event.type === "messageReceived" && event.sessionId) {
-        upsertConnectedSession({
-          sessionId: event.sessionId,
-          direction:
-            connectedSessions.value.find((item) => item.sessionId === event.sessionId)?.direction ??
-            "inbound",
-          status: "open",
-          remote: event.remote,
-          lastActiveAt: event.timestamp,
-        });
-      } else if (event.type === "clientClosed") {
-        for (const item of connectedSessions.value) {
-          if (item.remote === event.remote && item.status === "open") {
-            markConnectionClosed(item.sessionId, event.timestamp);
-          }
-        }
-      }
-    });
     await LanDiscovery.addListener("transportError", (event: TransportErrorEvent) => {
       appendEventLog("transportError", event);
       error.value = event.message;
@@ -405,3 +397,10 @@ export const useLanDiscoveryStore = defineStore("lan-discovery", () => {
     syncSessionState,
   };
 });
+
+export type LanStoreSendMessageInput<TType extends SynraMessageType = SynraMessageType> = {
+  sessionId: string;
+  messageType: TType;
+  payload: unknown;
+  messageId?: string;
+};

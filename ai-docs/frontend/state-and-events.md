@@ -1,6 +1,6 @@
 # 状态与事件流规范
 
-本文档定义产品版前端状态来源、事件处理路径与错误处理规则，确保 `Home/Plugins/Devices/Settings` 四页行为一致。
+本文档定义前端状态来源、事件处理路径与错误处理规则，确保 `Home/Plugins/Devices/Settings` 四页行为一致。
 
 ## 状态分层
 
@@ -8,9 +8,9 @@
 
 来源建议：
 
-- `useLanDiscoveryStore`（设备能力）
+- `useLanDiscoveryStore`（设备能力，消息与会话主状态）
 - `usePluginCatalogStore`（插件列表，后续）
-- `useAppShellStore`（侧栏收缩态、导航状态，后续）
+- `useAppShellStore`（壳层布局状态）
 
 关键状态分组：
 
@@ -37,7 +37,8 @@
 - 被动监听：
   - `deviceConnectableUpdated`
   - `sessionOpened`、`sessionClosed`
-  - `hostEvent`、`transportError`
+  - `messageReceived`、`messageAck`
+  - `transportError`
 
 ## 数据流规则
 
@@ -45,6 +46,7 @@
 2. store 更新状态并写入日志。
 3. 页面通过 `storeToRefs` 响应式刷新 UI。
 4. 日志与错误态集中在 `Devices/Settings`，`Home/Plugins` 保持轻量表达。
+5. 页面层不直接消费 `hostEvent`，统一消费已归一化的 domain 事件。
 
 ## 设备与会话状态规范
 
@@ -61,17 +63,24 @@
 - 设备不可达、未配对、会话过期等错误应阻断后续动作并立即反馈。
 - 插件列表页错误（例如图标加载失败）应优先回退，不阻断整个页面渲染。
 
+## 插件宿主状态规范
+
+- 前端宿主统一使用 `PluginHostFacade` 进行注册、激活、停用与页面挂载。
+- 路由绑定、生命周期切换、页面注册拆分为独立职责类（Registry/Lifecycle/RouteBinder）。
+- 插件页与平台能力交互必须通过能力端口适配层，不直接调用原生桥。
+
 ## 插件列表状态规范
 
 - `chat` 作为内置插件，默认在列表展示为已安装。
 - 插件图标加载优先 `logo.png`，失败自动回退 UnoCSS icon。
 - 搜索输入为空时展示全部插件；有关键字时仅本地过滤匹配项（首版）。
 
-## 推荐 Composables（后续实现）
+## 推荐 Composables（后续）
 
 - `useSidebarState`：侧栏收缩状态与动画开关。
 - `usePluginList`：插件搜索、排序、图标回退策略。
 - `useDiscoveryActions`：发现、配对、连接动作组合封装。
+- `usePluginHost`：宿主能力外观与页面生命周期组合封装。
 - `useSettingsDiagnostics`：诊断信息刷新与复制反馈。
 
 ## 验收清单
@@ -80,3 +89,4 @@
 - 事件监听只注册一次，避免重复追加日志。
 - `Home/Plugins/Devices/Settings` 的状态来源边界清晰，无重复缓存。
 - 同一类状态在不同页面表达一致（尤其 success/error 语义色映射）。
+- 插件导航切换时，离开的插件实例可正确触发停用与路由卸载。

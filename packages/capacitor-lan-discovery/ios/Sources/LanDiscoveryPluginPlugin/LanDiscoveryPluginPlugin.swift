@@ -19,8 +19,24 @@ public class LanDiscoveryPluginPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "closeSession", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "sendMessage", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getSessionState", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "pullHostEvents", returnType: CAPPluginReturnPromise),
     ]
     private let implementation = LanDiscoveryPlugin()
+
+    public override func load() {
+        implementation.onMessageReceived = { [weak self] payload in
+            self?.notifyListeners("messageReceived", data: payload)
+        }
+        implementation.onMessageAck = { [weak self] payload in
+            self?.notifyListeners("messageAck", data: payload)
+        }
+        implementation.onSessionClosed = { [weak self] payload in
+            self?.notifyListeners("sessionClosed", data: payload)
+        }
+        implementation.onTransportError = { [weak self] payload in
+            self?.notifyListeners("transportError", data: payload)
+        }
+    }
 
     @objc func startDiscovery(_ call: CAPPluginCall) {
         let includeLoopback = call.getBool("includeLoopback") ?? false
@@ -136,9 +152,9 @@ public class LanDiscoveryPluginPlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func sendMessage(_ call: CAPPluginCall) {
         guard
             let sessionId = call.getString("sessionId"),
-            let type = call.getString("type")
+            let messageType = call.getString("messageType")
         else {
-            call.reject("sessionId/type are required.")
+            call.reject("sessionId/messageType are required.")
             return
         }
 
@@ -147,7 +163,7 @@ public class LanDiscoveryPluginPlugin: CAPPlugin, CAPBridgedPlugin {
         guard
             let result = implementation.sendMessage(
                 sessionId: sessionId,
-                type: type,
+                messageType: messageType,
                 payload: payload,
                 messageId: messageId
             )
@@ -167,5 +183,9 @@ public class LanDiscoveryPluginPlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func getSessionState(_ call: CAPPluginCall) {
         let sessionId = call.getString("sessionId")
         call.resolve(implementation.getSessionState(sessionId: sessionId))
+    }
+
+    @objc func pullHostEvents(_ call: CAPPluginCall) {
+        call.resolve(["events": []])
     }
 }

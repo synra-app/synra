@@ -28,6 +28,8 @@ const DEFAULT_SCAN_WINDOW_MS = 15_000;
 const DEFAULT_TCP_PORT = 32100;
 const DEFAULT_PROBE_TIMEOUT_MS = 1500;
 const DEFAULT_ACK_TIMEOUT_MS = 3000;
+const MAX_FRAME_BYTES = 256 * 1024;
+const MAX_SEND_RETRIES = 3;
 const SYNRA_APP_ID = "synra";
 const SYNRA_PROTOCOL_VERSION = "1.0";
 
@@ -103,6 +105,10 @@ class FrameDecoder {
 
     while (this.buffer.length >= 4) {
       const frameLength = this.buffer.readUInt32BE(0);
+      if (frameLength > MAX_FRAME_BYTES) {
+        this.buffer = this.buffer.subarray(4);
+        continue;
+      }
       if (this.buffer.length < frameLength + 4) {
         break;
       }
@@ -123,6 +129,12 @@ class FrameDecoder {
 
 function encodeFrame(frame: LanFrame): Buffer {
   const payload = Buffer.from(JSON.stringify(frame), "utf8");
+  if (payload.length > MAX_FRAME_BYTES) {
+    throw new BridgeError(BRIDGE_ERROR_CODES.invalidParams, "Frame payload is too large.", {
+      bytes: payload.length,
+      maxBytes: MAX_FRAME_BYTES,
+    });
+  }
   const header = Buffer.allocUnsafe(4);
   header.writeUInt32BE(payload.length, 0);
   return Buffer.concat([header, payload]);
@@ -248,6 +260,7 @@ export function createDeviceDiscoveryService(
   let pendingHelloResolve: ((sessionId: string) => void) | undefined;
   let pendingHelloReject: ((reason?: string) => void) | undefined;
   const pendingAcks = new Map<string, () => void>();
+  const queuedWriteBySocket = new WeakMap<Socket, Promise<void>>();
   const inboundSessions = new Map<string, InboundSessionState>();
   const socketSessionIds = new Map<Socket, Set<string>>();
   const hostEvents: DeviceDiscoveryHostEvent[] = [];
@@ -272,7 +285,7 @@ export function createDeviceDiscoveryService(
     const decoder = new FrameDecoder();
     const remote = `${socket.remoteAddress ?? "unknown"}:${socket.remotePort ?? "unknown"}`;
     console.log("[lan-discovery] tcp client connected:", remote);
-    pushHostEvent("clientConnected", { remote });
+    pushHostEvent("transport.session.opened", { remote });
     socket.on("data", (chunk: Buffer) => {
       const frames = decoder.push(chunk);
       for (const frame of frames) {
@@ -289,7 +302,7 @@ export function createDeviceDiscoveryService(
             protocolVersion: SYNRA_PROTOCOL_VERSION,
             capabilities: ["message"],
           };
-          socket.write(encodeFrame(response));
+          void enqueueSocketFrame(socket, response);
           continue;
         }
 
@@ -306,7 +319,7 @@ export function createDeviceDiscoveryService(
             sessionId: frame.sessionId,
             messageId: frame.messageId,
           });
-          pushHostEvent("messageReceived", {
+          pushHostEvent("transport.message.received", {
             remote,
             sessionId: frame.sessionId,
             messageId: frame.messageId,
@@ -320,26 +333,18 @@ export function createDeviceDiscoveryService(
               messageId: frame.messageId,
               timestamp: Date.now(),
             };
-            socket.write(encodeFrame(ack));
+            void enqueueSocketFrame(socket, ack);
           }
-
-          const echo: LanFrame = {
-            version: SYNRA_PROTOCOL_VERSION,
-            type: "message",
-            sessionId: frame.sessionId,
-            messageId: randomUUID(),
-            timestamp: Date.now(),
-            payload: {
-              from: "desktop",
-              received: frame.payload ?? null,
-            },
-          };
-          socket.write(encodeFrame(echo));
           continue;
         }
 
         if (frame.type === "ack" && frame.messageId) {
           resolveAck(frame.sessionId, frame.messageId);
+          pushHostEvent("transport.message.ack", {
+            remote,
+            sessionId: frame.sessionId,
+            messageId: frame.messageId,
+          });
           continue;
         }
       }
@@ -347,12 +352,30 @@ export function createDeviceDiscoveryService(
     socket.on("close", () => {
       console.log("[lan-discovery] tcp client closed:", remote);
       releaseSocketInboundSessions(socket);
-      pushHostEvent("clientClosed", { remote });
+      pushHostEvent("transport.session.closed", { remote });
     });
   });
   tcpServer.listen(DEFAULT_TCP_PORT, "0.0.0.0");
 
-  function writeClientFrame(frame: LanFrame): void {
+  function enqueueSocketFrame(socket: Socket, frame: LanFrame): Promise<void> {
+    const previous = queuedWriteBySocket.get(socket) ?? Promise.resolve();
+    const current = previous
+      .catch(() => undefined)
+      .then(async () => {
+        if (socket.destroyed) {
+          throw new BridgeError(BRIDGE_ERROR_CODES.unsupportedOperation, "Socket is destroyed.");
+        }
+        const encoded = encodeFrame(frame);
+        const canContinue = socket.write(encoded);
+        if (!canContinue) {
+          await new Promise<void>((resolve) => socket.once("drain", () => resolve()));
+        }
+      });
+    queuedWriteBySocket.set(socket, current);
+    return current;
+  }
+
+  function writeClientFrame(frame: LanFrame): Promise<void> {
     if (!clientSocket) {
       throw new BridgeError(
         BRIDGE_ERROR_CODES.unsupportedOperation,
@@ -360,11 +383,11 @@ export function createDeviceDiscoveryService(
       );
     }
 
-    clientSocket.write(encodeFrame(frame));
+    return enqueueSocketFrame(clientSocket, frame);
   }
 
-  function writeSocketFrame(socket: Socket, frame: LanFrame): void {
-    socket.write(encodeFrame(frame));
+  function writeSocketFrame(socket: Socket, frame: LanFrame): Promise<void> {
+    return enqueueSocketFrame(socket, frame);
   }
 
   function toAckKey(sessionId: string | undefined, messageId: string): string {
@@ -514,7 +537,7 @@ export function createDeviceDiscoveryService(
           protocolVersion: SYNRA_PROTOCOL_VERSION,
           capabilities: ["message"],
         };
-        socket.write(encodeFrame(hello));
+        void enqueueSocketFrame(socket, hello);
       });
     });
   }
@@ -630,7 +653,7 @@ export function createDeviceDiscoveryService(
         socket.setTimeout(DEFAULT_ACK_TIMEOUT_MS, () => reject("SESSION_OPEN_TIMEOUT"));
         socket.on("error", (error) => reject(error.message));
         socket.connect(options.port, options.host, () => {
-          writeClientFrame({
+          void writeClientFrame({
             version: SYNRA_PROTOCOL_VERSION,
             type: "hello",
             sessionId: randomUUID(),
@@ -665,7 +688,7 @@ export function createDeviceDiscoveryService(
         const inbound = inboundSessions.get(targetSessionId);
         if (inbound && !inbound.socket.destroyed) {
           try {
-            writeSocketFrame(inbound.socket, {
+            await writeSocketFrame(inbound.socket, {
               version: SYNRA_PROTOCOL_VERSION,
               type: "close",
               sessionId: targetSessionId,
@@ -680,7 +703,7 @@ export function createDeviceDiscoveryService(
       }
       if (clientSocket && !clientSocket.destroyed) {
         try {
-          writeClientFrame({
+          await writeClientFrame({
             version: SYNRA_PROTOCOL_VERSION,
             type: "close",
             sessionId: targetSessionId,
@@ -702,46 +725,61 @@ export function createDeviceDiscoveryService(
     ): Promise<DeviceSessionSendMessageResult> {
       const messageId = options.messageId ?? randomUUID();
       if (clientSocket && !clientSocket.destroyed && session.state === "open") {
-        await new Promise<void>((resolve, reject) => {
-          const key = toAckKey(options.sessionId, messageId);
-          const timer = setTimeout(() => {
-            pendingAcks.delete(key);
-            reject(new Error("MESSAGE_ACK_TIMEOUT"));
-          }, DEFAULT_ACK_TIMEOUT_MS);
-          pendingAcks.set(key, () => {
-            clearTimeout(timer);
-            resolve();
-          });
-          writeClientFrame({
-            version: SYNRA_PROTOCOL_VERSION,
-            type: "message",
-            sessionId: options.sessionId,
-            messageId,
-            timestamp: Date.now(),
-            payload: {
-              type: options.type,
-              value: options.payload,
-            },
-          });
-        }).catch((error: unknown) => {
-          throw new BridgeError(BRIDGE_ERROR_CODES.timeout, "Failed to receive message ack.", {
-            reason: toErrorMessage(error, "MESSAGE_ACK_TIMEOUT"),
-          });
-        });
+        let completed = false;
+        let attempt = 0;
+        while (!completed && attempt < MAX_SEND_RETRIES) {
+          attempt += 1;
+          try {
+            await new Promise<void>((resolve, reject) => {
+              const key = toAckKey(options.sessionId, messageId);
+              const timer = setTimeout(() => {
+                pendingAcks.delete(key);
+                reject(new Error("MESSAGE_ACK_TIMEOUT"));
+              }, DEFAULT_ACK_TIMEOUT_MS);
+              pendingAcks.set(key, () => {
+                clearTimeout(timer);
+                resolve();
+              });
+              void writeClientFrame({
+                version: SYNRA_PROTOCOL_VERSION,
+                type: "message",
+                sessionId: options.sessionId,
+                messageId,
+                timestamp: Date.now(),
+                payload: {
+                  messageType: options.messageType,
+                  payload: options.payload,
+                },
+              }).catch((error: unknown) => {
+                clearTimeout(timer);
+                pendingAcks.delete(key);
+                reject(error);
+              });
+            });
+            completed = true;
+          } catch (error) {
+            if (attempt >= MAX_SEND_RETRIES) {
+              throw new BridgeError(BRIDGE_ERROR_CODES.timeout, "Failed to receive message ack.", {
+                reason: toErrorMessage(error, "MESSAGE_ACK_TIMEOUT"),
+              });
+            }
+            await new Promise<void>((resolve) => setTimeout(resolve, attempt * 200));
+          }
+        }
       } else {
         const inbound = inboundSessions.get(options.sessionId);
         if (!inbound || inbound.socket.destroyed) {
           throw new BridgeError(BRIDGE_ERROR_CODES.unsupportedOperation, "Session is not open.");
         }
-        writeSocketFrame(inbound.socket, {
+        await writeSocketFrame(inbound.socket, {
           version: SYNRA_PROTOCOL_VERSION,
           type: "message",
           sessionId: options.sessionId,
           messageId,
           timestamp: Date.now(),
           payload: {
-            type: options.type,
-            value: options.payload,
+            messageType: options.messageType,
+            payload: options.payload,
           },
         });
         inbound.lastActiveAt = Date.now();

@@ -48,6 +48,9 @@
     "check": "vp check",
     "prepublishOnly": "vp run build"
   },
+  "dependencies": {
+    "@synra/protocol": "workspace:*"
+  },
   "devDependencies": {
     "@capacitor/android": "catalog:capacitor",
     "@capacitor/core": "catalog:capacitor",

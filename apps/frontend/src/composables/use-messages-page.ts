@@ -1,5 +1,6 @@
 import { storeToRefs } from "pinia";
 import { computed, onMounted, ref } from "vue";
+import type { SynraMessageType } from "@synra/protocol";
 import { useLanDiscoveryStore } from "../stores/lan-discovery";
 import { useSessionLogs } from "./use-session-logs";
 import { useSessionSelection } from "./use-session-selection";
@@ -9,7 +10,7 @@ export function useMessagesPage() {
   const { connectedSessions, eventLogs, loading, error } = storeToRefs(store);
 
   const messageInput = ref("");
-  const messageType = ref("chat.text");
+  const messageType = ref<SynraMessageType>("custom.chat.text");
 
   const activeSessions = computed(() =>
     connectedSessions.value.filter((item) => item.status === "open"),
@@ -40,7 +41,7 @@ export function useMessagesPage() {
 
     await store.sendMessage({
       sessionId: selectedSession.value.sessionId,
-      type: messageType.value,
+      messageType: messageType.value,
       payload: content,
     });
   }
