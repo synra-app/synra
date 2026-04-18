@@ -1,8 +1,26 @@
-import type { SynraPlugin, ShareInput, PluginAction } from "@synra/plugin-sdk";
+import {
+  getSynraPluginMetaFromManifest,
+  getSynraUiManifestMetadata,
+  type PluginAction,
+  type ShareInput,
+  type SynraActionPlugin,
+  type SynraPluginManifest,
+} from "@synra/plugin-sdk";
 import type { SynraActionReceipt, SynraErrorCode } from "@synra/protocol";
 import type { ExternalLinkService } from "../services/external-link.service";
 
-const PLUGIN_ID = "github-open";
+const PLUGIN_MANIFEST: SynraPluginManifest = {
+  name: "synra-plugin-github-open",
+  version: "0.1.0",
+  synra: {
+    title: "GitHub Open",
+    builtin: true,
+    defaultPage: "home",
+    icon: "i-lucide-github",
+  },
+};
+const PLUGIN_METADATA = getSynraUiManifestMetadata(PLUGIN_MANIFEST);
+const PLUGIN_ID = PLUGIN_METADATA.pluginId;
 const OWNER_REPO_PATTERN = /^[a-z0-9_.-]+\/[a-z0-9_.-]+$/i;
 
 function normalizeGitHubUrl(input: ShareInput): string | null {
@@ -62,25 +80,13 @@ function createFailureReceipt(
   };
 }
 
-export function createGitHubOpenPlugin(externalLinkService: ExternalLinkService): SynraPlugin {
-  const plugin: SynraPlugin & {
-    meta: {
-      packageName: string;
-      displayName: string;
-      builtin: boolean;
-      defaultPage: string;
-      icon: string;
-    };
-  } = {
+export function createGitHubOpenPlugin(
+  externalLinkService: ExternalLinkService,
+): SynraActionPlugin {
+  const plugin: SynraActionPlugin = {
     id: PLUGIN_ID,
-    version: "0.1.0",
-    meta: {
-      packageName: "synra-plugin-github-open",
-      displayName: "GitHub Open",
-      builtin: true,
-      defaultPage: "home",
-      icon: "i-lucide-github",
-    },
+    version: PLUGIN_MANIFEST.version,
+    meta: getSynraPluginMetaFromManifest(PLUGIN_MANIFEST),
     async supports(input: ShareInput) {
       const url = normalizeGitHubUrl(input);
       return {

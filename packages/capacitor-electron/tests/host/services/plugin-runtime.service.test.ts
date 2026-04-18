@@ -1,8 +1,8 @@
 import { describe, expect, test } from "vite-plus/test";
-import type { PluginAction, SynraPlugin } from "@synra/plugin-sdk";
+import type { PluginAction, SynraActionPlugin } from "@synra/plugin-sdk";
 import { createPluginRuntimeService } from "../../../src/host/services/plugin-runtime.service";
 
-function createTestPlugin(shouldFail: boolean = false): SynraPlugin {
+function createTestPlugin(shouldFail: boolean = false): SynraActionPlugin {
   return {
     id: "test-plugin",
     version: "1.0.0",

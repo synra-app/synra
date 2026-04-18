@@ -1,4 +1,4 @@
-import type { PluginAction, ShareInput, SynraPlugin } from "@synra/plugin-sdk";
+import type { PluginAction, ShareInput, SynraActionPlugin } from "@synra/plugin-sdk";
 import type {
   ProtocolEnvelope,
   ProtocolPayloadByType,
@@ -25,9 +25,9 @@ export type ExecuteSelectedOptions = {
 };
 
 export type PluginRuntimeService = {
-  register(plugin: SynraPlugin): void;
+  register(plugin: SynraActionPlugin): void;
   unregister(pluginId: string): void;
-  listPlugins(): SynraPlugin[];
+  listPlugins(): SynraActionPlugin[];
   resolveActions(input: ShareInput): Promise<ResolveRuntimeActionsResult>;
   executeSelected(options: ExecuteSelectedOptions): Promise<RuntimeExecuteResult>;
 };
@@ -83,7 +83,7 @@ async function emitRuntimeMessage(
 }
 
 function toCandidate(
-  plugin: SynraPlugin,
+  plugin: SynraActionPlugin,
   action: PluginAction,
   score: number,
   reason?: string,
@@ -119,17 +119,17 @@ function createFailedReceipt(
 export function createPluginRuntimeService(
   options: PluginRuntimeServiceOptions = {},
 ): PluginRuntimeService {
-  const pluginRegistry = new Map<string, SynraPlugin>();
+  const pluginRegistry = new Map<string, SynraActionPlugin>();
   const now = options.now ?? (() => Date.now());
 
   return {
-    register(plugin: SynraPlugin): void {
+    register(plugin: SynraActionPlugin): void {
       pluginRegistry.set(plugin.id, plugin);
     },
     unregister(pluginId: string): void {
       pluginRegistry.delete(pluginId);
     },
-    listPlugins(): SynraPlugin[] {
+    listPlugins(): SynraActionPlugin[] {
       return [...pluginRegistry.values()];
     },
     async resolveActions(input: ShareInput): Promise<ResolveRuntimeActionsResult> {

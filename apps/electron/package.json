@@ -21,8 +21,8 @@
   "devDependencies": {
     "@capacitor/cli": "catalog:capacitor",
     "@types/node": "catalog:types",
-    "electron": "catalog:",
-    "electron-builder": "catalog:",
+    "electron": "catalog:electron",
+    "electron-builder": "catalog:electron",
     "esbuild": "catalog:build",
     "typescript": "catalog:types",
     "vite-plugin-synra-electron": "workspace:*",

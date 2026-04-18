@@ -3,7 +3,6 @@ import { access } from "node:fs/promises";
 import { createInterface, type Interface as ReadlineInterface } from "node:readline";
 import { setTimeout as delay } from "node:timers/promises";
 import { styleText } from "node:util";
-import type { Plugin } from "vite-plus";
 
 type SpawnCommand = {
   command: string;
@@ -254,7 +253,7 @@ async function stopProcessAndWait(
   });
 }
 
-export function synraElectronPlugin(options: SynraElectronPluginOptions = {}): Plugin {
+export function synraElectronPlugin(options: SynraElectronPluginOptions = {}) {
   const workspaceRoot = options.workspaceRoot ?? process.cwd();
   const electronCwd = options.electronCwd ?? process.cwd();
   const frontendDevUrl = options.frontendDevUrl ?? "http://localhost:5173";
@@ -446,8 +445,8 @@ export function synraElectronPlugin(options: SynraElectronPluginOptions = {}): P
 
   return {
     name: "vite-plugin-synra-electron",
-    apply: "serve",
-    configureServer(server) {
+    apply: "serve" as const,
+    configureServer(server: any) {
       if (started) {
         return;
       }

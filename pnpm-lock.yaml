@@ -9,6 +9,9 @@ catalogs:
     esbuild:
       specifier: ^0.28.0
       version: 0.28.0
+    tinyglobby:
+      specifier: ^0.2.16
+      version: 0.2.16
   capacitor:
     '@capacitor/android':
       specifier: ^8.3.1
@@ -25,25 +28,20 @@ catalogs:
     '@capacitor/ios':
       specifier: ^8.3.1
       version: 8.3.1
-  default:
+  cli:
     '@inquirer/prompts':
       specifier: ^8.4.1
       version: 8.4.1
+    unconfig:
+      specifier: ^7.5.0
+      version: 7.5.0
+  electron:
     electron:
       specifier: ^41.2.0
       version: 41.2.0
     electron-builder:
       specifier: ^26.8.1
       version: 26.8.1
-    unconfig:
-      specifier: ^7.5.0
-      version: 7.5.0
-    unplugin-auto-import:
-      specifier: ^21.0.0
-      version: 21.0.0
-    unplugin-vue-components:
-      specifier: ^32.0.0
-      version: 32.0.0
   release:
     bumpp:
       specifier: ^11.0.1
@@ -94,6 +92,15 @@ catalogs:
     '@vitejs/plugin-vue':
       specifier: ^6.0.6
       version: 6.0.6
+    unplugin-auto-import:
+      specifier: ^21.0.0
+      version: 21.0.0
+    unplugin-vue:
+      specifier: ^7.1.1
+      version: 7.1.1
+    unplugin-vue-components:
+      specifier: ^32.0.0
+      version: 32.0.0
     vite-plus:
       specifier: ^0.1.18
       version: 0.1.18
@@ -114,7 +121,7 @@ importers:
   .:
     devDependencies:
       '@inquirer/prompts':
-        specifier: 'catalog:'
+        specifier: catalog:cli
         version: 8.4.1(@types/node@25.6.0)
       '@types/node':
         specifier: catalog:types
@@ -123,7 +130,7 @@ importers:
         specifier: ^4.8.0
         version: 4.8.0
       unconfig:
-        specifier: 'catalog:'
+        specifier: catalog:cli
         version: 7.5.0
       vite-plus:
         specifier: catalog:vite
@@ -145,10 +152,10 @@ importers:
         specifier: catalog:types
         version: 25.6.0
       electron:
-        specifier: 'catalog:'
+        specifier: catalog:electron
         version: 41.2.0
       electron-builder:
-        specifier: 'catalog:'
+        specifier: catalog:electron
         version: 26.8.1(electron-builder-squirrel-windows@26.8.1)
       esbuild:
         specifier: catalog:build
@@ -168,6 +175,9 @@ importers:
       '@capacitor/core':
         specifier: catalog:capacitor
         version: 8.3.1
+      '@synra-plugin/chat':
+        specifier: workspace:*
+        version: link:../../packages/synra-plugin-chat
       '@synra/capacitor-electron':
         specifier: workspace:*
         version: link:../../packages/capacitor-electron
@@ -227,10 +237,10 @@ importers:
         specifier: catalog:unocss
         version: 66.6.8(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)(@voidzero-dev/vite-plus-core@0.1.16(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(typescript@6.0.3)(yaml@2.8.3))
       unplugin-auto-import:
-        specifier: 'catalog:'
+        specifier: catalog:vite
         version: 21.0.0
       unplugin-vue-components:
-        specifier: 'catalog:'
+        specifier: catalog:vite
         version: 32.0.0(vue@3.5.32(typescript@6.0.3))
       vite:
         specifier: npm:@voidzero-dev/vite-plus-core@0.1.16
@@ -263,6 +273,9 @@ importers:
 
   packages/capacitor-electron:
     dependencies:
+      '@synra-plugin/chat':
+        specifier: workspace:*
+        version: link:../synra-plugin-chat
       '@synra/plugin-sdk':
         specifier: workspace:*
         version: link:../plugin-sdk
@@ -331,6 +344,39 @@ importers:
       '@synra/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@unocss/vite':
+        specifier: catalog:unocss
+        version: 66.6.8(vite@8.0.8(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(yaml@2.8.3))
+      '@vitejs/plugin-vue':
+        specifier: catalog:vite
+        version: 6.0.6(vite@8.0.8(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(yaml@2.8.3))(vue@3.5.32(typescript@6.0.3))
+      tinyglobby:
+        specifier: catalog:build
+        version: 0.2.16
+      unplugin-auto-import:
+        specifier: catalog:vite
+        version: 21.0.0
+      unplugin-vue:
+        specifier: catalog:vite
+        version: 7.1.1(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(typescript@6.0.3)(vue@3.5.32(typescript@6.0.3))(yaml@2.8.3)
+      unplugin-vue-components:
+        specifier: catalog:vite
+        version: 32.0.0(vue@3.5.32(typescript@6.0.3))
+      vite-plus:
+        specifier: catalog:vite
+        version: 0.1.18(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(typescript@6.0.3)(vite@8.0.8(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(yaml@2.8.3))(yaml@2.8.3)
+    devDependencies:
+      '@types/node':
+        specifier: catalog:types
+        version: 25.6.0
+      bumpp:
+        specifier: catalog:release
+        version: 11.0.1
+      typescript:
+        specifier: catalog:types
+        version: 6.0.3
+
+  packages/protocol:
     devDependencies:
       '@types/node':
         specifier: catalog:types
@@ -345,17 +391,33 @@ importers:
         specifier: catalog:vite
         version: 0.1.18(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(typescript@6.0.3)(vite@8.0.8(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(yaml@2.8.3))(yaml@2.8.3)
 
-  packages/protocol:
+  packages/synra-plugin-chat:
+    dependencies:
+      '@synra/plugin-sdk':
+        specifier: workspace:*
+        version: link:../plugin-sdk
+      vue:
+        specifier: catalog:vue
+        version: 3.5.32(typescript@6.0.3)
     devDependencies:
       '@types/node':
         specifier: catalog:types
         version: 25.6.0
+      '@unocss/preset-icons':
+        specifier: catalog:unocss
+        version: 66.6.8
+      '@unocss/preset-wind3':
+        specifier: catalog:unocss
+        version: 66.6.8
       bumpp:
-        specifier: ^11.0.1
+        specifier: catalog:release
         version: 11.0.1
       typescript:
         specifier: catalog:types
         version: 6.0.3
+      unocss:
+        specifier: catalog:unocss
+        version: 66.6.8(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)(vite@8.0.8(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(yaml@2.8.3))
       vite-plus:
         specifier: catalog:vite
         version: 0.1.18(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(typescript@6.0.3)(vite@8.0.8(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(yaml@2.8.3))(yaml@2.8.3)
@@ -3738,6 +3800,12 @@ packages:
       '@nuxt/kit':
         optional: true
 
+  unplugin-vue@7.1.1:
+    resolution: {integrity: sha512-0171rToKyJtoz+faE9CSGtAhCF7//t8sJueyyfZujf4RcKtoHLU/wqcsnuH5aq3tDB+I/Tg6IXiWgPvI+TK/zw==}
+    engines: {node: '>=20.19.0'}
+    peerDependencies:
+      vue: ^3.2.25
+
   unplugin@2.3.11:
     resolution: {integrity: sha512-5uKD0nqiYVzlmCRs01Fhs2BdkEgBS3SAVP6ndrBsuK42iC2+JHyxM05Rm9G8+5mkmRtzMZGY8Ct5+mliZxU/Ww==}
     engines: {node: '>=18.12.0'}
@@ -5103,10 +5171,29 @@ snapshots:
       unplugin-utils: 0.3.1
       vite: '@voidzero-dev/vite-plus-core@0.1.16(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(typescript@6.0.3)(yaml@2.8.3)'
 
+  '@unocss/vite@66.6.8(vite@8.0.8(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(yaml@2.8.3))':
+    dependencies:
+      '@jridgewell/remapping': 2.3.5
+      '@unocss/config': 66.6.8
+      '@unocss/core': 66.6.8
+      '@unocss/inspector': 66.6.8
+      chokidar: 5.0.0
+      magic-string: 0.30.21
+      pathe: 2.0.3
+      tinyglobby: 0.2.16
+      unplugin-utils: 0.3.1
+      vite: 8.0.8(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(yaml@2.8.3)
+
   '@vitejs/plugin-vue@6.0.6(@voidzero-dev/vite-plus-core@0.1.16(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(typescript@6.0.3)(yaml@2.8.3))(vue@3.5.32(typescript@6.0.3))':
     dependencies:
       '@rolldown/pluginutils': 1.0.0-rc.13
       vite: '@voidzero-dev/vite-plus-core@0.1.16(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(typescript@6.0.3)(yaml@2.8.3)'
+      vue: 3.5.32(typescript@6.0.3)
+
+  '@vitejs/plugin-vue@6.0.6(vite@8.0.8(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(yaml@2.8.3))(vue@3.5.32(typescript@6.0.3))':
+    dependencies:
+      '@rolldown/pluginutils': 1.0.0-rc.13
+      vite: 8.0.8(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(yaml@2.8.3)
       vue: 3.5.32(typescript@6.0.3)
 
   '@voidzero-dev/vite-plus-core@0.1.16(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(typescript@6.0.3)(yaml@2.8.3)':
@@ -7157,6 +7244,30 @@ snapshots:
       - '@emnapi/runtime'
       - vite
 
+  unocss@66.6.8(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)(vite@8.0.8(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(yaml@2.8.3)):
+    dependencies:
+      '@unocss/cli': 66.6.8
+      '@unocss/core': 66.6.8
+      '@unocss/preset-attributify': 66.6.8
+      '@unocss/preset-icons': 66.6.8
+      '@unocss/preset-mini': 66.6.8
+      '@unocss/preset-tagify': 66.6.8
+      '@unocss/preset-typography': 66.6.8
+      '@unocss/preset-uno': 66.6.8
+      '@unocss/preset-web-fonts': 66.6.8
+      '@unocss/preset-wind': 66.6.8
+      '@unocss/preset-wind3': 66.6.8
+      '@unocss/preset-wind4': 66.6.8
+      '@unocss/transformer-attributify-jsx': 66.6.8(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)
+      '@unocss/transformer-compile-class': 66.6.8
+      '@unocss/transformer-directives': 66.6.8
+      '@unocss/transformer-variant-group': 66.6.8
+      '@unocss/vite': 66.6.8(vite@8.0.8(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(yaml@2.8.3))
+    transitivePeerDependencies:
+      - '@emnapi/core'
+      - '@emnapi/runtime'
+      - vite
+
   unplugin-auto-import@21.0.0:
     dependencies:
       local-pkg: 1.1.2
@@ -7183,6 +7294,35 @@ snapshots:
       unplugin: 3.0.0
       unplugin-utils: 0.3.1
       vue: 3.5.32(typescript@6.0.3)
+
+  unplugin-vue@7.1.1(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(typescript@6.0.3)(vue@3.5.32(typescript@6.0.3))(yaml@2.8.3):
+    dependencies:
+      '@jridgewell/gen-mapping': 0.3.13
+      '@jridgewell/trace-mapping': 0.3.31
+      '@vue/reactivity': 3.5.32
+      obug: 2.1.1
+      unplugin: 3.0.0
+      vite: '@voidzero-dev/vite-plus-core@0.1.16(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(typescript@6.0.3)(yaml@2.8.3)'
+      vue: 3.5.32(typescript@6.0.3)
+    transitivePeerDependencies:
+      - '@arethetypeswrong/core'
+      - '@tsdown/css'
+      - '@tsdown/exe'
+      - '@types/node'
+      - '@vitejs/devtools'
+      - esbuild
+      - jiti
+      - less
+      - publint
+      - sass
+      - sass-embedded
+      - stylus
+      - sugarss
+      - terser
+      - tsx
+      - typescript
+      - unplugin-unused
+      - yaml
 
   unplugin@2.3.11:
     dependencies:

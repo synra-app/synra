@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@capacitor/core": "catalog:capacitor",
+    "@synra-plugin/chat": "workspace:*",
     "@synra/capacitor-electron": "workspace:*",
     "@synra/capacitor-lan-discovery": "workspace:*",
     "@synra/plugin-sdk": "workspace:*",
@@ -32,8 +33,8 @@
     "typescript": "catalog:types",
     "uno-colors": "catalog:style",
     "unocss": "catalog:unocss",
-    "unplugin-auto-import": "catalog:",
-    "unplugin-vue-components": "catalog:",
+    "unplugin-auto-import": "catalog:vite",
+    "unplugin-vue-components": "catalog:vite",
     "vite": "catalog:vite",
     "vite-plus": "catalog:vite"
   }

@@ -1,12 +1,12 @@
 import { describe, expect, test } from "vite-plus/test";
-import type { SynraPlugin } from "@synra/plugin-sdk";
+import type { SynraActionPlugin } from "@synra/plugin-sdk";
 import { createPluginCatalogService } from "../../../src/host/services/plugin-catalog.service";
 import { createPluginRuntimeService } from "../../../src/host/services/plugin-runtime.service";
 
 describe("host/services/plugin-catalog.service", () => {
   test("returns plugin entries from runtime registry", async () => {
     const runtime = createPluginRuntimeService();
-    const plugin: SynraPlugin & {
+    const plugin: SynraActionPlugin & {
       meta: {
         packageName: string;
         displayName: string;

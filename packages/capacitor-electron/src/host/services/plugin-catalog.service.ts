@@ -1,5 +1,11 @@
 import type { PluginCatalogRequestPayload } from "@synra/protocol";
-import type { SynraPlugin } from "@synra/plugin-sdk";
+import {
+  getSynraUiManifestMetadata,
+  parsePluginIdFromPackageName,
+  type SynraActionPlugin,
+  type SynraPluginManifest,
+} from "@synra/plugin-sdk";
+import chatPackageJson from "@synra-plugin/chat/package.json";
 import type { PluginCatalogResult } from "../../shared/protocol/types";
 import type { PluginRuntimeService } from "./plugin-runtime.service";
 
@@ -7,40 +13,7 @@ export type PluginCatalogService = {
   getCatalog(request?: PluginCatalogRequestPayload): Promise<PluginCatalogResult>;
 };
 
-const BUILTIN_CHAT_PACKAGE = "@synra-plugin/chat";
-
-function toBuiltInChatCatalogItem() {
-  return {
-    pluginId: "chat",
-    version: "0.1.0",
-    displayName: "Chat",
-    status: "installed" as const,
-    builtin: true,
-    defaultPage: "home",
-    icon: "i-lucide-message-circle",
-    packageName: BUILTIN_CHAT_PACKAGE,
-  };
-}
-
-function parsePluginIdFromPackageName(packageName: string): string | null {
-  const scopedPrefix = "@synra-plugin/";
-  const unscopedPrefix = "synra-plugin-";
-  let candidate = "";
-
-  if (packageName.startsWith(scopedPrefix)) {
-    candidate = packageName.slice(scopedPrefix.length);
-  } else if (packageName.startsWith(unscopedPrefix)) {
-    candidate = packageName.slice(unscopedPrefix.length);
-  } else {
-    return null;
-  }
-
-  if (!/^[a-z0-9-]+$/.test(candidate)) {
-    return null;
-  }
-
-  return candidate;
-}
+const chatPluginManifest = chatPackageJson as SynraPluginManifest;
 
 type PluginMetadata = {
   packageName?: string;
@@ -48,10 +21,11 @@ type PluginMetadata = {
   builtin?: boolean;
   defaultPage?: string;
   icon?: string;
+  manifest?: SynraPluginManifest;
 };
 
-function getPluginMetadata(plugin: SynraPlugin): PluginMetadata | undefined {
-  const pluginWithMeta = plugin as SynraPlugin & { meta?: PluginMetadata };
+function getPluginMetadata(plugin: SynraActionPlugin): PluginMetadata | undefined {
+  const pluginWithMeta = plugin as SynraActionPlugin & { meta?: PluginMetadata };
   return pluginWithMeta.meta;
 }
 
@@ -66,29 +40,60 @@ type CatalogPluginRecord = {
   icon?: string;
 };
 
+function toCatalogPluginRecordFromManifest(manifest: SynraPluginManifest): CatalogPluginRecord {
+  const metadata = getSynraUiManifestMetadata(manifest);
+  return {
+    pluginId: metadata.pluginId,
+    packageName: metadata.packageName,
+    version: metadata.version,
+    displayName: metadata.title,
+    status: "installed",
+    builtin: metadata.builtin,
+    defaultPage: metadata.defaultPage,
+    icon: metadata.icon,
+  };
+}
+
+function readManifestMetadata(
+  manifest?: SynraPluginManifest,
+): ReturnType<typeof getSynraUiManifestMetadata> | undefined {
+  if (!manifest) {
+    return undefined;
+  }
+
+  try {
+    return getSynraUiManifestMetadata(manifest);
+  } catch {
+    return undefined;
+  }
+}
+
 export function createPluginCatalogService(
   pluginRuntimeService: PluginRuntimeService,
 ): PluginCatalogService {
   return {
     async getCatalog(request: PluginCatalogRequestPayload = {}): Promise<PluginCatalogResult> {
       const catalogMap = new Map<string, CatalogPluginRecord>(
-        [toBuiltInChatCatalogItem()].map((item) => [item.pluginId, item] as const),
+        [toCatalogPluginRecordFromManifest(chatPluginManifest)].map(
+          (item) => [item.pluginId, item] as const,
+        ),
       );
 
       for (const plugin of pluginRuntimeService.listPlugins()) {
         const metadata = getPluginMetadata(plugin);
-        const packageName = metadata?.packageName;
+        const manifestMetadata = readManifestMetadata(metadata?.manifest);
+        const packageName = manifestMetadata?.packageName ?? metadata?.packageName;
         const parsedPluginId = packageName ? parsePluginIdFromPackageName(packageName) : null;
-        const pluginId = parsedPluginId ?? plugin.id;
+        const pluginId = manifestMetadata?.pluginId ?? parsedPluginId ?? plugin.id;
         catalogMap.set(pluginId, {
           pluginId,
           packageName,
-          version: plugin.version,
-          displayName: metadata?.displayName ?? plugin.id,
+          version: manifestMetadata?.version ?? plugin.version,
+          displayName: metadata?.displayName ?? manifestMetadata?.title ?? plugin.id,
           status: "installed",
-          builtin: metadata?.builtin ?? false,
-          defaultPage: metadata?.defaultPage ?? "home",
-          icon: metadata?.icon,
+          builtin: manifestMetadata?.builtin ?? metadata?.builtin ?? false,
+          defaultPage: manifestMetadata?.defaultPage ?? metadata?.defaultPage ?? "home",
+          icon: manifestMetadata?.icon ?? metadata?.icon,
         });
       }
 

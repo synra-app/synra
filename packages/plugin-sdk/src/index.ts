@@ -30,7 +30,7 @@ export type ExecuteContext = {
   traceId: string;
 };
 
-export type SynraPlugin = {
+export type SynraActionPlugin = {
   id: string;
   version: string;
   meta?: {
@@ -39,6 +39,7 @@ export type SynraPlugin = {
     builtin?: boolean;
     defaultPage?: string;
     icon?: string;
+    manifest?: SynraPluginManifest;
   };
   supports(input: ShareInput): Promise<PluginMatchResult>;
   buildActions(input: ShareInput): Promise<PluginAction[]>;
@@ -59,14 +60,7 @@ export type SynraPluginManifest = {
   };
 };
 
-export type PluginPageLoader = () => Promise<{ default: unknown }>;
-
-export type PluginPageRegistry = {
-  register(pagePath: string, loader: PluginPageLoader): void;
-  unregister(pagePath: string): void;
-};
-
-export type SynraUiPlugin = {
+export type SynraUiManifestMetadata = {
   pluginId: string;
   packageName: SynraPluginPackageName;
   version: string;
@@ -74,9 +68,12 @@ export type SynraUiPlugin = {
   builtin: boolean;
   defaultPage: string;
   icon?: string;
-  onPluginEnter(registry: PluginPageRegistry): void | Promise<void>;
-  onPluginExit(registry: PluginPageRegistry): void | Promise<void>;
 };
+
+export abstract class SynraPlugin {
+  onPluginEnter(): void | Promise<void> {}
+  onPluginExit(): void | Promise<void> {}
+}
 
 export type HostCapabilityPort = {
   sendCrossDeviceMessage<TType extends SynraMessageType>(
@@ -118,6 +115,39 @@ export function parsePluginIdFromPackageName(packageName: string): string | null
   }
 
   return candidate;
+}
+
+export function getSynraUiManifestMetadata(manifest: SynraPluginManifest): SynraUiManifestMetadata {
+  const pluginId = parsePluginIdFromPackageName(manifest.name);
+  if (!pluginId) {
+    throw new Error(
+      `Cannot derive pluginId from package name '${manifest.name}'. Expected @synra-plugin/<id> or synra-plugin-<id>.`,
+    );
+  }
+
+  return {
+    pluginId,
+    packageName: manifest.name as SynraPluginPackageName,
+    version: manifest.version,
+    title: manifest.synra?.title ?? pluginId,
+    builtin: manifest.synra?.builtin ?? false,
+    defaultPage: manifest.synra?.defaultPage ?? "home",
+    icon: manifest.synra?.icon,
+  };
+}
+
+export function getSynraPluginMetaFromManifest(
+  manifest: SynraPluginManifest,
+): NonNullable<SynraActionPlugin["meta"]> {
+  const metadata = getSynraUiManifestMetadata(manifest);
+  return {
+    packageName: metadata.packageName,
+    displayName: metadata.title,
+    builtin: metadata.builtin,
+    defaultPage: metadata.defaultPage,
+    icon: metadata.icon,
+    manifest,
+  };
 }
 
 export function normalizePluginPagePath(pagePath: string): string {

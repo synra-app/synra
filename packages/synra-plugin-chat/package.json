@@ -1,7 +1,7 @@
 {
-  "name": "@synra/plugin-sdk",
-  "version": "0.0.0",
-  "description": "Plugin contracts for Synra cross-device runtime.",
+  "name": "@synra-plugin/chat",
+  "version": "0.1.0",
+  "description": "Built-in chat UI plugin for Synra.",
   "license": "MIT",
   "files": [
     "dist"
@@ -10,14 +10,14 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./vite": "./src/vite.ts",
+    "./pages/home": "./pages/home/index.vue",
     "./package.json": "./package.json"
   },
   "publishConfig": {
     "access": "public",
     "exports": {
       ".": "./dist/index.mjs",
-      "./vite": "./dist/vite.mjs",
+      "./pages/home": "./dist/pages/home/index.mjs",
       "./package.json": "./package.json"
     }
   },
@@ -29,18 +29,21 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
-    "@synra/protocol": "workspace:*",
-    "@unocss/vite": "catalog:unocss",
-    "@vitejs/plugin-vue": "catalog:vite",
-    "tinyglobby": "catalog:build",
-    "unplugin-auto-import": "catalog:vite",
-    "unplugin-vue": "catalog:vite",
-    "unplugin-vue-components": "catalog:vite",
-    "vite-plus": "catalog:vite"
+    "@synra/plugin-sdk": "workspace:*",
+    "vue": "catalog:vue"
   },
   "devDependencies": {
     "@types/node": "catalog:types",
+    "@unocss/preset-icons": "catalog:unocss",
+    "@unocss/preset-wind3": "catalog:unocss",
     "bumpp": "catalog:release",
-    "typescript": "catalog:types"
+    "typescript": "catalog:types",
+    "unocss": "catalog:unocss",
+    "vite-plus": "catalog:vite"
+  },
+  "synra": {
+    "title": "Chat",
+    "builtin": true,
+    "icon": "i-lucide-message-circle"
   }
 }

@@ -20,10 +20,10 @@
     "prepare": "vp config"
   },
   "devDependencies": {
-    "@inquirer/prompts": "catalog:",
+    "@inquirer/prompts": "catalog:cli",
     "@types/node": "catalog:types",
     "esno": "^4.8.0",
-    "unconfig": "catalog:",
+    "unconfig": "catalog:cli",
     "vite-plus": "catalog:vite"
   },
   "engines": {
