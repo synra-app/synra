@@ -5,6 +5,7 @@ packages:
 allowBuilds:
   "@parcel/watcher": true
   electron: true
+  electron-winstaller: true
   esbuild: true
 catalog:
   "@inquirer/prompts": ^8.4.1
@@ -15,12 +16,12 @@ catalogMode: prefer
 
 catalogs:
   build:
-    esbuild: ^0.27.7
+    esbuild: ^0.28.0
   capacitor:
-    "@capacitor/android": ^8.3.0
-    "@capacitor/cli": ^8.3.0
-    "@capacitor/core": ^8.3.0
-    "@capacitor/ios": ^8.3.0
+    "@capacitor/android": ^8.3.1
+    "@capacitor/cli": ^8.3.1
+    "@capacitor/core": ^8.3.1
+    "@capacitor/ios": ^8.3.1
   release:
     bumpp: ^11.0.1
   style:
@@ -29,7 +30,7 @@ catalogs:
   types:
     "@types/node": ^25.6.0
     "@typescript/native-preview": 7.0.0-dev.20260328.1
-    typescript: ^6.0.2
+    typescript: ^6.0.3
   unocss:
     "@unocss/preset-attributify": ^66.6.8
     "@unocss/preset-icons": ^66.6.8

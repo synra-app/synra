@@ -23,7 +23,7 @@
     "@unocss/vite": "catalog:unocss",
     "@vitejs/plugin-vue": "catalog:vite",
     "sass": "catalog:style",
-    "typescript": "~6.0.2",
+    "typescript": "catalog:types",
     "uno-colors": "catalog:style",
     "unocss": "catalog:unocss",
     "vite": "catalog:vite",
