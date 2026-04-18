@@ -339,7 +339,7 @@ export function synraElectronPlugin(options: SynraElectronPluginOptions = {}): P
         );
         quitting = true;
         teardownInteractiveCommands();
-        cleanup();
+        void cleanup();
         requestQuit?.();
       });
     })()

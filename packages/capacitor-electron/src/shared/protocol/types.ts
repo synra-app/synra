@@ -98,6 +98,135 @@ export type PluginCatalogResult = {
   plugins: PluginCatalogItem[];
 };
 
+export type DiscoverySource = "mdns" | "probe" | "manual";
+
+export type DiscoveryState = "idle" | "scanning";
+
+export type DiscoveredDevice = {
+  deviceId: string;
+  name: string;
+  ipAddress: string;
+  source: DiscoverySource;
+  paired: boolean;
+  connectable: boolean;
+  connectCheckAt?: number;
+  connectCheckError?: string;
+  discoveredAt: number;
+  lastSeenAt: number;
+};
+
+export type DeviceDiscoveryStartOptions = {
+  includeLoopback?: boolean;
+  manualTargets?: string[];
+  enableProbeFallback?: boolean;
+  reset?: boolean;
+  scanWindowMs?: number;
+  port?: number;
+  timeoutMs?: number;
+};
+
+export type DeviceDiscoveryStartResult = {
+  requestId: string;
+  state: DiscoveryState;
+  startedAt?: number;
+  scanWindowMs: number;
+  devices: DiscoveredDevice[];
+};
+
+export type DeviceDiscoveryListResult = {
+  state: DiscoveryState;
+  startedAt?: number;
+  scanWindowMs: number;
+  devices: DiscoveredDevice[];
+};
+
+export type DeviceDiscoveryPairOptions = {
+  deviceId: string;
+};
+
+export type DeviceDiscoveryPairResult = {
+  success: true;
+  device: DiscoveredDevice;
+};
+
+export type DeviceDiscoveryProbeConnectableOptions = {
+  port?: number;
+  timeoutMs?: number;
+};
+
+export type DeviceDiscoveryProbeConnectableResult = {
+  checkedAt: number;
+  port: number;
+  timeoutMs: number;
+  devices: DiscoveredDevice[];
+};
+
+export type DeviceSessionOpenOptions = {
+  deviceId: string;
+  host: string;
+  port: number;
+  token?: string;
+};
+
+export type DeviceSessionState = "idle" | "connecting" | "open" | "closed" | "error";
+
+export type DeviceSessionSnapshot = {
+  sessionId?: string;
+  deviceId?: string;
+  host?: string;
+  port?: number;
+  state: DeviceSessionState;
+  lastError?: string;
+  openedAt?: number;
+  closedAt?: number;
+};
+
+export type DeviceSessionOpenResult = {
+  success: true;
+  sessionId: string;
+  state: DeviceSessionState;
+};
+
+export type DeviceSessionCloseOptions = {
+  sessionId?: string;
+};
+
+export type DeviceSessionCloseResult = {
+  success: true;
+  sessionId?: string;
+};
+
+export type DeviceSessionSendMessageOptions = {
+  sessionId: string;
+  type: string;
+  payload: string | Record<string, unknown>;
+  messageId?: string;
+};
+
+export type DeviceSessionSendMessageResult = {
+  success: true;
+  messageId: string;
+  sessionId: string;
+};
+
+export type DeviceSessionGetStateOptions = {
+  sessionId?: string;
+};
+
+export type DeviceDiscoveryHostEvent = {
+  id: number;
+  timestamp: number;
+  type: "clientConnected" | "clientClosed" | "messageReceived";
+  remote: string;
+  sessionId?: string;
+  messageId?: string;
+  payload?: unknown;
+};
+
+export type DeviceDiscoveryPullHostEventsResult = {
+  events: DeviceDiscoveryHostEvent[];
+};
+
 export type MethodPayloadMap = {
   "runtime.getInfo": Record<string, never>;
   "runtime.resolveActions": ResolveRuntimeActionsOptions;
@@ -105,6 +234,16 @@ export type MethodPayloadMap = {
   "plugin.catalog.get": Record<string, never>;
   "external.open": OpenExternalOptions;
   "file.read": ReadFileOptions;
+  "discovery.start": DeviceDiscoveryStartOptions;
+  "discovery.stop": Record<string, never>;
+  "discovery.list": Record<string, never>;
+  "discovery.pair": DeviceDiscoveryPairOptions;
+  "discovery.probeConnectable": DeviceDiscoveryProbeConnectableOptions;
+  "discovery.openSession": DeviceSessionOpenOptions;
+  "discovery.closeSession": DeviceSessionCloseOptions;
+  "discovery.sendMessage": DeviceSessionSendMessageOptions;
+  "discovery.getSessionState": DeviceSessionGetStateOptions;
+  "discovery.pullHostEvents": Record<string, never>;
 };
 
 export type MethodResultMap = {
@@ -114,4 +253,14 @@ export type MethodResultMap = {
   "plugin.catalog.get": PluginCatalogResult;
   "external.open": OperationResult;
   "file.read": ReadFileResult;
+  "discovery.start": DeviceDiscoveryStartResult;
+  "discovery.stop": OperationResult;
+  "discovery.list": DeviceDiscoveryListResult;
+  "discovery.pair": DeviceDiscoveryPairResult;
+  "discovery.probeConnectable": DeviceDiscoveryProbeConnectableResult;
+  "discovery.openSession": DeviceSessionOpenResult;
+  "discovery.closeSession": DeviceSessionCloseResult;
+  "discovery.sendMessage": DeviceSessionSendMessageResult;
+  "discovery.getSessionState": DeviceSessionSnapshot;
+  "discovery.pullHostEvents": DeviceDiscoveryPullHostEventsResult;
 };

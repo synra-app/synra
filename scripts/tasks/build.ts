@@ -25,6 +25,11 @@ type BuildStep = {
 const stepsByTarget: Record<BuildTarget, BuildStep[]> = {
   frontend: [
     {
+      title: "Build tools/packages",
+      command: VP_COMMAND,
+      args: ["run", "build:tools"],
+    },
+    {
       title: "Build frontend",
       command: VP_COMMAND,
       args: ["run", "frontend#build"],
@@ -56,6 +61,11 @@ const stepsByTarget: Record<BuildTarget, BuildStep[]> = {
   ],
   android: [
     {
+      title: "Build tools/packages",
+      command: VP_COMMAND,
+      args: ["run", "build:tools"],
+    },
+    {
       title: "Build frontend for mobile",
       command: VP_COMMAND,
       args: ["run", "frontend#build"],
@@ -68,6 +78,11 @@ const stepsByTarget: Record<BuildTarget, BuildStep[]> = {
   ],
   ios: [
     {
+      title: "Build tools/packages",
+      command: VP_COMMAND,
+      args: ["run", "build:tools"],
+    },
+    {
       title: "Build frontend for mobile",
       command: VP_COMMAND,
       args: ["run", "frontend#build"],
@@ -79,6 +94,11 @@ const stepsByTarget: Record<BuildTarget, BuildStep[]> = {
     },
   ],
   all: [
+    {
+      title: "Build tools/packages",
+      command: VP_COMMAND,
+      args: ["run", "build:tools"],
+    },
     {
       title: "Build frontend",
       command: VP_COMMAND,

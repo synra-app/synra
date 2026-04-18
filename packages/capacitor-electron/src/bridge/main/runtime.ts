@@ -5,10 +5,12 @@ import {
 import { createShellAdapter, type ShellAdapter } from "../../host/adapters/electron-shell.adapter";
 import { createExternalLinkService } from "../../host/services/external-link.service";
 import { createFileService } from "../../host/services/file.service";
+import { createDeviceDiscoveryService } from "../../host/services/device-discovery.service";
 import { createGitHubOpenPlugin } from "../../host/plugins/github-open.plugin";
 import { createPluginCatalogService } from "../../host/services/plugin-catalog.service";
 import { createPluginRuntimeService } from "../../host/services/plugin-runtime.service";
 import { createRuntimeInfoService } from "../../host/services/runtime-info.service";
+import type { DeviceDiscoveryHostEvent } from "../../shared/protocol/types";
 import type { BridgeLogger } from "../../shared/observability/logger";
 import { createMainDispatcher } from "./dispatch";
 import { createBridgeHandlers } from "./handlers";
@@ -21,6 +23,7 @@ export type BridgeRuntimeOptions = {
   logger?: BridgeLogger;
   capacitorVersion?: string;
   electronVersion?: string;
+  onDiscoveryHostEvent?: (event: DeviceDiscoveryHostEvent) => void;
 };
 
 export function setupBridgeMainRuntime(
@@ -38,6 +41,9 @@ export function setupBridgeMainRuntime(
   const fileService = createFileService(fileSystemAdapter, {
     allowedRoots: options.allowedFileRoots,
   });
+  const deviceDiscoveryService = createDeviceDiscoveryService({
+    onHostEvent: options.onDiscoveryHostEvent,
+  });
   const pluginRuntimeService = createPluginRuntimeService();
   pluginRuntimeService.register(createGitHubOpenPlugin(externalLinkService));
   const pluginCatalogService = createPluginCatalogService(pluginRuntimeService);
@@ -48,6 +54,7 @@ export function setupBridgeMainRuntime(
     fileService,
     pluginRuntimeService,
     pluginCatalogService,
+    deviceDiscoveryService,
   });
 
   const dispatch = createMainDispatcher(handlers, { logger: options.logger });

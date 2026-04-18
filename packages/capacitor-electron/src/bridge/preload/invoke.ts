@@ -17,6 +17,8 @@ import {
   validateResolveActionsPayload,
   validateRuntimeExecutePayload,
   validateExternalOpenPayload,
+  validateDiscoveryOpenSessionPayload,
+  validateDiscoverySendMessagePayload,
   validateReadFilePayload,
 } from "../../shared/schema/validators";
 
@@ -69,6 +71,26 @@ function validatePayload(method: string, payload: unknown): void {
     throw new BridgeError(
       BRIDGE_ERROR_CODES.invalidParams,
       "file.read expects { path, encoding? }.",
+    );
+  }
+
+  if (
+    method === BRIDGE_METHODS.discoveryOpenSession &&
+    !validateDiscoveryOpenSessionPayload(payload)
+  ) {
+    throw new BridgeError(
+      BRIDGE_ERROR_CODES.invalidParams,
+      "discovery.openSession expects { deviceId, host, port, token? }.",
+    );
+  }
+
+  if (
+    method === BRIDGE_METHODS.discoverySendMessage &&
+    !validateDiscoverySendMessagePayload(payload)
+  ) {
+    throw new BridgeError(
+      BRIDGE_ERROR_CODES.invalidParams,
+      "discovery.sendMessage expects { sessionId, type, payload, messageId? }.",
     );
   }
 }

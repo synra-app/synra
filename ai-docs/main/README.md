@@ -16,6 +16,7 @@
 - 跨端主流程路线图与执行清单
 - 协议与运行时 TypeScript 草案（文档内）
 - 契约单页索引（快速对齐）
+- Capacitor 内网设备搜索插件落地说明（MVP）
 
 ## 阅读顺序
 
@@ -27,6 +28,7 @@
 6. `package-splitting.md`
 7. `roadmap.md`
 8. `checklist.md`
+9. `capacitor-lan-discovery-plugin.md`
 
 ## 与 `capacitor-electron-implementation` 的关系
 

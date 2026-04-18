@@ -60,7 +60,17 @@ export function isSupportedMethod(method: string): boolean {
     method === BRIDGE_METHODS.runtimeExecute ||
     method === BRIDGE_METHODS.pluginCatalogGet ||
     method === BRIDGE_METHODS.externalOpen ||
-    method === BRIDGE_METHODS.fileRead
+    method === BRIDGE_METHODS.fileRead ||
+    method === BRIDGE_METHODS.discoveryStart ||
+    method === BRIDGE_METHODS.discoveryStop ||
+    method === BRIDGE_METHODS.discoveryList ||
+    method === BRIDGE_METHODS.discoveryPair ||
+    method === BRIDGE_METHODS.discoveryProbeConnectable ||
+    method === BRIDGE_METHODS.discoveryOpenSession ||
+    method === BRIDGE_METHODS.discoveryCloseSession ||
+    method === BRIDGE_METHODS.discoverySendMessage ||
+    method === BRIDGE_METHODS.discoveryGetSessionState ||
+    method === BRIDGE_METHODS.discoveryPullHostEvents
   );
 }
 
@@ -118,4 +128,120 @@ export function validateReadFilePayload(
   }
 
   return typeof payload.encoding === "string";
+}
+
+export function validateDiscoveryStartPayload(payload: unknown): payload is {
+  includeLoopback?: boolean;
+  manualTargets?: string[];
+  enableProbeFallback?: boolean;
+  reset?: boolean;
+  scanWindowMs?: number;
+  port?: number;
+  timeoutMs?: number;
+} {
+  if (!isObject(payload)) {
+    return false;
+  }
+
+  if (payload.includeLoopback !== undefined && typeof payload.includeLoopback !== "boolean") {
+    return false;
+  }
+
+  if (
+    payload.manualTargets !== undefined &&
+    (!Array.isArray(payload.manualTargets) ||
+      payload.manualTargets.some((target) => typeof target !== "string"))
+  ) {
+    return false;
+  }
+
+  if (
+    payload.enableProbeFallback !== undefined &&
+    typeof payload.enableProbeFallback !== "boolean"
+  ) {
+    return false;
+  }
+
+  if (payload.reset !== undefined && typeof payload.reset !== "boolean") {
+    return false;
+  }
+
+  if (payload.scanWindowMs !== undefined && typeof payload.scanWindowMs !== "number") {
+    return false;
+  }
+
+  if (payload.port !== undefined && typeof payload.port !== "number") {
+    return false;
+  }
+
+  if (payload.timeoutMs !== undefined && typeof payload.timeoutMs !== "number") {
+    return false;
+  }
+
+  return true;
+}
+
+export function validateDiscoveryPairPayload(payload: unknown): payload is { deviceId: string } {
+  return isObject(payload) && typeof payload.deviceId === "string" && payload.deviceId.length > 0;
+}
+
+export function validateDiscoveryOpenSessionPayload(payload: unknown): payload is {
+  deviceId: string;
+  host: string;
+  port: number;
+  token?: string;
+} {
+  if (!isObject(payload)) {
+    return false;
+  }
+
+  if (typeof payload.deviceId !== "string" || payload.deviceId.length === 0) {
+    return false;
+  }
+
+  if (typeof payload.host !== "string" || payload.host.length === 0) {
+    return false;
+  }
+
+  if (typeof payload.port !== "number") {
+    return false;
+  }
+
+  if (payload.token !== undefined && typeof payload.token !== "string") {
+    return false;
+  }
+
+  return true;
+}
+
+export function validateDiscoverySendMessagePayload(payload: unknown): payload is {
+  sessionId: string;
+  type: string;
+  payload: string | Record<string, unknown>;
+  messageId?: string;
+} {
+  if (!isObject(payload)) {
+    return false;
+  }
+
+  if (typeof payload.sessionId !== "string" || payload.sessionId.length === 0) {
+    return false;
+  }
+
+  if (typeof payload.type !== "string" || payload.type.length === 0) {
+    return false;
+  }
+
+  if (
+    typeof payload.payload !== "string" &&
+    (typeof payload.payload !== "object" || payload.payload === null)
+  ) {
+    return false;
+  }
+
+  if (payload.messageId !== undefined && typeof payload.messageId !== "string") {
+    return false;
+  }
+
+  return true;
 }

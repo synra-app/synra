@@ -7,6 +7,10 @@ import {
   validateResolveActionsPayload,
   validateRuntimeExecutePayload,
   validateExternalOpenPayload,
+  validateDiscoveryOpenSessionPayload,
+  validateDiscoverySendMessagePayload,
+  validateDiscoveryPairPayload,
+  validateDiscoveryStartPayload,
   validateReadFilePayload,
 } from "../../../src/shared/schema/validators";
 import { BRIDGE_METHODS, BRIDGE_PROTOCOL_VERSION } from "../../../src/shared/protocol/constants";
@@ -35,6 +39,12 @@ describe("shared/schema/validators", () => {
     expect(isSupportedProtocolVersion(BRIDGE_PROTOCOL_VERSION)).toBe(true);
     expect(isSupportedProtocolVersion("9.9")).toBe(false);
     expect(isSupportedMethod(BRIDGE_METHODS.fileRead)).toBe(true);
+    expect(isSupportedMethod(BRIDGE_METHODS.discoveryStart)).toBe(true);
+    expect(isSupportedMethod(BRIDGE_METHODS.discoveryPair)).toBe(true);
+    expect(isSupportedMethod(BRIDGE_METHODS.discoveryProbeConnectable)).toBe(true);
+    expect(isSupportedMethod(BRIDGE_METHODS.discoveryOpenSession)).toBe(true);
+    expect(isSupportedMethod(BRIDGE_METHODS.discoverySendMessage)).toBe(true);
+    expect(isSupportedMethod(BRIDGE_METHODS.discoveryPullHostEvents)).toBe(true);
     expect(isSupportedMethod(BRIDGE_METHODS.runtimeResolveActions)).toBe(true);
     expect(isSupportedMethod(BRIDGE_METHODS.runtimeExecute)).toBe(true);
     expect(isSupportedMethod("unknown.method")).toBe(false);
@@ -63,6 +73,35 @@ describe("shared/schema/validators", () => {
           label: "Open in browser",
           requiresConfirm: true,
         },
+      }),
+    ).toBe(true);
+  });
+
+  test("validates discovery payloads", () => {
+    expect(
+      validateDiscoveryStartPayload({
+        includeLoopback: true,
+        manualTargets: ["192.168.1.100"],
+        enableProbeFallback: true,
+        reset: false,
+        scanWindowMs: 3000,
+      }),
+    ).toBe(true);
+    expect(validateDiscoveryStartPayload({ manualTargets: [1] })).toBe(false);
+    expect(validateDiscoveryPairPayload({ deviceId: "device-1" })).toBe(true);
+    expect(validateDiscoveryPairPayload({ deviceId: "" })).toBe(false);
+    expect(
+      validateDiscoveryOpenSessionPayload({
+        deviceId: "device-1",
+        host: "10.0.0.109",
+        port: 32100,
+      }),
+    ).toBe(true);
+    expect(
+      validateDiscoverySendMessagePayload({
+        sessionId: "session-1",
+        type: "chat",
+        payload: "hello",
       }),
     ).toBe(true);
   });

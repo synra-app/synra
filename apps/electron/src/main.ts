@@ -1,7 +1,7 @@
 import { join, resolve } from "node:path";
 import { styleText } from "node:util";
 import { app, BrowserWindow, ipcMain, shell } from "electron";
-import { setupBridgeMainRuntime } from "@synra/capacitor-electron";
+import { BRIDGE_HOST_EVENT_CHANNEL, setupBridgeMainRuntime } from "@synra/capacitor-electron";
 
 const TAG_STYLES: Readonly<Record<string, Parameters<typeof styleText>[0]>> = {
   "electron-main": "blue",
@@ -75,6 +75,13 @@ function registerCapacitorElectronBridge(): void {
     allowedFileRoots: [app.getAppPath()],
     capacitorVersion: "8.x",
     electronVersion: process.versions.electron,
+    onDiscoveryHostEvent(event) {
+      for (const window of BrowserWindow.getAllWindows()) {
+        if (!window.isDestroyed()) {
+          window.webContents.send(BRIDGE_HOST_EVENT_CHANNEL, event);
+        }
+      }
+    },
   });
 }
 

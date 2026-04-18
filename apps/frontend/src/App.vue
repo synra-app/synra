@@ -5,6 +5,8 @@ const route = useRoute();
 
 const tabs = [
   { label: "Home", to: "/" },
+  { label: "Connections", to: "/connect" },
+  { label: "Messages", to: "/messages" },
   { label: "System Info Demo", to: "/electron-demo" },
 ];
 
@@ -15,12 +17,12 @@ const isActive = (target: string): boolean =>
 <template>
   <main class="mx-auto max-w-3xl p-6">
     <nav class="mb-6 rounded-lg border border-gray-200 bg-white p-2">
-      <div class="flex gap-2">
+      <div class="flex gap-2 overflow-x-auto whitespace-nowrap pb-1">
         <RouterLink
           v-for="tab in tabs"
           :key="tab.to"
           :to="tab.to"
-          class="rounded-md px-4 py-2 text-sm font-medium transition"
+          class="shrink-0 rounded-md px-4 py-2 text-sm font-medium transition"
           :class="
             isActive(tab.to)
               ? 'bg-gray-900 text-white'

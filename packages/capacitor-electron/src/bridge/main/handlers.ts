@@ -2,6 +2,7 @@ import { BRIDGE_METHODS } from "../../shared/protocol/constants";
 import type { BridgeRequest, MethodPayloadMap, MethodResultMap } from "../../shared/protocol/types";
 import type { ExternalLinkService } from "../../host/services/external-link.service";
 import type { FileService } from "../../host/services/file.service";
+import type { DeviceDiscoveryService } from "../../host/services/device-discovery.service";
 import type { PluginCatalogService } from "../../host/services/plugin-catalog.service";
 import type { PluginRuntimeService } from "../../host/services/plugin-runtime.service";
 
@@ -15,6 +16,7 @@ export type BridgeHandlerDependencies = {
   fileService: FileService;
   pluginRuntimeService: PluginRuntimeService;
   pluginCatalogService: PluginCatalogService;
+  deviceDiscoveryService: DeviceDiscoveryService;
 };
 
 export type BridgeHandlerMap = {
@@ -42,5 +44,23 @@ export function createBridgeHandlers(deps: BridgeHandlerDependencies): BridgeHan
       deps.externalLinkService.openExternal(request.payload.url),
     [BRIDGE_METHODS.fileRead]: async (request) =>
       deps.fileService.readFile(request.payload.path, request.payload.encoding),
+    [BRIDGE_METHODS.discoveryStart]: async (request) =>
+      deps.deviceDiscoveryService.startDiscovery(request.payload),
+    [BRIDGE_METHODS.discoveryStop]: async () => deps.deviceDiscoveryService.stopDiscovery(),
+    [BRIDGE_METHODS.discoveryList]: async () => deps.deviceDiscoveryService.listDevices(),
+    [BRIDGE_METHODS.discoveryPair]: async (request) =>
+      deps.deviceDiscoveryService.pairDevice(request.payload),
+    [BRIDGE_METHODS.discoveryProbeConnectable]: async (request) =>
+      deps.deviceDiscoveryService.probeConnectable(request.payload),
+    [BRIDGE_METHODS.discoveryOpenSession]: async (request) =>
+      deps.deviceDiscoveryService.openSession(request.payload),
+    [BRIDGE_METHODS.discoveryCloseSession]: async (request) =>
+      deps.deviceDiscoveryService.closeSession(request.payload),
+    [BRIDGE_METHODS.discoverySendMessage]: async (request) =>
+      deps.deviceDiscoveryService.sendMessage(request.payload),
+    [BRIDGE_METHODS.discoveryGetSessionState]: async (request) =>
+      deps.deviceDiscoveryService.getSessionState(request.payload),
+    [BRIDGE_METHODS.discoveryPullHostEvents]: async () =>
+      deps.deviceDiscoveryService.pullHostEvents(),
   };
 }

@@ -49,6 +49,48 @@ describe("bridge/main runtime e2e flow", () => {
       },
       pluginRuntimeService: runtime,
       pluginCatalogService: catalog,
+      deviceDiscoveryService: {
+        startDiscovery: vi.fn(async () => ({
+          requestId: "discovery-e2e-1",
+          state: "scanning" as const,
+          scanWindowMs: 10_000,
+          devices: [],
+        })),
+        stopDiscovery: vi.fn(async () => ({ success: true as const })),
+        listDevices: vi.fn(async () => ({
+          state: "idle" as const,
+          scanWindowMs: 10_000,
+          devices: [],
+        })),
+        pairDevice: vi.fn(async () => {
+          throw new Error("pairDevice mock not configured");
+        }),
+        probeConnectable: vi.fn(async () => ({
+          checkedAt: Date.now(),
+          port: 32100,
+          timeoutMs: 1500,
+          devices: [],
+        })),
+        openSession: vi.fn(async () => ({
+          success: true as const,
+          sessionId: "session-e2e-1",
+          state: "open" as const,
+        })),
+        closeSession: vi.fn(async () => ({
+          success: true as const,
+          sessionId: "session-e2e-1",
+        })),
+        sendMessage: vi.fn(async () => ({
+          success: true as const,
+          messageId: "msg-e2e-1",
+          sessionId: "session-e2e-1",
+        })),
+        getSessionState: vi.fn(async () => ({
+          sessionId: "session-e2e-1",
+          state: "open" as const,
+        })),
+        pullHostEvents: vi.fn(async () => ({ events: [] })),
+      },
     });
     const dispatch = createMainDispatcher(handlers);
 
@@ -119,6 +161,48 @@ describe("bridge/main runtime e2e flow", () => {
       },
       pluginRuntimeService: runtime,
       pluginCatalogService: createPluginCatalogService(runtime),
+      deviceDiscoveryService: {
+        startDiscovery: vi.fn(async () => ({
+          requestId: "discovery-e2e-2",
+          state: "scanning" as const,
+          scanWindowMs: 10_000,
+          devices: [],
+        })),
+        stopDiscovery: vi.fn(async () => ({ success: true as const })),
+        listDevices: vi.fn(async () => ({
+          state: "idle" as const,
+          scanWindowMs: 10_000,
+          devices: [],
+        })),
+        pairDevice: vi.fn(async () => {
+          throw new Error("pairDevice mock not configured");
+        }),
+        probeConnectable: vi.fn(async () => ({
+          checkedAt: Date.now(),
+          port: 32100,
+          timeoutMs: 1500,
+          devices: [],
+        })),
+        openSession: vi.fn(async () => ({
+          success: true as const,
+          sessionId: "session-e2e-2",
+          state: "open" as const,
+        })),
+        closeSession: vi.fn(async () => ({
+          success: true as const,
+          sessionId: "session-e2e-2",
+        })),
+        sendMessage: vi.fn(async () => ({
+          success: true as const,
+          messageId: "msg-e2e-2",
+          sessionId: "session-e2e-2",
+        })),
+        getSessionState: vi.fn(async () => ({
+          sessionId: "session-e2e-2",
+          state: "open" as const,
+        })),
+        pullHostEvents: vi.fn(async () => ({ events: [] })),
+      },
     });
     const dispatch = createMainDispatcher(handlers);
     const [mobileTransport, pcTransport] = createLoopbackTransportPair();

@@ -1,4 +1,5 @@
 import type { MethodPayloadMap, MethodResultMap } from "../../shared/protocol/types";
+import type { DeviceDiscoveryHostEvent } from "../../shared/protocol/types";
 
 export type PreloadBridgeInvoke = <TMethod extends keyof MethodPayloadMap>(
   method: TMethod,
@@ -8,6 +9,7 @@ export type PreloadBridgeInvoke = <TMethod extends keyof MethodPayloadMap>(
 
 export type PreloadBridgeApi = {
   invoke: PreloadBridgeInvoke;
+  onHostEvent?: (listener: (event: DeviceDiscoveryHostEvent) => void) => () => void;
 };
 
 export type PreloadExposeTarget = {

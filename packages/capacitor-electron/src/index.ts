@@ -47,6 +47,10 @@ export {
   type FileService,
   type FileServiceOptions,
 } from "./host/services/file.service";
+export {
+  createDeviceDiscoveryService,
+  type DeviceDiscoveryService,
+} from "./host/services/device-discovery.service";
 export { createShellAdapter, type ShellAdapter } from "./host/adapters/electron-shell.adapter";
 export {
   createFileSystemAdapter,
@@ -56,6 +60,7 @@ export { BRIDGE_ERROR_CODES, type BridgeErrorCode } from "./shared/errors/codes"
 export { BridgeError, toBridgeError, type BridgeErrorDetails } from "./shared/errors/bridge-error";
 export {
   BRIDGE_CHANNEL_WHITELIST,
+  BRIDGE_HOST_EVENT_CHANNEL,
   BRIDGE_INVOKE_CHANNEL,
   BRIDGE_METHODS,
   BRIDGE_PROTOCOL_VERSION,
@@ -71,6 +76,26 @@ export type {
   MethodPayloadMap,
   MethodResultMap,
   OpenExternalOptions,
+  DiscoverySource,
+  DiscoveryState,
+  DiscoveredDevice,
+  DeviceDiscoveryListResult,
+  DeviceDiscoveryProbeConnectableOptions,
+  DeviceDiscoveryProbeConnectableResult,
+  DeviceDiscoveryPairOptions,
+  DeviceDiscoveryPairResult,
+  DeviceSessionOpenOptions,
+  DeviceSessionOpenResult,
+  DeviceSessionCloseOptions,
+  DeviceSessionCloseResult,
+  DeviceSessionSendMessageOptions,
+  DeviceSessionSendMessageResult,
+  DeviceSessionGetStateOptions,
+  DeviceSessionSnapshot,
+  DeviceDiscoveryStartOptions,
+  DeviceDiscoveryStartResult,
+  DeviceDiscoveryHostEvent,
+  DeviceDiscoveryPullHostEventsResult,
   PluginCatalogResult,
   OperationResult,
   ReadFileOptions,
@@ -91,6 +116,10 @@ export {
   validateRuntimeExecutePayload,
   validateExternalOpenPayload,
   validateReadFilePayload,
+  validateDiscoveryStartPayload,
+  validateDiscoveryPairPayload,
+  validateDiscoveryOpenSessionPayload,
+  validateDiscoverySendMessagePayload,
 } from "./shared/schema/validators";
 export {
   noopBridgeLogger,

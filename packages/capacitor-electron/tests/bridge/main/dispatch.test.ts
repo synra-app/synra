@@ -3,7 +3,7 @@ import { createBridgeHandlers } from "../../../src/bridge/main/handlers";
 import { createMainDispatcher } from "../../../src/bridge/main/dispatch";
 import { BRIDGE_ERROR_CODES } from "../../../src/shared/errors/codes";
 import { BRIDGE_METHODS, BRIDGE_PROTOCOL_VERSION } from "../../../src/shared/protocol/constants";
-import type { RuntimeInfo } from "../../../src/shared/protocol/types";
+import type { MethodResultMap, RuntimeInfo } from "../../../src/shared/protocol/types";
 
 function createRuntimeInfo(): RuntimeInfo {
   return {
@@ -41,6 +41,45 @@ function createHandlers() {
     },
     pluginCatalogService: {
       getCatalog: vi.fn(async () => ({ plugins: [] })),
+    },
+    deviceDiscoveryService: {
+      startDiscovery: vi.fn(async () => ({
+        requestId: "discovery-1",
+        state: "scanning" as const,
+        scanWindowMs: 10_000,
+        devices: [],
+      })),
+      stopDiscovery: vi.fn(async () => ({ success: true as const })),
+      listDevices: vi.fn(async () => ({
+        state: "idle" as const,
+        scanWindowMs: 10_000,
+        devices: [],
+      })),
+      pairDevice: vi.fn(async () => {
+        throw new Error("pairDevice mock not configured");
+      }),
+      probeConnectable: vi.fn(async () => ({
+        checkedAt: Date.now(),
+        port: 32100,
+        timeoutMs: 1500,
+        devices: [],
+      })),
+      openSession: vi.fn(async () => ({
+        success: true as const,
+        sessionId: "session-1",
+        state: "open" as const,
+      })),
+      closeSession: vi.fn(async () => ({ success: true as const, sessionId: "session-1" })),
+      sendMessage: vi.fn(async () => ({
+        success: true as const,
+        messageId: "msg-1",
+        sessionId: "session-1",
+      })),
+      getSessionState: vi.fn(async () => ({
+        sessionId: "session-1",
+        state: "open" as const,
+      })),
+      pullHostEvents: vi.fn(async () => ({ events: [] })),
     },
   });
 }
@@ -119,6 +158,45 @@ describe("bridge/main/dispatch", () => {
       pluginCatalogService: {
         getCatalog: vi.fn(async () => ({ plugins: [] })),
       },
+      deviceDiscoveryService: {
+        startDiscovery: vi.fn(async () => ({
+          requestId: "discovery-2",
+          state: "scanning" as const,
+          scanWindowMs: 10_000,
+          devices: [],
+        })),
+        stopDiscovery: vi.fn(async () => ({ success: true as const })),
+        listDevices: vi.fn(async () => ({
+          state: "idle" as const,
+          scanWindowMs: 10_000,
+          devices: [],
+        })),
+        pairDevice: vi.fn(async () => {
+          throw new Error("pairDevice mock not configured");
+        }),
+        probeConnectable: vi.fn(async () => ({
+          checkedAt: Date.now(),
+          port: 32100,
+          timeoutMs: 1500,
+          devices: [],
+        })),
+        openSession: vi.fn(async () => ({
+          success: true as const,
+          sessionId: "session-1",
+          state: "open" as const,
+        })),
+        closeSession: vi.fn(async () => ({ success: true as const, sessionId: "session-1" })),
+        sendMessage: vi.fn(async () => ({
+          success: true as const,
+          messageId: "msg-1",
+          sessionId: "session-1",
+        })),
+        getSessionState: vi.fn(async () => ({
+          sessionId: "session-1",
+          state: "open" as const,
+        })),
+        pullHostEvents: vi.fn(async () => ({ events: [] })),
+      },
     });
     const dispatch = createMainDispatcher(slowHandlers, { defaultTimeoutMs: 1 });
     const response = await dispatch({
@@ -132,5 +210,28 @@ describe("bridge/main/dispatch", () => {
     if (!response.ok) {
       expect(response.error.code).toBe(BRIDGE_ERROR_CODES.timeout);
     }
+  });
+
+  test("dispatches discovery.start with payload", async () => {
+    const handlers = createHandlers();
+    const dispatch = createMainDispatcher(handlers);
+    const response = await dispatch({
+      protocolVersion: BRIDGE_PROTOCOL_VERSION,
+      requestId: "req-4",
+      method: BRIDGE_METHODS.discoveryStart,
+      payload: {
+        includeLoopback: true,
+        manualTargets: ["192.168.1.120"],
+      },
+    });
+
+    expect(response.ok).toBe(true);
+    if (!response.ok) {
+      return;
+    }
+
+    const startData = response.data as MethodResultMap["discovery.start"];
+    expect(startData.state).toBe("scanning");
+    expect(startData.requestId).toBe("discovery-1");
   });
 });

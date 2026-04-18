@@ -12,6 +12,8 @@
   "dependencies": {
     "@capacitor/core": "catalog:capacitor",
     "@synra/capacitor-electron": "workspace:*",
+    "@synra/capacitor-lan-discovery": "workspace:*",
+    "pinia": "^3.0.4",
     "vue": "catalog:vue",
     "vue-router": "catalog:vue"
   },

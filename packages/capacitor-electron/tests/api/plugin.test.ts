@@ -99,6 +99,40 @@ describe("api/plugin", () => {
     expect(result.plugins).toHaveLength(1);
   });
 
+  test("starts and lists device discovery through invoke", async () => {
+    const invoke: BridgeInvoke = async (method, payload) => {
+      if (method === BRIDGE_METHODS.discoveryStart) {
+        expect(payload).toMatchObject({
+          includeLoopback: true,
+          manualTargets: ["192.168.1.200"],
+        });
+        return {
+          requestId: "discovery-1",
+          state: "scanning",
+          scanWindowMs: 10_000,
+          devices: [],
+        } as unknown as MethodResultMap[typeof method];
+      }
+
+      expect(method).toBe(BRIDGE_METHODS.discoveryList);
+      return {
+        state: "scanning",
+        scanWindowMs: 10_000,
+        devices: [],
+      } as unknown as MethodResultMap[typeof method];
+    };
+
+    const plugin = createElectronBridgePlugin(invoke);
+    const start = await plugin.startDeviceDiscovery({
+      includeLoopback: true,
+      manualTargets: ["192.168.1.200"],
+    });
+    const list = await plugin.listDiscoveredDevices();
+
+    expect(start.state).toBe("scanning");
+    expect(list.devices).toHaveLength(0);
+  });
+
   test("throws when preload bridge is missing on global", async () => {
     expect(() => createElectronBridgePluginFromGlobal({})).toThrow(
       "Preload bridge is not available",
