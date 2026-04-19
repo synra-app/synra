@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AppButton from '../base/AppButton.vue'
+
 type SidebarItem = {
   label: string
   icon: string
@@ -16,36 +18,31 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <nav class="relative flex h-full w-72 flex-col gap-4 overflow-hidden p-4">
-    <div class="flex items-center justify-between gap-2">
-      <div class="flex items-center gap-2">
-        <span class="fcc h-8 w-8 rounded-lg bg-primary/20 text-primary">
-          <span class="i-lucide-sparkles text-xl" />
-        </span>
-        <span class="text-lg font-semibold">Synra</span>
-      </div>
-      <button
-        class="inline-flex rounded-md border border-surface-5 p-1.5 text-muted-6 lg:hidden"
+  <nav class="relative flex h-full flex-col gap-3 overflow-hidden">
+    <div class="flex justify-end pb-1">
+      <AppButton
+        class="lg:hidden"
+        size="icon"
         aria-label="Close sidebar"
         @click="emit('closeMobile')"
       >
         <span class="i-lucide-x" />
-      </button>
+      </AppButton>
     </div>
 
-    <ul class="space-y-1">
+    <ul class="space-y-1.5">
       <li v-for="item in items" :key="item.to">
         <RouterLink
           :to="item.to"
-          class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors duration-200"
+          class="app-focus-ring flex items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-sm transition-all duration-200"
           :class="
             currentPath === item.to || currentPath.startsWith(`${item.to}/`)
-              ? 'bg-primary text-white'
-              : 'text-muted-6 hover:bg-surface-2'
+              ? 'border-primary-4/35 bg-primary/22 text-slate-100'
+              : 'text-muted-2 hover:border-white/15 hover:bg-white/7'
           "
           @click="emit('closeMobile')"
         >
-          <span class="fcc h-5 w-5 text-lg" :class="item.icon" />
+          <span class="fcc h-5 w-5 text-base" :class="item.icon" />
           <span class="whitespace-nowrap">
             {{ item.label }}
           </span>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { DiscoveredDevice } from '@synra/capacitor-lan-discovery'
+import AppButton from '../base/AppButton.vue'
 
 defineProps<{
   devices: DiscoveredDevice[]
@@ -20,16 +21,16 @@ const emit = defineEmits<{
       <li
         v-for="device in devices"
         :key="device.deviceId"
-        class="rounded-md border border-gray-200 p-3"
+        class="rounded-xl border border-white/12 bg-white/5 p-3"
       >
         <div class="flex flex-wrap items-start justify-between gap-3">
           <div class="space-y-1">
-            <p class="font-semibold">{{ device.name }}</p>
-            <p class="text-gray-600">{{ device.ipAddress }}</p>
-            <p class="text-gray-500">
+            <p class="font-semibold text-slate-100">{{ device.name }}</p>
+            <p class="text-muted-2">{{ device.ipAddress }}</p>
+            <p class="text-muted-4">
               Source: {{ device.source }} | Last Seen: {{ device.lastSeenAt }}
             </p>
-            <p class="text-xs" :class="device.connectable ? 'text-green-700' : 'text-amber-700'">
+            <p class="text-xs" :class="device.connectable ? 'text-success-4' : 'text-warning-4'">
               Connectable:
               {{
                 device.connectable
@@ -38,32 +39,23 @@ const emit = defineEmits<{
               }}
             </p>
           </div>
-          <button
+          <AppButton
             v-if="!connectedDeviceIds.includes(device.deviceId)"
-            class="rounded-md bg-gray-900 px-3 py-2 text-white disabled:cursor-not-allowed disabled:opacity-50"
+            variant="solid"
             :disabled="loading || !device.connectable"
             @click="emit('connect', device.deviceId)"
           >
             Connect
-          </button>
-          <button
-            v-else
-            class="rounded-md border border-gray-300 px-3 py-2 disabled:cursor-not-allowed disabled:opacity-50"
-            :disabled="loading"
-            @click="emit('disconnect', device.deviceId)"
-          >
+          </AppButton>
+          <AppButton v-else :disabled="loading" @click="emit('disconnect', device.deviceId)">
             Disconnect
-          </button>
-          <button
-            class="rounded-md border border-red-300 px-3 py-2 text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
-            :disabled="loading"
-            @click="emit('remove', device.deviceId)"
-          >
+          </AppButton>
+          <AppButton variant="danger" :disabled="loading" @click="emit('remove', device.deviceId)">
             Remove
-          </button>
+          </AppButton>
         </div>
       </li>
     </ul>
-    <p v-else class="text-gray-600">No connectable Synra devices found yet.</p>
+    <p v-else class="text-muted-3">No connectable Synra devices found yet.</p>
   </PanelCard>
 </template>

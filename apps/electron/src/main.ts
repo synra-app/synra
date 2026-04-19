@@ -35,6 +35,14 @@ const TAG_STYLES: Readonly<Record<string, Parameters<typeof styleText>[0]>> = {
   'renderer:3': 'magenta'
 }
 
+const WINDOW_CONTROL_CHANNELS = {
+  minimize: 'synra:window:minimize',
+  toggleMaximize: 'synra:window:toggle-maximize',
+  close: 'synra:window:close',
+  isMaximized: 'synra:window:is-maximized',
+  stateChange: 'synra:window:state-change'
+} as const
+
 function styleTag(tag: string): string {
   const style = TAG_STYLES[tag] ?? 'cyan'
   return styleText(style, `[${tag}]`)
@@ -48,12 +56,36 @@ function errorWithTag(tag: string, ...args: unknown[]): void {
   console.error(styleTag(tag), ...args)
 }
 
+function buildWindowState(window: BrowserWindow): { maximized: boolean; focused: boolean } {
+  return {
+    maximized: window.isMaximized(),
+    focused: window.isFocused()
+  }
+}
+
+function emitWindowState(window: BrowserWindow): void {
+  if (window.isDestroyed()) {
+    return
+  }
+  window.webContents.send(WINDOW_CONTROL_CHANNELS.stateChange, buildWindowState(window))
+}
+
+function registerWindowStateListeners(window: BrowserWindow): void {
+  window.on('maximize', () => emitWindowState(window))
+  window.on('unmaximize', () => emitWindowState(window))
+  window.on('focus', () => emitWindowState(window))
+  window.on('blur', () => emitWindowState(window))
+}
+
 function createMainWindow(): BrowserWindow {
   const startupBeginAt = Date.now()
   const mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     show: false,
+    frame: false,
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : undefined,
+    trafficLightPosition: process.platform === 'darwin' ? { x: 16, y: 16 } : undefined,
     backgroundColor: '#0f172a',
     webPreferences: {
       preload: join(resolve(__dirname), 'preload.cjs'),
@@ -94,6 +126,7 @@ function createMainWindow(): BrowserWindow {
     logWithTag('electron-main', 'window ready-to-show in', `${Date.now() - startupBeginAt}ms`)
     if (!mainWindow.isDestroyed()) {
       mainWindow.show()
+      emitWindowState(mainWindow)
     }
   })
 
@@ -113,6 +146,8 @@ function createMainWindow(): BrowserWindow {
   mainWindow.webContents.on('console-message', (_event, level, message) => {
     logWithTag(`renderer:${String(level)}`, message)
   })
+
+  registerWindowStateListeners(mainWindow)
 
   return mainWindow
 }
@@ -160,8 +195,39 @@ function registerCapacitorElectronBridge(): void {
   }
 }
 
+function registerWindowControlBridge(): void {
+  ipcMain.handle(WINDOW_CONTROL_CHANNELS.minimize, (event) => {
+    const targetWindow = BrowserWindow.fromWebContents(event.sender)
+    targetWindow?.minimize()
+  })
+
+  ipcMain.handle(WINDOW_CONTROL_CHANNELS.toggleMaximize, (event) => {
+    const targetWindow = BrowserWindow.fromWebContents(event.sender)
+    if (!targetWindow) {
+      return false
+    }
+    if (targetWindow.isMaximized()) {
+      targetWindow.unmaximize()
+      return false
+    }
+    targetWindow.maximize()
+    return true
+  })
+
+  ipcMain.handle(WINDOW_CONTROL_CHANNELS.close, (event) => {
+    const targetWindow = BrowserWindow.fromWebContents(event.sender)
+    targetWindow?.close()
+  })
+
+  ipcMain.handle(WINDOW_CONTROL_CHANNELS.isMaximized, (event) => {
+    const targetWindow = BrowserWindow.fromWebContents(event.sender)
+    return Boolean(targetWindow?.isMaximized())
+  })
+}
+
 void app.whenReady().then(() => {
   registerCapacitorElectronBridge()
+  registerWindowControlBridge()
   createMainWindow()
 
   app.on('activate', () => {

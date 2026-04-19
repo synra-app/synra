@@ -1,1 +1,75 @@
 @import '@unocss/reset/tailwind-compat.css';
+
+:root {
+  color-scheme: dark;
+  --app-bg-start: #060913;
+  --app-bg-mid: #0a1229;
+  --app-bg-end: #111a34;
+  --app-text-primary: #e2e8f0;
+  --app-text-secondary: #94a3b8;
+  --app-border: rgba(148, 163, 184, 0.22);
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  color: var(--app-text-primary);
+  background:
+    radial-gradient(1200px circle at -10% -20%, rgba(124, 140, 255, 0.26), transparent 55%),
+    radial-gradient(900px circle at 110% -10%, rgba(56, 189, 248, 0.2), transparent 50%),
+    linear-gradient(160deg, var(--app-bg-start), var(--app-bg-mid) 45%, var(--app-bg-end));
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
+}
+
+.app-titlebar-drag {
+  -webkit-app-region: drag;
+}
+
+.app-titlebar-no-drag {
+  -webkit-app-region: no-drag;
+}
+
+.app-scroll-container {
+  scrollbar-gutter: stable;
+  padding-right: 10px;
+  scrollbar-width: none;
+}
+
+.app-scroll-container:hover {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.48) transparent;
+}
+
+.app-scroll-container::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.app-scroll-container:hover::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.app-scroll-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.app-scroll-container::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.5);
+}
+
+.app-scroll-container:hover::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.56);
+}

@@ -2,18 +2,24 @@
 import { storeToRefs } from 'pinia'
 import { useAppShellStore } from './stores/app-shell'
 import { deactivatePlugin } from './plugins/host'
+import { appMenuItems } from './constants/navigation'
 
 const route = useRoute()
 const router = useRouter()
 const appShellStore = useAppShellStore()
 const { isMobileMenuOpen } = storeToRefs(appShellStore)
-
-const menuItems = [
-  { label: 'Home', icon: 'i-lucide-home', to: '/home' },
-  { label: 'Plugins', icon: 'i-lucide-puzzle', to: '/plugins' },
-  { label: 'Devices', icon: 'i-lucide-monitor-smartphone', to: '/devices' },
-  { label: 'Settings', icon: 'i-lucide-settings', to: '/settings' }
-]
+const appTitle = computed(() => {
+  if (route.path.startsWith('/plugins')) {
+    return 'Plugin Workspace'
+  }
+  if (route.path.startsWith('/devices')) {
+    return 'Device Sessions'
+  }
+  if (route.path.startsWith('/settings')) {
+    return 'Runtime Settings'
+  }
+  return 'Dashboard'
+})
 
 watch(
   () => route.fullPath,
@@ -39,22 +45,18 @@ watch(
 </script>
 
 <template>
-  <AppShellLayout :mobile-open="isMobileMenuOpen" @close-mobile="appShellStore.closeMobileMenu()">
+  <AppShellLayout
+    :mobile-open="isMobileMenuOpen"
+    :app-title="appTitle"
+    @toggle-mobile="appShellStore.toggleMobileMenu()"
+    @close-mobile="appShellStore.closeMobileMenu()"
+  >
     <template #sidebar>
       <SidebarNav
-        :items="menuItems"
+        :items="appMenuItems"
         :current-path="route.path"
         @close-mobile="appShellStore.closeMobileMenu()"
       />
-    </template>
-    <template #mobile-trigger>
-      <button
-        class="inline-flex items-center gap-2 rounded-lg border border-surface-5 bg-surface px-3 py-2 text-sm text-muted-6 lg:hidden"
-        @click="appShellStore.toggleMobileMenu()"
-      >
-        <span class="i-lucide-menu text-base" />
-        <span>Menu</span>
-      </button>
     </template>
     <RouterView />
   </AppShellLayout>

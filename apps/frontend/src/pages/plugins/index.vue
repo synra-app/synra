@@ -8,7 +8,7 @@ const { error, filteredPlugins, keyword, loading, openPlugin, refreshCatalog } =
       <PluginSearchBar v-model:keyword="keyword" :loading="loading" @search="refreshCatalog" />
     </PanelCard>
     <PanelCard v-if="error">
-      <p class="text-sm text-error-7">{{ error }}</p>
+      <p class="text-sm text-error-4">{{ error }}</p>
     </PanelCard>
     <PanelCard>
       <PluginCardGrid :plugins="filteredPlugins" @open="openPlugin" />

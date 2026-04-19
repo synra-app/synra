@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { ConnectedSession } from '../../stores/lan-discovery'
+import AppButton from '../base/AppButton.vue'
 
 defineProps<{
   sessions: ConnectedSession[]
@@ -20,15 +21,15 @@ const emit = defineEmits<{
       <li
         v-for="session in sessions"
         :key="session.sessionId"
-        class="rounded-md border border-gray-200 p-3"
+        class="rounded-xl border border-white/12 bg-white/5 p-3"
       >
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div class="space-y-1">
-            <p class="font-semibold">
+            <p class="font-semibold text-slate-100">
               {{ session.deviceId ?? session.remote ?? session.sessionId }}
             </p>
-            <p class="text-muted-6">Session: {{ session.sessionId }}</p>
-            <p class="text-muted-6">
+            <p class="text-muted-2">Session: {{ session.sessionId }}</p>
+            <p class="text-muted-2">
               Endpoint:
               {{
                 session.host
@@ -36,14 +37,14 @@ const emit = defineEmits<{
                   : (session.remote ?? '-')
               }}
             </p>
-            <p class="text-muted-5">
+            <p class="text-muted-3">
               Direction:
               <span
                 class="rounded px-1.5 py-0.5 text-xs"
                 :class="
                   session.direction === 'inbound'
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'bg-emerald-100 text-emerald-700'
+                    ? 'bg-info/18 text-info-4'
+                    : 'bg-success/18 text-success-4'
                 "
               >
                 {{ session.direction ?? 'outbound' }}
@@ -51,32 +52,28 @@ const emit = defineEmits<{
               | Last Active: {{ session.lastActiveAt }}
             </p>
           </div>
-          <button
+          <AppButton
             v-if="mode === 'connect'"
-            class="rounded-md bg-primary px-3 py-2 text-white"
+            variant="solid"
             @click="emit('openMessages', session.sessionId)"
           >
             Open Messages
-          </button>
-          <button
-            v-if="mode === 'connect'"
-            class="rounded-md border border-gray-300 px-3 py-2"
-            @click="emit('disconnect', session.sessionId)"
-          >
+          </AppButton>
+          <AppButton v-if="mode === 'connect'" @click="emit('disconnect', session.sessionId)">
             Disconnect
-          </button>
-          <button
+          </AppButton>
+          <AppButton
             v-else
-            class="rounded-md px-3 py-2 text-sm"
+            size="sm"
             :class="
               selectedSessionId === session.sessionId
-                ? 'bg-primary text-white'
-                : 'border border-surface-5 bg-surface text-muted-6'
+                ? 'border-primary-4/35 bg-primary/24 text-slate-100'
+                : ''
             "
             @click="emit('select', session.sessionId)"
           >
             {{ selectedSessionId === session.sessionId ? 'Selected' : 'Open' }}
-          </button>
+          </AppButton>
         </div>
       </li>
     </ul>

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AppButton from '../base/AppButton.vue'
+
 const messageInput = defineModel<string>('messageInput', { required: true })
 const messageType = defineModel<string>('messageType', { required: true })
 
@@ -17,24 +19,18 @@ const emit = defineEmits<{
     <div class="grid grid-cols-1 gap-2 md:grid-cols-[1fr_auto_auto]">
       <input
         v-model="messageInput"
-        class="w-full rounded-md border border-gray-300 px-3 py-2"
+        class="app-focus-ring w-full rounded-lg border border-white/14 bg-white/6 px-3 py-2 text-slate-100 placeholder:text-muted-4"
         :disabled="disabled"
         placeholder="Type a message..."
         @keyup.enter="emit('send')"
       />
       <input
         v-model="messageType"
-        class="rounded-md border border-gray-300 px-3 py-2 md:w-40"
+        class="app-focus-ring rounded-lg border border-white/14 bg-white/6 px-3 py-2 text-slate-100 placeholder:text-muted-4 md:w-40"
         :disabled="disabled"
         placeholder="message type"
       />
-      <button
-        class="rounded-md bg-gray-900 px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-50"
-        :disabled="!canSend"
-        @click="emit('send')"
-      >
-        Send
-      </button>
+      <AppButton variant="solid" :disabled="!canSend" @click="emit('send')"> Send </AppButton>
     </div>
   </PanelCard>
 </template>

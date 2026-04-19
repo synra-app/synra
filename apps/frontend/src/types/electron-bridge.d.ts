@@ -25,6 +25,15 @@ declare global {
       ) => Promise<unknown>
       onHostEvent?: (listener: (event: SynraHostEvent) => void) => () => void
     }
+    __synraWindowControls?: {
+      minimize: () => Promise<void>
+      toggleMaximize: () => Promise<boolean>
+      close: () => Promise<void>
+      isMaximized: () => Promise<boolean>
+      onWindowStateChange: (
+        listener: (state: { maximized: boolean; focused: boolean }) => void
+      ) => () => void
+    }
   }
 }
 

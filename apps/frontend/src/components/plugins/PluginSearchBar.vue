@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AppButton from '../base/AppButton.vue'
+
 const keyword = defineModel<string>('keyword', { required: true })
 
 defineProps<{
@@ -15,16 +17,10 @@ const emit = defineEmits<{
   <div class="flex flex-col gap-2 md:flex-row">
     <input
       v-model="keyword"
-      class="w-full rounded-lg border border-surface-5 bg-surface px-3 py-2"
+      class="app-focus-ring w-full rounded-lg border border-white/15 bg-white/6 px-3 py-2 text-sm text-slate-100 placeholder:text-muted-4"
       :placeholder="placeholder ?? 'Search plugins'"
       @keyup.enter="emit('search')"
     />
-    <button
-      class="rounded-lg border border-surface-5 px-3 py-2 text-sm text-muted-6 disabled:cursor-not-allowed disabled:opacity-60"
-      :disabled="loading"
-      @click="emit('search')"
-    >
-      Refresh
-    </button>
+    <AppButton :disabled="loading" @click="emit('search')"> Refresh </AppButton>
   </div>
 </template>

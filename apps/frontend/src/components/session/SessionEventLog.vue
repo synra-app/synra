@@ -12,13 +12,13 @@ defineProps<{
       <li
         v-for="log in entries"
         :key="log.id"
-        class="rounded-md border px-3 py-2"
+        class="rounded-lg border px-3 py-2"
         :class="
           log.type === 'transportError'
-            ? 'border-red-200 bg-red-50 text-red-700'
+            ? 'border-error/35 bg-error/12 text-error-3'
             : log.type === 'messageAck' || log.type === 'sessionOpened'
-              ? 'border-green-200 bg-green-50 text-green-700'
-              : 'border-gray-200 bg-gray-50 text-gray-700'
+              ? 'border-success/35 bg-success/12 text-success-3'
+              : 'border-white/12 bg-white/6 text-muted-1'
         "
       >
         <p>
@@ -27,6 +27,6 @@ defineProps<{
         </p>
       </li>
     </ul>
-    <p v-else class="text-gray-600">No logs for selected session.</p>
+    <p v-else class="text-muted-3">No logs for selected session.</p>
   </PanelCard>
 </template>

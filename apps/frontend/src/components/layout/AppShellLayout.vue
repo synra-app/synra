@@ -1,33 +1,37 @@
 <script setup lang="ts">
 defineProps<{
   mobileOpen: boolean
+  appTitle?: string
 }>()
 
 const emit = defineEmits<{
   closeMobile: []
+  toggleMobile: []
 }>()
 </script>
 
 <template>
-  <div class="flex h-screen flex-col overflow-hidden bg-surface-1 text-slate-900">
-    <div class="shrink-0 border-b border-surface-3 bg-surface px-4 py-3 lg:hidden">
-      <slot name="mobile-trigger" />
-    </div>
-    <div class="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[auto_1fr]">
+  <div class="relative flex h-dvh flex-col overflow-hidden text-slate-100">
+    <AppTopbar class="shrink-0" :title="appTitle" @toggle-mobile="emit('toggleMobile')" />
+    <div
+      class="grid min-h-0 flex-1 grid-cols-1 gap-2 overflow-hidden px-2 pb-2 pt-2 lg:grid-cols-[260px_1fr] lg:gap-3 lg:px-3 lg:pb-3 lg:pt-3"
+    >
       <aside
-        class="fixed inset-y-0 left-0 z-40 w-72 -translate-x-full overflow-y-auto border-r border-surface-3 bg-surface transition-transform duration-200 ease-in-out lg:static lg:h-full lg:translate-x-0"
+        class="app-scroll-container fixed bottom-2 left-2 top-12 z-50 w-[min(260px,84vw)] -translate-x-[105%] overflow-y-auto rounded-2xl bg-[#0f172acc] p-2.5 backdrop-blur-xl transition-transform duration-300 ease-in-out lg:static lg:top-auto lg:h-full lg:w-auto lg:translate-x-0 lg:bg-white/4"
         :class="mobileOpen ? 'translate-x-0' : ''"
       >
         <slot name="sidebar" />
       </aside>
       <button
         v-if="mobileOpen"
-        class="fixed inset-0 z-30 bg-black/30 lg:hidden"
+        class="fixed inset-0 z-40 bg-black/55 lg:hidden"
         aria-label="Close menu overlay"
         @click="emit('closeMobile')"
       />
-      <main class="min-w-0 overflow-y-auto p-4 sm:p-6">
-        <slot />
+      <main class="app-scroll-container glass-panel min-h-0 min-w-0 overflow-y-auto p-4 md:p-5">
+        <div class="mx-auto w-full max-w-[1400px]">
+          <slot />
+        </div>
       </main>
     </div>
   </div>

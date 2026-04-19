@@ -73,13 +73,13 @@ const {
           <li
             v-for="task in reconnectTasks"
             :key="task.id"
-            class="rounded-md border border-gray-200 p-2"
+            class="rounded-xl border border-white/12 bg-white/6 p-2.5 text-muted-2"
           >
             {{ task.deviceId }} · {{ task.host }}:{{ task.port }} · {{ task.status }} · attempts:
             {{ task.attempts }}
           </li>
         </ul>
-        <p v-else class="text-sm text-gray-600">No reconnect tasks yet.</p>
+        <p v-else class="text-sm text-muted-3">No reconnect tasks yet.</p>
       </PanelCard>
     </div>
 
@@ -91,7 +91,7 @@ const {
         @disconnect="onDisconnectSession"
       />
       <PanelCard>
-        <p class="text-sm text-muted-5">
+        <p class="text-sm text-muted-3">
           Open the built-in Chat plugin page to continue the active session.
         </p>
       </PanelCard>

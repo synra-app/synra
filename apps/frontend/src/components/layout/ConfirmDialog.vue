@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AppButton from '../base/AppButton.vue'
+
 defineProps<{
   visible: boolean
   title: string
@@ -14,17 +16,22 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div v-if="visible" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-    <div class="w-full max-w-md rounded-lg bg-white p-5 shadow-xl">
-      <h3 class="text-lg font-semibold">{{ title }}</h3>
-      <p class="mt-2 text-sm text-gray-600">{{ message }}</p>
+  <div
+    v-if="visible"
+    class="fixed inset-0 z-[80] flex items-center justify-center bg-black/65 px-4 backdrop-blur-sm"
+  >
+    <div
+      class="w-full max-w-md rounded-2xl border border-white/14 bg-slate-950/92 p-5 shadow-2xl shadow-black/50"
+    >
+      <h3 class="text-lg font-semibold text-slate-100">{{ title }}</h3>
+      <p class="mt-2 text-sm text-muted-2">{{ message }}</p>
       <div class="mt-4 flex justify-end gap-2">
-        <button class="rounded-md border border-gray-300 px-3 py-2" @click="emit('cancel')">
+        <AppButton @click="emit('cancel')">
           {{ cancelText ?? 'Cancel' }}
-        </button>
-        <button class="rounded-md bg-red-600 px-3 py-2 text-white" @click="emit('confirm')">
+        </AppButton>
+        <AppButton variant="danger" @click="emit('confirm')">
           {{ confirmText ?? 'Confirm' }}
-        </button>
+        </AppButton>
       </div>
     </div>
   </div>
