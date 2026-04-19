@@ -23,3 +23,17 @@ const packageBaseConfig: UserConfig = {
 export function createPackageViteConfig(overrides: UserConfig = {}): UserConfig {
   return mergeConfig(packageBaseConfig, overrides)
 }
+
+export function createCapacitorPluginViteConfig(): UserConfig {
+  return createPackageViteConfig({
+    pack: {
+      entry: ['src/index.ts'],
+      dts: {
+        tsgo: false
+      },
+      exports: {
+        devExports: true
+      }
+    }
+  })
+}

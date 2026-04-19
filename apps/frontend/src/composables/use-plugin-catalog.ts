@@ -1,4 +1,5 @@
 import { createElectronBridgePluginFromGlobal } from '@synra/capacitor-electron/api/plugin'
+import { unknownToErrorMessage } from '@synra/protocol'
 import { getInstalledPluginRecord, installPluginOnClient } from '../plugins/install-manager'
 import { listBuiltinPlugins, openPluginPage } from '../plugins/host'
 
@@ -99,8 +100,7 @@ export function usePluginCatalog() {
 
       plugins.value = [...merged.values()]
     } catch (unknownError) {
-      error.value =
-        unknownError instanceof Error ? unknownError.message : 'Failed to fetch plugin catalog.'
+      error.value = unknownToErrorMessage(unknownError, 'Failed to fetch plugin catalog.')
       plugins.value = getFallbackPlugins()
     } finally {
       loading.value = false

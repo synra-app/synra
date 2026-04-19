@@ -283,18 +283,13 @@ export type SynraActionReceipt =
       }
     }
 
+export function unknownToErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback
+}
+
 export function createMessage<TPayload>(
   input: Omit<SynraCrossDeviceMessage<SynraMessageType, TPayload>, 'protocolVersion'>
 ): SynraCrossDeviceMessage<SynraMessageType, TPayload> {
-  return {
-    ...input,
-    protocolVersion: PROTOCOL_VERSION
-  }
-}
-
-export function createTypedMessage<TType extends SynraMessageType>(
-  input: Omit<SynraCrossDeviceMessage<TType>, 'protocolVersion'>
-): SynraCrossDeviceMessage<TType> {
   return {
     ...input,
     protocolVersion: PROTOCOL_VERSION

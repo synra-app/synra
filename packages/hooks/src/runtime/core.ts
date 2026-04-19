@@ -1,6 +1,6 @@
 import type { HostEvent, MessageReceivedEvent } from '@synra/capacitor-device-connection'
 import type { DiscoveredDevice } from '@synra/capacitor-lan-discovery'
-import type { SynraMessageType } from '@synra/protocol'
+import { unknownToErrorMessage, type SynraMessageType } from '@synra/protocol'
 import { computed, ref, type Ref } from 'vue'
 import type {
   SynraConnectionFilter,
@@ -254,7 +254,7 @@ function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionR
       await probeConnectable()
       error.value = null
     } catch (unknownError) {
-      error.value = unknownError instanceof Error ? unknownError.message : 'Failed to load devices.'
+      error.value = unknownToErrorMessage(unknownError, 'Failed to load devices.')
     }
   }
 
@@ -281,8 +281,7 @@ function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionR
       await probeConnectable()
       error.value = null
     } catch (unknownError) {
-      error.value =
-        unknownError instanceof Error ? unknownError.message : 'Failed to start discovery.'
+      error.value = unknownToErrorMessage(unknownError, 'Failed to start discovery.')
     } finally {
       loading.value = false
     }
@@ -295,8 +294,7 @@ function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionR
       scanState.value = 'idle'
       error.value = null
     } catch (unknownError) {
-      error.value =
-        unknownError instanceof Error ? unknownError.message : 'Failed to stop discovery.'
+      error.value = unknownToErrorMessage(unknownError, 'Failed to stop discovery.')
     } finally {
       loading.value = false
     }
@@ -311,7 +309,7 @@ function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionR
       )
       error.value = null
     } catch (unknownError) {
-      error.value = unknownError instanceof Error ? unknownError.message : 'Failed to pair device.'
+      error.value = unknownToErrorMessage(unknownError, 'Failed to pair device.')
     } finally {
       loading.value = false
     }
@@ -323,10 +321,7 @@ function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionR
       devices.value = sortDevices(result.devices)
       error.value = null
     } catch (unknownError) {
-      error.value =
-        unknownError instanceof Error
-          ? unknownError.message
-          : 'Failed to probe device connectability.'
+      error.value = unknownToErrorMessage(unknownError, 'Failed to probe device connectability.')
     }
   }
 
@@ -360,7 +355,7 @@ function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionR
       })
       error.value = null
     } catch (unknownError) {
-      error.value = unknownError instanceof Error ? unknownError.message : 'Failed to open session.'
+      error.value = unknownToErrorMessage(unknownError, 'Failed to open session.')
     } finally {
       loading.value = false
     }
@@ -379,8 +374,7 @@ function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionR
       markConnectionClosed(sessionId, Date.now())
       error.value = null
     } catch (unknownError) {
-      error.value =
-        unknownError instanceof Error ? unknownError.message : 'Failed to close session.'
+      error.value = unknownToErrorMessage(unknownError, 'Failed to close session.')
     } finally {
       loading.value = false
     }
@@ -421,7 +415,7 @@ function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionR
       })
       error.value = null
     } catch (unknownError) {
-      error.value = unknownError instanceof Error ? unknownError.message : 'Failed to send message.'
+      error.value = unknownToErrorMessage(unknownError, 'Failed to send message.')
       throw unknownError
     } finally {
       loading.value = false
@@ -433,8 +427,7 @@ function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionR
       const snapshot = await adapter.getSessionState(sessionId)
       sessionState.value = snapshot
     } catch (unknownError) {
-      error.value =
-        unknownError instanceof Error ? unknownError.message : 'Failed to sync session state.'
+      error.value = unknownToErrorMessage(unknownError, 'Failed to sync session state.')
     }
   }
 

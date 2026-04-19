@@ -150,10 +150,7 @@ export function getSynraPluginMetaFromManifest(
   }
 }
 
-export function normalizePluginPagePath(pagePath: string): string {
-  const normalized = pagePath.startsWith('/') ? pagePath : `/${pagePath}`
-  return normalized.replace(/\/+/g, '/')
-}
+export { normalizePluginPagePath, pluginFilePathToPagePath } from './page-path'
 
 export type {
   PluginWorkerRuntime,

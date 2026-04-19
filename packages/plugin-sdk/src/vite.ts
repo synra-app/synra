@@ -19,13 +19,12 @@ function toPageEntryName(pageEntryPath: string): string {
   return pageEntryPath.replace(/\.vue$/i, '')
 }
 
-function toRuntimePagePath(pageEntryPath: string): string {
-  const normalized = normalizeEntryPath(pageEntryPath)
-  const stripped = normalized
-    .replace(/^pages\//, '')
-    .replace(/\/index\.vue$/i, '')
-    .replace(/^\/+/, '')
-  return `/${stripped || 'home'}`.replace(/\/+/g, '/')
+function pluginFilePathToPagePath(filePath: string): string {
+  const normalized = filePath.replaceAll('\\', '/').replace(/^\/+/, '')
+  const withoutDistPrefix = normalized.replace(/^dist\//, '')
+  const withoutPagesPrefix = withoutDistPrefix.replace(/^pages\//, '')
+  const withoutFileSuffix = withoutPagesPrefix.replace(/\/index\.(vue|mjs)$/i, '')
+  return `/${withoutFileSuffix || 'home'}`.replace(/\/+/g, '/')
 }
 
 type PagesManifestItem = {
@@ -40,7 +39,7 @@ const RESOLVED_VIRTUAL_PAGES_ENTRY_ID = '\0virtual:synra-pages-entry'
 function createPagesManifestItems(pageEntries: string[]): PagesManifestItem[] {
   return pageEntries.map((pageEntry) => {
     return {
-      path: toRuntimePagePath(pageEntry),
+      path: pluginFilePathToPagePath(pageEntry),
       file: pageEntry
     }
   })

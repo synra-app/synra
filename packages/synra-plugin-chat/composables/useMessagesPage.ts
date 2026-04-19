@@ -2,6 +2,10 @@ import type { ChatSession, SessionLogEntry } from '../src/types/chat'
 import { useConnectionState, useDiscovery, useSessionMessages } from '@synra/plugin-sdk/hooks'
 import type { SynraHookSendMessageInput } from '@synra/plugin-sdk/hooks'
 
+function resolveErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback
+}
+
 export function useMessagesPage() {
   const { activeSessions: rawActiveSessions } = useConnectionState()
   const { ensureListeners, loading, error: discoveryError } = useDiscovery()
@@ -84,8 +88,7 @@ export function useMessagesPage() {
         payload: content
       })
     } catch (unknownError) {
-      localError.value =
-        unknownError instanceof Error ? unknownError.message : 'Failed to send message.'
+      localError.value = resolveErrorMessage(unknownError, 'Failed to send message.')
     }
   }
 

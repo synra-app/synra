@@ -1,6 +1,7 @@
 import {
   getSynraUiManifestMetadata,
   normalizePluginPagePath,
+  pluginFilePathToPagePath,
   type SynraPlugin,
   type SynraPluginManifest,
   type SynraUiManifestMetadata
@@ -66,9 +67,11 @@ class PluginRegistry {
 
 class PluginRouteBinder {
   private readonly pagesByPlugin = new Map<string, Map<string, RegisteredPage>>()
+  // Source pages are available during local workspace development.
   private readonly pageSourceModules = import.meta.glob(
     '/node_modules/@synra-plugin/*/pages/**/index.vue'
   )
+  // Dist pages are required for published plugin packages.
   private readonly pageDistModules = import.meta.glob(
     '/node_modules/@synra-plugin/*/dist/pages/**/index.mjs'
   )
@@ -124,6 +127,7 @@ class PluginRouteBinder {
       return manifest
     }
 
+    // Compatibility fallback for plugins that do not emit pages.json in development.
     const inferredManifest = this.inferPagesManifest(packageName)
     if (inferredManifest.pages.length > 0) {
       return inferredManifest
@@ -142,7 +146,7 @@ class PluginRouteBinder {
         continue
       }
       const file = sourceModulePath.slice(sourcePrefix.length)
-      const path = this.toPagePathFromFile(file)
+      const path = pluginFilePathToPagePath(file)
       pages.set(path, { path, file })
     }
 
@@ -152,7 +156,7 @@ class PluginRouteBinder {
       }
       const distRelativeFile = distModulePath.slice(distPrefix.length)
       const file = distRelativeFile.replace(/\.mjs$/i, '.vue')
-      const path = this.toPagePathFromFile(file)
+      const path = pluginFilePathToPagePath(file)
       if (!pages.has(path)) {
         pages.set(path, { path, file })
       }
@@ -163,15 +167,6 @@ class PluginRouteBinder {
     }
   }
 
-  private toPagePathFromFile(file: string): string {
-    const normalized = file.replaceAll('\\', '/').replace(/^\/+/, '')
-    const withoutDistPrefix = normalized.replace(/^dist\//, '')
-    const withoutPagesPrefix = withoutDistPrefix.replace(/^pages\//, '')
-    const withoutFileSuffix = withoutPagesPrefix.replace(/\/index\.(vue|mjs)$/i, '')
-    const runtimePath = `/${withoutFileSuffix || 'home'}`.replace(/\/+/g, '/')
-    return normalizePluginPagePath(runtimePath)
-  }
-
   private resolvePageLoader(
     packageName: string,
     pageFilePath: string
@@ -179,7 +174,7 @@ class PluginRouteBinder {
     const normalizedFilePath = pageFilePath.replace(/^\/+/, '')
     const sourcePath = `/node_modules/${packageName}/${normalizedFilePath}`
     const distPath = `/node_modules/${packageName}/dist/${normalizedFilePath.replace(/\.vue$/i, '.mjs')}`
-    const loader = this.pageModuleLoaders[sourcePath] ?? this.pageModuleLoaders[distPath]
+    const loader = this.pageModuleLoaders[distPath] ?? this.pageModuleLoaders[sourcePath]
     if (!loader) {
       throw new Error(
         `Cannot resolve page module for '${packageName}' file '${normalizedFilePath}'.`
