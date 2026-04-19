@@ -10,9 +10,11 @@ import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Enumeration;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 public class LanDiscoveryPlugin {
@@ -27,6 +29,9 @@ public class LanDiscoveryPlugin {
         boolean includeLoopback,
         List<String> manualTargets,
         boolean enableProbeFallback,
+        String discoveryMode,
+        List<String> subnetCidrs,
+        Integer maxProbeHosts,
         boolean reset,
         Integer requestedScanWindowMs
     ) {
@@ -38,13 +43,14 @@ public class LanDiscoveryPlugin {
         this.startedAt = System.currentTimeMillis();
         this.scanWindowMs = requestedScanWindowMs != null ? requestedScanWindowMs : DEFAULT_SCAN_WINDOW_MS;
 
-        List<DeviceRecord> interfaceDevices = collectInterfaceDevices(includeLoopback);
-        mergeDevices(interfaceDevices);
-        mergeDevices(collectManualDevices(manualTargets));
+        String mode = discoveryMode == null ? "hybrid" : discoveryMode;
+        boolean includeManual = !"none".equals(mode);
 
-        if (enableProbeFallback) {
-            mergeDevices(collectProbeCandidates(interfaceDevices));
+        List<DeviceRecord> interfaceDevices = collectInterfaceDevices(includeLoopback);
+        if (includeManual) {
+            mergeDevices(collectManualDevices(manualTargets));
         }
+        pruneSelfDevices(interfaceDevices);
 
         JSObject result = listDevices();
         result.put("requestId", UUID.randomUUID().toString());
@@ -118,6 +124,29 @@ public class LanDiscoveryPlugin {
             } else {
                 this.devices.put(device.deviceId, device);
             }
+        }
+    }
+
+    private void pruneSelfDevices(List<DeviceRecord> interfaceDevices) {
+        Set<String> localIps = new HashSet<>();
+        for (DeviceRecord local : interfaceDevices) {
+            localIps.add(local.ipAddress);
+        }
+        if (localIps.isEmpty()) {
+            return;
+        }
+        List<String> toDelete = new ArrayList<>();
+        for (Map.Entry<String, DeviceRecord> entry : this.devices.entrySet()) {
+            DeviceRecord value = entry.getValue();
+            if ("manual".equals(value.source)) {
+                continue;
+            }
+            if (localIps.contains(value.ipAddress)) {
+                toDelete.add(entry.getKey());
+            }
+        }
+        for (String key : toDelete) {
+            this.devices.remove(key);
         }
     }
 
@@ -200,37 +229,6 @@ public class LanDiscoveryPlugin {
             index += 1;
         }
         return result;
-    }
-
-    private List<DeviceRecord> collectProbeCandidates(List<DeviceRecord> seeds) {
-        if (seeds.isEmpty()) {
-            return List.of();
-        }
-
-        String[] octets = seeds.get(0).ipAddress.split("\\.");
-        if (octets.length != 4) {
-            return List.of();
-        }
-
-        try {
-            int tail = Integer.parseInt(octets[3]);
-            int probeTail = tail >= 254 ? 1 : tail + 1;
-            String probeIp = octets[0] + "." + octets[1] + "." + octets[2] + "." + probeTail;
-            return List.of(new DeviceRecord(
-                hashDeviceId("probe:" + probeIp),
-                "Probe Candidate",
-                probeIp,
-                "probe",
-                false,
-                false,
-                null,
-                null,
-                System.currentTimeMillis(),
-                System.currentTimeMillis()
-            ));
-        } catch (NumberFormatException ignored) {
-            return List.of();
-        }
     }
 
     private static String safeHostName() {

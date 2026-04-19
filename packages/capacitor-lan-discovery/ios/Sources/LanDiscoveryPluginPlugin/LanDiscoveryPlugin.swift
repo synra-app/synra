@@ -1,24 +1,50 @@
 import Foundation
 import CryptoKit
 import Network
+import Darwin
 
 @objc public class LanDiscoveryPlugin: NSObject {
+    private let appId = "synra"
+    private let protocolVersion = "1.0"
+    private let defaultTcpPort: UInt16 = 32100
     private let defaultScanWindowMs = 15_000
+    private let defaultDiscoveryTimeoutMs = 1500
+    private let defaultMdnsServiceType = "_synra._tcp."
+    private let udpDiscoveryPort: UInt16 = 32101
+    private let udpDiscoveryMagic = "SYNRA_DISCOVERY_V1"
     private var state: String = "idle"
     private var startedAt: Int?
     private var scanWindowMs: Int = 15_000
     private var devices: [String: DeviceRecord] = [:]
     private var sessionState = SessionState()
     private var connection: NWConnection?
+    private var advertisedService: NetService?
+    private var udpResponderSocket: Int32 = -1
+    private var udpResponderSource: DispatchSourceRead?
+    private let udpResponderQueue = DispatchQueue(label: "com.synra.lan-discovery.udp-responder")
     public var onMessageReceived: (([String: Any]) -> Void)?
     public var onMessageAck: (([String: Any]) -> Void)?
     public var onSessionClosed: (([String: Any]) -> Void)?
     public var onTransportError: (([String: Any]) -> Void)?
 
+    public override init() {
+        super.init()
+        startBackgroundDiscoveryServices()
+    }
+
+    deinit {
+        stopBackgroundDiscoveryServices()
+    }
+
     @objc public func startDiscovery(
         includeLoopback: Bool,
         manualTargets: [String],
         enableProbeFallback: Bool,
+        discoveryMode: String?,
+        mdnsServiceType: String?,
+        discoveryTimeoutMs: NSNumber?,
+        subnetCidrs: [String],
+        maxProbeHosts: NSNumber?,
         reset: Bool,
         scanWindowMs: NSNumber?
     ) -> [String: Any] {
@@ -29,14 +55,33 @@ import Network
         state = "scanning"
         startedAt = now()
         self.scanWindowMs = scanWindowMs?.intValue ?? defaultScanWindowMs
+        let mode = discoveryMode ?? "hybrid"
+        let includeMdns = mode == "hybrid" || mode == "mdns"
+        let includeUdpFallback = mode == "hybrid"
+        let includeManual = mode != "mdns"
+        let discoveryTimeout = max(200, discoveryTimeoutMs?.intValue ?? defaultDiscoveryTimeoutMs)
+        _ = enableProbeFallback
+        _ = subnetCidrs
+        _ = maxProbeHosts
 
         let interfaceDevices = collectInterfaceDevices(includeLoopback: includeLoopback)
-        mergeDevices(interfaceDevices)
-        mergeDevices(collectManualDevices(manualTargets))
-
-        if enableProbeFallback {
-            mergeDevices(collectProbeCandidates(seedDevices: interfaceDevices))
+        var discoveredTargets: [String] = []
+        if includeMdns {
+            discoveredTargets = discoverByMdns(
+                serviceType: mdnsServiceType ?? defaultMdnsServiceType,
+                timeoutMs: discoveryTimeout
+            )
         }
+        if discoveredTargets.isEmpty, includeUdpFallback {
+            discoveredTargets = discoverByUdp(timeoutMs: discoveryTimeout)
+        }
+        if !discoveredTargets.isEmpty {
+            mergeDevices(collectManualDevices(discoveredTargets))
+        }
+        if includeManual {
+            mergeDevices(collectManualDevices(manualTargets))
+        }
+        pruneSelfDevices(interfaceDevices)
 
         var result = listDevices()
         result["requestId"] = UUID().uuidString
@@ -265,27 +310,64 @@ import Network
         }
     }
 
+    private func pruneSelfDevices(_ interfaceDevices: [DeviceRecord]) {
+        let localIps = Set(interfaceDevices.map(\.ipAddress))
+        guard !localIps.isEmpty else {
+            return
+        }
+        devices = devices.filter { _, device in
+            if device.source == "manual" {
+                return true
+            }
+            return !localIps.contains(device.ipAddress)
+        }
+    }
+
     private func collectInterfaceDevices(includeLoopback: Bool) -> [DeviceRecord] {
-        guard includeLoopback else {
+        var cursor: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&cursor) == 0, let first = cursor else {
             return []
         }
+        defer { freeifaddrs(cursor) }
 
         let host = Host.current().localizedName ?? "ios-host"
-        let address = "127.0.0.1"
-        return [
-            DeviceRecord(
-                deviceId: hashDeviceId("loopback:\(address)"),
-                name: "\(host) (loopback)",
-                ipAddress: address,
-                source: "mdns",
-                paired: false,
-                connectable: false,
-                connectCheckAt: nil,
-                connectCheckError: nil,
-                discoveredAt: now(),
-                lastSeenAt: now()
-            ),
-        ]
+        var records: [DeviceRecord] = []
+        var pointer: UnsafeMutablePointer<ifaddrs>? = first
+        while let current = pointer {
+            let interface = current.pointee
+            pointer = interface.ifa_next
+            guard let address = interface.ifa_addr, address.pointee.sa_family == UInt8(AF_INET) else {
+                continue
+            }
+            let interfaceName = String(cString: interface.ifa_name)
+            let addressValue = withUnsafePointer(to: address.pointee) {
+                $0.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { rebound -> String in
+                    var addr = rebound.pointee.sin_addr
+                    var buffer = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
+                    _ = inet_ntop(AF_INET, &addr, &buffer, socklen_t(INET_ADDRSTRLEN))
+                    return String(cString: buffer)
+                }
+            }
+            let isLoopback = addressValue == "127.0.0.1"
+            if isLoopback && !includeLoopback {
+                continue
+            }
+            records.append(
+                DeviceRecord(
+                    deviceId: hashDeviceId("\(host):\(addressValue)"),
+                    name: "\(host) (\(interfaceName))",
+                    ipAddress: addressValue,
+                    source: "mdns",
+                    paired: false,
+                    connectable: false,
+                    connectCheckAt: nil,
+                    connectCheckError: nil,
+                    discoveredAt: now(),
+                    lastSeenAt: now()
+                )
+            )
+        }
+        return records
     }
 
     private func collectManualDevices(_ manualTargets: [String]) -> [DeviceRecord] {
@@ -314,33 +396,248 @@ import Network
         return result
     }
 
-    private func collectProbeCandidates(seedDevices: [DeviceRecord]) -> [DeviceRecord] {
-        guard let first = seedDevices.first else {
+    @objc public func startBackgroundDiscoveryServices() {
+        startMdnsAdvertisement()
+        startUdpDiscoveryResponder()
+    }
+
+    @objc public func stopBackgroundDiscoveryServices() {
+        stopMdnsAdvertisement()
+        stopUdpDiscoveryResponder()
+    }
+
+    private func startMdnsAdvertisement() {
+        if advertisedService != nil {
+            return
+        }
+        let serviceName = "synra-\(UUID().uuidString.prefix(8))"
+        let service = NetService(
+            domain: "local.",
+            type: defaultMdnsServiceType,
+            name: serviceName,
+            port: Int32(defaultTcpPort)
+        )
+        service.publish()
+        advertisedService = service
+    }
+
+    private func stopMdnsAdvertisement() {
+        advertisedService?.stop()
+        advertisedService = nil
+    }
+
+    private func discoverByMdns(serviceType: String, timeoutMs: Int) -> [String] {
+        let collector = MdnsCollector()
+        collector.start(
+            serviceType: normalizeMdnsType(serviceType),
+            timeoutMs: timeoutMs
+        )
+        return collector.collectedAddresses()
+    }
+
+    private func normalizeMdnsType(_ serviceType: String) -> String {
+        let trimmed = serviceType.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            return defaultMdnsServiceType
+        }
+        return trimmed.hasSuffix(".") ? trimmed : "\(trimmed)."
+    }
+
+    private func discoverByUdp(timeoutMs: Int) -> [String] {
+        var results = Set<String>()
+        let socketFd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)
+        guard socketFd >= 0 else {
             return []
         }
+        defer { close(socketFd) }
 
-        let octets = first.ipAddress.split(separator: ".")
-        guard octets.count == 4, let tail = Int(octets[3]) else {
-            return []
+        var broadcastFlag: Int32 = 1
+        _ = setsockopt(
+            socketFd,
+            SOL_SOCKET,
+            SO_BROADCAST,
+            &broadcastFlag,
+            socklen_t(MemoryLayout<Int32>.size)
+        )
+
+        var receiveTimeout = timeval(
+            tv_sec: 0,
+            tv_usec: Int32(max(200, timeoutMs) * 1000)
+        )
+        _ = setsockopt(
+            socketFd,
+            SOL_SOCKET,
+            SO_RCVTIMEO,
+            &receiveTimeout,
+            socklen_t(MemoryLayout<timeval>.size)
+        )
+
+        var destination = sockaddr_in()
+        destination.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        destination.sin_family = sa_family_t(AF_INET)
+        destination.sin_port = CFSwapInt16HostToBig(udpDiscoveryPort)
+        destination.sin_addr = in_addr(s_addr: inet_addr("255.255.255.255"))
+
+        let payload = Array(udpDiscoveryMagic.utf8)
+        payload.withUnsafeBytes { bytes in
+            guard let rawPointer = bytes.baseAddress else {
+                return
+            }
+            withUnsafePointer(to: &destination) { destinationPointer in
+                destinationPointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
+                    _ = sendto(
+                        socketFd,
+                        rawPointer,
+                        bytes.count,
+                        0,
+                        sockaddrPointer,
+                        socklen_t(MemoryLayout<sockaddr_in>.size)
+                    )
+                }
+            }
         }
 
-        let probeTail = tail >= 254 ? 1 : tail + 1
-        let probeIp = "\(octets[0]).\(octets[1]).\(octets[2]).\(probeTail)"
+        let deadline = Date().addingTimeInterval(Double(max(timeoutMs, 200)) / 1000.0)
+        var buffer = [UInt8](repeating: 0, count: 512)
+        while Date() < deadline {
+            var source = sockaddr_in()
+            var sourceLength = socklen_t(MemoryLayout<sockaddr_in>.size)
+            let receivedBytes = withUnsafeMutablePointer(to: &source) { sourcePointer in
+                sourcePointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
+                    recvfrom(
+                        socketFd,
+                        &buffer,
+                        buffer.count,
+                        0,
+                        sockaddrPointer,
+                        &sourceLength
+                    )
+                }
+            }
+            if receivedBytes <= 0 {
+                continue
+            }
+            let data = Data(buffer.prefix(Int(receivedBytes)))
+            guard
+                let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                object["appId"] as? String == appId
+            else {
+                continue
+            }
+            var addressBuffer = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
+            var sourceAddress = source.sin_addr
+            guard inet_ntop(AF_INET, &sourceAddress, &addressBuffer, socklen_t(INET_ADDRSTRLEN)) != nil else {
+                continue
+            }
+            results.insert(String(cString: addressBuffer))
+        }
+        return Array(results)
+    }
 
-        return [
-            DeviceRecord(
-                deviceId: hashDeviceId("probe:\(probeIp)"),
-                name: "Probe Candidate",
-                ipAddress: probeIp,
-                source: "probe",
-                paired: false,
-                connectable: false,
-                connectCheckAt: nil,
-                connectCheckError: nil,
-                discoveredAt: now(),
-                lastSeenAt: now()
-            ),
-        ]
+    private func startUdpDiscoveryResponder() {
+        if udpResponderSocket >= 0 {
+            return
+        }
+        let socketFd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)
+        guard socketFd >= 0 else {
+            return
+        }
+        var reuseFlag: Int32 = 1
+        _ = setsockopt(
+            socketFd,
+            SOL_SOCKET,
+            SO_REUSEADDR,
+            &reuseFlag,
+            socklen_t(MemoryLayout<Int32>.size)
+        )
+        var bindAddress = sockaddr_in()
+        bindAddress.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        bindAddress.sin_family = sa_family_t(AF_INET)
+        bindAddress.sin_port = CFSwapInt16HostToBig(udpDiscoveryPort)
+        bindAddress.sin_addr = in_addr(s_addr: INADDR_ANY.bigEndian)
+        let bindResult = withUnsafePointer(to: &bindAddress) { bindPointer in
+            bindPointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
+                bind(
+                    socketFd,
+                    sockaddrPointer,
+                    socklen_t(MemoryLayout<sockaddr_in>.size)
+                )
+            }
+        }
+        guard bindResult == 0 else {
+            close(socketFd)
+            return
+        }
+        udpResponderSocket = socketFd
+        let source = DispatchSource.makeReadSource(fileDescriptor: socketFd, queue: udpResponderQueue)
+        source.setEventHandler { [weak self] in
+            self?.handleUdpResponderRead(socketFd: socketFd)
+        }
+        source.setCancelHandler {
+            close(socketFd)
+        }
+        udpResponderSource = source
+        source.resume()
+    }
+
+    private func stopUdpDiscoveryResponder() {
+        udpResponderSource?.cancel()
+        udpResponderSource = nil
+        udpResponderSocket = -1
+    }
+
+    private func handleUdpResponderRead(socketFd: Int32) {
+        var buffer = [UInt8](repeating: 0, count: 256)
+        var source = sockaddr_in()
+        var sourceLength = socklen_t(MemoryLayout<sockaddr_in>.size)
+        let receivedBytes = withUnsafeMutablePointer(to: &source) { sourcePointer in
+            sourcePointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
+                recvfrom(
+                    socketFd,
+                    &buffer,
+                    buffer.count,
+                    0,
+                    sockaddrPointer,
+                    &sourceLength
+                )
+            }
+        }
+        guard receivedBytes > 0 else {
+            return
+        }
+        let payload = String(decoding: buffer.prefix(Int(receivedBytes)), as: UTF8.self).trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        guard payload == udpDiscoveryMagic else {
+            return
+        }
+        let responseData = try? JSONSerialization.data(
+            withJSONObject: [
+                "appId": appId,
+                "protocolVersion": protocolVersion,
+                "port": Int(defaultTcpPort),
+            ]
+        )
+        guard let responseData else {
+            return
+        }
+        responseData.withUnsafeBytes { bytes in
+            guard let rawPointer = bytes.baseAddress else {
+                return
+            }
+            withUnsafePointer(to: &source) { sourcePointer in
+                sourcePointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
+                    _ = sendto(
+                        socketFd,
+                        rawPointer,
+                        bytes.count,
+                        0,
+                        sockaddrPointer,
+                        sourceLength
+                    )
+                }
+            }
+        }
     }
 
     private func now() -> Int {
@@ -516,6 +813,81 @@ import Network
                 ])
             }
             self.startReceiveLoop()
+        }
+    }
+}
+
+private final class MdnsCollector: NSObject, NetServiceBrowserDelegate, NetServiceDelegate {
+    private let browser = NetServiceBrowser()
+    private var addresses = Set<String>()
+    private let accessQueue = DispatchQueue(label: "com.synra.lan-discovery.mdns-collector")
+
+    override init() {
+        super.init()
+        browser.delegate = self
+    }
+
+    func start(serviceType: String, timeoutMs: Int) {
+        browser.searchForServices(ofType: serviceType, inDomain: "local.")
+        let timeout = DispatchTime.now() + .milliseconds(max(timeoutMs, 200))
+        accessQueue.asyncAfter(deadline: timeout) { [weak self] in
+            self?.browser.stop()
+        }
+        Thread.sleep(forTimeInterval: Double(max(timeoutMs, 200)) / 1000.0)
+    }
+
+    func collectedAddresses() -> [String] {
+        accessQueue.sync {
+            Array(addresses)
+        }
+    }
+
+    func netServiceBrowser(
+        _ browser: NetServiceBrowser,
+        didFind service: NetService,
+        moreComing: Bool
+    ) {
+        service.delegate = self
+        service.resolve(withTimeout: 1.5)
+    }
+
+    func netServiceDidResolveAddress(_ sender: NetService) {
+        guard let rawAddresses = sender.addresses else {
+            return
+        }
+        for rawAddress in rawAddresses {
+            guard
+                let address = rawAddress.withUnsafeBytes({ pointer -> String? in
+                    guard let sockaddrPointer = pointer.bindMemory(to: sockaddr.self).baseAddress else {
+                        return nil
+                    }
+                    if sockaddrPointer.pointee.sa_family != sa_family_t(AF_INET) {
+                        return nil
+                    }
+                    let inetPointer = UnsafeRawPointer(sockaddrPointer).assumingMemoryBound(
+                        to: sockaddr_in.self
+                    )
+                    var inAddr = inetPointer.pointee.sin_addr
+                    var buffer = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
+                    guard
+                        inet_ntop(
+                            AF_INET,
+                            &inAddr,
+                            &buffer,
+                            socklen_t(INET_ADDRSTRLEN)
+                        ) != nil
+                    else {
+                        return nil
+                    }
+                    return String(cString: buffer)
+                }),
+                !address.isEmpty
+            else {
+                continue
+            }
+            accessQueue.async { [weak self] in
+                self?.addresses.insert(address)
+            }
         }
     }
 }

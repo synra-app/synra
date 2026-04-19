@@ -106,6 +106,7 @@ export type PluginCatalogResult = {
 }
 
 export type DiscoverySource = 'mdns' | 'probe' | 'manual'
+export type DiscoveryMode = 'hybrid' | 'mdns' | 'subnet' | 'manual'
 
 export type DiscoveryState = 'idle' | 'scanning'
 
@@ -126,6 +127,12 @@ export type DeviceDiscoveryStartOptions = {
   includeLoopback?: boolean
   manualTargets?: string[]
   enableProbeFallback?: boolean
+  discoveryMode?: DiscoveryMode
+  mdnsServiceType?: string
+  subnetCidrs?: string[]
+  maxProbeHosts?: number
+  concurrency?: number
+  discoveryTimeoutMs?: number
   reset?: boolean
   scanWindowMs?: number
   port?: number

@@ -4,6 +4,8 @@ export type {
   SynraHooksAdapterFactory,
   SynraHookConnectedSession,
   SynraHookDevice,
+  SynraDiscoveryStartMode,
+  SynraDiscoveryStartOptions,
   SynraHookEventLog,
   SynraHookSendMessageInput,
   SynraHookSessionState

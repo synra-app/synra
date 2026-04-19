@@ -21,6 +21,14 @@
 - `getSessionState(options)`
 - `pullHostEvents()`
 
+### `startDiscovery` 关键参数（新增）
+
+- `discoveryMode`：`hybrid | mdns | subnet | manual`
+- `subnetCidrs`：可选，指定受控子网（例如 `192.168.1.0/24`）
+- `maxProbeHosts`：子网探测候选上限，避免大范围扫描
+- `concurrency`：探测并发度（当前主要用于 Electron）
+- `discoveryTimeoutMs`：扫描阶段时间预算（当前主要用于 Electron）
+
 ## 事件模型（当前）
 
 - `deviceFound`
@@ -75,9 +83,15 @@
   - socket 写队列与 `drain` 背压控制
   - ACK 超时重试（短退避）
   - `transport.*` host event 统一语义
+- 设备发现策略已调整为混合模式：
+  - `hybrid`：mDNS 源 + 手动目标 + 受控子网探测候选
+  - `subnet`：仅子网候选 + 手动目标
+  - `manual`：仅手动目标
+  - `mdns`：仅 mDNS 源（当前以网卡地址源为主）
+- 子网探测从“单个相邻 IP”升级为“CIDR 范围候选 + 上限控制”。
 - Android / iOS 已对齐消息字段：`messageType + payload`。
-- iOS 已补充消息接收事件透传（message/ack/close/error）。
-- Web 端仍为 no-op fallback（只用于构建与轻量调试）。
+- iOS 已补充消息接收事件透传（message/ack/close/error），并补齐 IPv4 网卡枚举。
+- Web 端仍为 fallback，但会保留手动目标并返回 `CAPABILITY_UNAVAILABLE_ON_WEB` 连接检查错误，避免误判为“无设备”。
 
 ## 验收建议（当前）
 

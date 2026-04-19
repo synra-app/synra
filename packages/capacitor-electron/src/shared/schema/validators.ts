@@ -134,6 +134,12 @@ export function validateDiscoveryStartPayload(payload: unknown): payload is {
   includeLoopback?: boolean
   manualTargets?: string[]
   enableProbeFallback?: boolean
+  discoveryMode?: 'hybrid' | 'mdns' | 'subnet' | 'manual'
+  mdnsServiceType?: string
+  subnetCidrs?: string[]
+  maxProbeHosts?: number
+  concurrency?: number
+  discoveryTimeoutMs?: number
   reset?: boolean
   scanWindowMs?: number
   port?: number
@@ -159,6 +165,40 @@ export function validateDiscoveryStartPayload(payload: unknown): payload is {
     payload.enableProbeFallback !== undefined &&
     typeof payload.enableProbeFallback !== 'boolean'
   ) {
+    return false
+  }
+
+  if (
+    payload.discoveryMode !== undefined &&
+    payload.discoveryMode !== 'hybrid' &&
+    payload.discoveryMode !== 'mdns' &&
+    payload.discoveryMode !== 'subnet' &&
+    payload.discoveryMode !== 'manual'
+  ) {
+    return false
+  }
+
+  if (payload.mdnsServiceType !== undefined && typeof payload.mdnsServiceType !== 'string') {
+    return false
+  }
+
+  if (
+    payload.subnetCidrs !== undefined &&
+    (!Array.isArray(payload.subnetCidrs) ||
+      payload.subnetCidrs.some((cidr) => typeof cidr !== 'string'))
+  ) {
+    return false
+  }
+
+  if (payload.maxProbeHosts !== undefined && typeof payload.maxProbeHosts !== 'number') {
+    return false
+  }
+
+  if (payload.concurrency !== undefined && typeof payload.concurrency !== 'number') {
+    return false
+  }
+
+  if (payload.discoveryTimeoutMs !== undefined && typeof payload.discoveryTimeoutMs !== 'number') {
     return false
   }
 

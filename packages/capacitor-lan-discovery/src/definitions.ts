@@ -2,6 +2,7 @@ import type { PluginListenerHandle } from '@capacitor/core'
 import type { SynraMessageType } from '@synra/protocol'
 
 export type DiscoverySource = 'mdns' | 'probe' | 'manual'
+export type DiscoveryMode = 'hybrid' | 'mdns' | 'subnet' | 'manual'
 
 export type DiscoveryState = 'idle' | 'scanning'
 
@@ -22,6 +23,12 @@ export type StartDiscoveryOptions = {
   includeLoopback?: boolean
   manualTargets?: string[]
   enableProbeFallback?: boolean
+  discoveryMode?: DiscoveryMode
+  mdnsServiceType?: string
+  subnetCidrs?: string[]
+  maxProbeHosts?: number
+  concurrency?: number
+  discoveryTimeoutMs?: number
   reset?: boolean
   scanWindowMs?: number
   port?: number

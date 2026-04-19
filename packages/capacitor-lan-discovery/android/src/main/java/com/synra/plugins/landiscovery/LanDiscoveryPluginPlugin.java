@@ -1,5 +1,9 @@
 package com.synra.plugins.landiscovery;
 
+import android.annotation.SuppressLint;
+import android.content.Context;
+import android.net.nsd.NsdManager;
+import android.net.nsd.NsdServiceInfo;
 import androidx.annotation.NonNull;
 
 import com.getcapacitor.JSArray;
@@ -17,21 +21,32 @@ import java.io.BufferedOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 @CapacitorPlugin(name = "LanDiscovery")
 public class LanDiscoveryPluginPlugin extends Plugin {
     private static final int DEFAULT_TCP_PORT = 32100;
     private static final int DEFAULT_TIMEOUT_MS = 1500;
+    private static final int DEFAULT_DISCOVERY_TIMEOUT_MS = 1500;
+    private static final int UDP_DISCOVERY_PORT = 32101;
+    private static final String UDP_DISCOVERY_MAGIC = "SYNRA_DISCOVERY_V1";
+    private static final String DEFAULT_MDNS_SERVICE_TYPE = "_synra._tcp.";
     private static final int SESSION_ACK_TIMEOUT_MS = 3000;
     private static final String APP_ID = "synra";
     private static final String PROTOCOL_VERSION = "1.0";
@@ -48,21 +63,51 @@ public class LanDiscoveryPluginPlugin extends Plugin {
     private String currentHost;
     private Integer currentPort;
     private String lastSessionError;
+    private DatagramSocket udpResponderSocket;
+    private ExecutorService discoveryExecutor;
+    private NsdManager.RegistrationListener mdnsRegistrationListener;
+
+    @Override
+    public void load() {
+        super.load();
+        this.discoveryExecutor = Executors.newSingleThreadExecutor();
+        startUdpDiscoveryResponder();
+        registerMdnsService();
+    }
 
     @PluginMethod
     public void startDiscovery(PluginCall call) {
         boolean includeLoopback = call.getBoolean("includeLoopback", false);
         boolean enableProbeFallback = call.getBoolean("enableProbeFallback", true);
+        String discoveryMode = call.getString("discoveryMode", "hybrid");
         boolean reset = call.getBoolean("reset", true);
         Integer scanWindowMs = call.getInt("scanWindowMs", null);
         int port = call.getInt("port", DEFAULT_TCP_PORT);
         int timeoutMs = call.getInt("timeoutMs", DEFAULT_TIMEOUT_MS);
+        int discoveryTimeoutMs = call.getInt("discoveryTimeoutMs", DEFAULT_DISCOVERY_TIMEOUT_MS);
+        String mdnsServiceType = call.getString("mdnsServiceType", DEFAULT_MDNS_SERVICE_TYPE);
+        Integer maxProbeHosts = call.getInt("maxProbeHosts", null);
         List<String> manualTargets = toStringList(call.getArray("manualTargets", new JSArray()));
+        List<String> subnetCidrs = toStringList(call.getArray("subnetCidrs", new JSArray()));
+        List<String> discoveryTargets = collectAutoDiscoveryTargets(
+            discoveryMode,
+            mdnsServiceType,
+            discoveryTimeoutMs
+        );
+        List<String> combinedTargets = new ArrayList<>(manualTargets);
+        for (String target : discoveryTargets) {
+            if (!combinedTargets.contains(target)) {
+                combinedTargets.add(target);
+            }
+        }
 
         JSObject result = implementation.startDiscovery(
             includeLoopback,
-            manualTargets,
+            combinedTargets,
             enableProbeFallback,
+            discoveryMode,
+            subnetCidrs,
+            maxProbeHosts,
             reset,
             scanWindowMs
         );
@@ -305,8 +350,13 @@ public class LanDiscoveryPluginPlugin extends Plugin {
     @Override
     protected void handleOnDestroy() {
         closeSessionSocket();
+        unregisterMdnsService();
+        stopUdpDiscoveryResponder();
         ioExecutor.shutdownNow();
         readerExecutor.shutdownNow();
+        if (discoveryExecutor != null) {
+            discoveryExecutor.shutdownNow();
+        }
     }
 
     @NonNull
@@ -316,6 +366,254 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             result.add(values.optString(i));
         }
         return result;
+    }
+
+    private List<String> collectAutoDiscoveryTargets(
+        String discoveryMode,
+        String mdnsServiceType,
+        int timeoutMs
+    ) {
+        String mode = discoveryMode == null ? "hybrid" : discoveryMode;
+        boolean shouldRunMdns = "hybrid".equals(mode) || "mdns".equals(mode);
+        boolean shouldRunUdpFallback = "hybrid".equals(mode);
+        Set<String> discovered = new LinkedHashSet<>();
+        if (shouldRunMdns) {
+            discovered.addAll(discoverByMdns(mdnsServiceType, timeoutMs));
+        }
+        if (discovered.isEmpty() && shouldRunUdpFallback) {
+            discovered.addAll(discoverByUdp(timeoutMs));
+        }
+        return new ArrayList<>(discovered);
+    }
+
+    @SuppressLint("MissingPermission")
+    private List<String> discoverByMdns(String serviceType, int timeoutMs) {
+        Context context = getContext();
+        if (context == null) {
+            return List.of();
+        }
+        Object service = context.getSystemService(Context.NSD_SERVICE);
+        if (!(service instanceof NsdManager nsdManager)) {
+            return List.of();
+        }
+        String resolvedType = normalizeMdnsType(serviceType);
+        Set<String> discovered = new LinkedHashSet<>();
+        CountDownLatch latch = new CountDownLatch(1);
+        NsdManager.DiscoveryListener listener = new NsdManager.DiscoveryListener() {
+            @Override
+            public void onStartDiscoveryFailed(String serviceType, int errorCode) {
+                latch.countDown();
+            }
+
+            @Override
+            public void onStopDiscoveryFailed(String serviceType, int errorCode) {
+                latch.countDown();
+            }
+
+            @Override
+            public void onDiscoveryStarted(String serviceType) {
+                // noop
+            }
+
+            @Override
+            public void onDiscoveryStopped(String serviceType) {
+                latch.countDown();
+            }
+
+            @Override
+            public void onServiceFound(NsdServiceInfo serviceInfo) {
+                nsdManager.resolveService(serviceInfo, new NsdManager.ResolveListener() {
+                    @Override
+                    public void onResolveFailed(NsdServiceInfo serviceInfo, int errorCode) {
+                        // noop
+                    }
+
+                    @Override
+                    public void onServiceResolved(NsdServiceInfo serviceInfo) {
+                        InetAddress host = serviceInfo.getHost();
+                        if (host == null) {
+                            return;
+                        }
+                        String address = host.getHostAddress();
+                        if (address != null && !address.isBlank() && !address.contains(":")) {
+                            synchronized (discovered) {
+                                discovered.add(address);
+                            }
+                        }
+                    }
+                });
+            }
+
+            @Override
+            public void onServiceLost(NsdServiceInfo serviceInfo) {
+                // noop
+            }
+        };
+        try {
+            nsdManager.discoverServices(resolvedType, NsdManager.PROTOCOL_DNS_SD, listener);
+            latch.await(Math.max(timeoutMs, 200), TimeUnit.MILLISECONDS);
+        } catch (Exception ignored) {
+            // noop
+        } finally {
+            try {
+                nsdManager.stopServiceDiscovery(listener);
+            } catch (Exception ignored) {
+                // noop
+            }
+        }
+        synchronized (discovered) {
+            return new ArrayList<>(discovered);
+        }
+    }
+
+    private String normalizeMdnsType(String serviceType) {
+        String type = serviceType == null || serviceType.isBlank() ? DEFAULT_MDNS_SERVICE_TYPE : serviceType;
+        return type.endsWith(".") ? type : type + ".";
+    }
+
+    private List<String> discoverByUdp(int timeoutMs) {
+        Set<String> discovered = new LinkedHashSet<>();
+        try (DatagramSocket socket = new DatagramSocket()) {
+            socket.setBroadcast(true);
+            socket.setSoTimeout(200);
+            byte[] request = UDP_DISCOVERY_MAGIC.getBytes(StandardCharsets.UTF_8);
+            DatagramPacket packet = new DatagramPacket(
+                request,
+                request.length,
+                InetAddress.getByName("255.255.255.255"),
+                UDP_DISCOVERY_PORT
+            );
+            socket.send(packet);
+
+            long deadline = System.currentTimeMillis() + Math.max(timeoutMs, 200);
+            byte[] buffer = new byte[512];
+            while (System.currentTimeMillis() < deadline) {
+                DatagramPacket response = new DatagramPacket(buffer, buffer.length);
+                try {
+                    socket.receive(response);
+                    String payloadRaw = new String(response.getData(), 0, response.getLength(), StandardCharsets.UTF_8);
+                    JSONObject payload = new JSONObject(payloadRaw);
+                    if (!APP_ID.equals(payload.optString("appId"))) {
+                        continue;
+                    }
+                    String address = response.getAddress().getHostAddress();
+                    if (address != null && !address.isBlank()) {
+                        discovered.add(address);
+                    }
+                } catch (Exception ignored) {
+                    // timeout or malformed payload
+                }
+            }
+        } catch (Exception ignored) {
+            // noop
+        }
+        return new ArrayList<>(discovered);
+    }
+
+    private void startUdpDiscoveryResponder() {
+        ExecutorService responderExecutor = discoveryExecutor;
+        if (responderExecutor == null) {
+            responderExecutor = Executors.newSingleThreadExecutor();
+            discoveryExecutor = responderExecutor;
+        }
+        responderExecutor.submit(() -> {
+            try {
+                DatagramSocket socket = new DatagramSocket(UDP_DISCOVERY_PORT);
+                socket.setBroadcast(true);
+                this.udpResponderSocket = socket;
+                byte[] buffer = new byte[256];
+                while (!socket.isClosed()) {
+                    DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+                    socket.receive(packet);
+                    String payload = new String(packet.getData(), 0, packet.getLength(), StandardCharsets.UTF_8).trim();
+                    if (!UDP_DISCOVERY_MAGIC.equals(payload)) {
+                        continue;
+                    }
+                    JSONObject response = new JSONObject();
+                    response.put("appId", APP_ID);
+                    response.put("protocolVersion", PROTOCOL_VERSION);
+                    response.put("port", DEFAULT_TCP_PORT);
+                    byte[] responseBytes = response.toString().getBytes(StandardCharsets.UTF_8);
+                    DatagramPacket responsePacket = new DatagramPacket(
+                        responseBytes,
+                        responseBytes.length,
+                        packet.getAddress(),
+                        packet.getPort()
+                    );
+                    socket.send(responsePacket);
+                }
+            } catch (Exception ignored) {
+                // noop
+            }
+        });
+    }
+
+    private void stopUdpDiscoveryResponder() {
+        if (udpResponderSocket != null && !udpResponderSocket.isClosed()) {
+            udpResponderSocket.close();
+        }
+        udpResponderSocket = null;
+    }
+
+    @SuppressLint("MissingPermission")
+    private void registerMdnsService() {
+        Context context = getContext();
+        if (context == null) {
+            return;
+        }
+        Object service = context.getSystemService(Context.NSD_SERVICE);
+        if (!(service instanceof NsdManager nsdManager)) {
+            return;
+        }
+        NsdServiceInfo info = new NsdServiceInfo();
+        info.setServiceName("synra-" + UUID.randomUUID().toString().substring(0, 8));
+        info.setServiceType(DEFAULT_MDNS_SERVICE_TYPE);
+        info.setPort(DEFAULT_TCP_PORT);
+        this.mdnsRegistrationListener = new NsdManager.RegistrationListener() {
+            @Override
+            public void onServiceRegistered(NsdServiceInfo NsdServiceInfo) {
+                // noop
+            }
+
+            @Override
+            public void onRegistrationFailed(NsdServiceInfo serviceInfo, int errorCode) {
+                // noop
+            }
+
+            @Override
+            public void onServiceUnregistered(NsdServiceInfo serviceInfo) {
+                // noop
+            }
+
+            @Override
+            public void onUnregistrationFailed(NsdServiceInfo serviceInfo, int errorCode) {
+                // noop
+            }
+        };
+        try {
+            nsdManager.registerService(info, NsdManager.PROTOCOL_DNS_SD, mdnsRegistrationListener);
+        } catch (Exception ignored) {
+            this.mdnsRegistrationListener = null;
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private void unregisterMdnsService() {
+        Context context = getContext();
+        if (context == null || mdnsRegistrationListener == null) {
+            return;
+        }
+        Object service = context.getSystemService(Context.NSD_SERVICE);
+        if (!(service instanceof NsdManager nsdManager)) {
+            return;
+        }
+        try {
+            nsdManager.unregisterService(mdnsRegistrationListener);
+        } catch (Exception ignored) {
+            // noop
+        } finally {
+            mdnsRegistrationListener = null;
+        }
     }
 
     private void startSessionReader() {

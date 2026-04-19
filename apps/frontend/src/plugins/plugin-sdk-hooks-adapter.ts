@@ -1,5 +1,6 @@
 import {
   configureSynraHooks,
+  type SynraDiscoveryStartOptions,
   type SynraHookSendMessageInput,
   type SynraHooksAdapter
 } from '@synra/plugin-sdk/hooks'
@@ -31,7 +32,8 @@ function createFrontendHooksAdapter(): SynraHooksAdapter {
     connectedSessions,
     eventLogs,
     ensureListeners: () => store.ensureListeners(),
-    startDiscovery: (manualTargets?: string[]) => store.startDiscovery(manualTargets),
+    startDiscovery: (options?: string[] | SynraDiscoveryStartOptions) =>
+      store.startDiscovery(options),
     stopDiscovery: () => store.stopDiscovery(),
     refreshDevices: () => store.refreshDevices(),
     pairDevice: (deviceId: string) => store.pairDevice(deviceId),

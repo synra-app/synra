@@ -1,7 +1,7 @@
 import { join, resolve } from 'node:path'
 import { styleText } from 'node:util'
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
-import { BRIDGE_HOST_EVENT_CHANNEL, setupBridgeMainRuntime } from '@synra/capacitor-electron'
+import { BRIDGE_HOST_EVENT_CHANNEL, setupBridgeMainRuntime } from './bridge/main'
 
 const TAG_STYLES: Readonly<Record<string, Parameters<typeof styleText>[0]>> = {
   'electron-main': 'blue',

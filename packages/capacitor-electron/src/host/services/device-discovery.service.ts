@@ -1,6 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto'
+import { createSocket } from 'node:dgram'
 import { createServer, Socket } from 'node:net'
-import { hostname, networkInterfaces } from 'node:os'
+import { networkInterfaces } from 'node:os'
+import { Bonjour } from 'bonjour-service'
 import { BridgeError } from '../../shared/errors/bridge-error'
 import { BRIDGE_ERROR_CODES } from '../../shared/errors/codes'
 import type {
@@ -27,6 +29,11 @@ import type {
 const DEFAULT_SCAN_WINDOW_MS = 15_000
 const DEFAULT_TCP_PORT = 32100
 const DEFAULT_PROBE_TIMEOUT_MS = 1500
+const DEFAULT_PROBE_CONCURRENCY = 24
+const DEFAULT_DISCOVERY_TIMEOUT_MS = 1500
+const UDP_DISCOVERY_PORT = 32101
+const UDP_DISCOVERY_MAGIC = 'SYNRA_DISCOVERY_V1'
+const DEFAULT_MDNS_SERVICE_TYPE = '_synra._tcp.local'
 const DEFAULT_ACK_TIMEOUT_MS = 3000
 const MAX_FRAME_BYTES = 256 * 1024
 const MAX_SEND_RETRIES = 3
@@ -34,6 +41,10 @@ const SYNRA_APP_ID = 'synra'
 const SYNRA_PROTOCOL_VERSION = '1.0'
 
 type DeviceSource = DiscoveredDevice['source']
+type DiscoveryMode = NonNullable<DeviceDiscoveryStartOptions['discoveryMode']>
+type NetworkSeed = {
+  address: string
+}
 
 type DeviceDiscoveryState = DeviceDiscoveryListResult['state']
 
@@ -163,12 +174,11 @@ function toDevice(
   }
 }
 
-function collectInterfaceDevices(includeLoopback: boolean): DiscoveredDevice[] {
-  const host = hostname()
+function collectInterfaceSeeds(includeLoopback: boolean): NetworkSeed[] {
   const interfaces = networkInterfaces()
-  const entries: DiscoveredDevice[] = []
+  const entries: NetworkSeed[] = []
 
-  for (const [ifaceName, ifaceRecords] of Object.entries(interfaces)) {
+  for (const [_ifaceName, ifaceRecords] of Object.entries(interfaces)) {
     for (const iface of ifaceRecords ?? []) {
       if (iface.family !== 'IPv4') {
         continue
@@ -178,13 +188,17 @@ function collectInterfaceDevices(includeLoopback: boolean): DiscoveredDevice[] {
         continue
       }
 
-      entries.push(
-        toDevice(`${host}:${iface.address}`, `${host} (${ifaceName})`, iface.address, 'mdns')
-      )
+      entries.push({
+        address: iface.address
+      })
     }
   }
 
   return entries
+}
+
+function collectLocalIpSet(includeLoopback: boolean): Set<string> {
+  return new Set(collectInterfaceSeeds(includeLoopback).map((seed) => seed.address))
 }
 
 function collectManualDevices(manualTargets: string[]): DiscoveredDevice[] {
@@ -195,28 +209,30 @@ function collectManualDevices(manualTargets: string[]): DiscoveredDevice[] {
     )
 }
 
-function collectProbeCandidates(seedDevices: DiscoveredDevice[]): DiscoveredDevice[] {
-  const candidates: DiscoveredDevice[] = []
-  const seedIp = seedDevices[0]?.ipAddress
+function toAutoDiscoveredDevice(
+  ipAddress: string,
+  source: DeviceSource,
+  name?: string
+): DiscoveredDevice {
+  return toDevice(`auto:${ipAddress}`, name ?? `Synra Device ${ipAddress}`, ipAddress, source)
+}
 
-  if (!seedIp) {
-    return candidates
+function parseMdnsServiceType(serviceType?: string): { type: string; protocol: 'tcp' | 'udp' } {
+  const fallback = DEFAULT_MDNS_SERVICE_TYPE
+  const normalized = (serviceType && serviceType.length > 0 ? serviceType : fallback)
+    .trim()
+    .replace(/^\./, '')
+    .replace(/\.local\.?$/, '')
+  const segments = normalized.split('.').filter((segment) => segment.length > 0)
+  if (segments.length >= 2) {
+    const typeSegment = segments[0] ?? '_synra'
+    const protocolSegment = segments[1] === '_udp' ? 'udp' : 'tcp'
+    return {
+      type: typeSegment.replace(/^_/, ''),
+      protocol: protocolSegment
+    }
   }
-
-  const octets = seedIp.split('.')
-  if (octets.length !== 4) {
-    return candidates
-  }
-
-  const tail = Number.parseInt(octets[3] ?? '', 10)
-  if (!Number.isFinite(tail)) {
-    return candidates
-  }
-
-  const probeTail = tail >= 254 ? 1 : tail + 1
-  const probeIp = `${octets[0]}.${octets[1]}.${octets[2]}.${probeTail}`
-  candidates.push(toDevice(`probe:${probeIp}`, 'Probe Candidate', probeIp, 'probe'))
-  return candidates
+  return { type: 'synra', protocol: 'tcp' }
 }
 
 function mergeDevices(target: DeviceDiscoveryMap, devices: DiscoveredDevice[]): void {
@@ -233,6 +249,17 @@ function mergeDevices(target: DeviceDiscoveryMap, devices: DiscoveredDevice[]): 
     }
 
     target.set(device.deviceId, device)
+  }
+}
+
+function pruneSelfDevices(target: DeviceDiscoveryMap, localIps: Set<string>): void {
+  for (const [deviceId, device] of target.entries()) {
+    if (device.source === 'manual') {
+      continue
+    }
+    if (localIps.has(device.ipAddress)) {
+      target.delete(deviceId)
+    }
   }
 }
 
@@ -356,6 +383,112 @@ export function createDeviceDiscoveryService(
     })
   })
   tcpServer.listen(DEFAULT_TCP_PORT, '0.0.0.0')
+
+  const bonjour = new Bonjour()
+  const mdnsPublishedService = bonjour.publish({
+    name: `synra-${randomUUID().slice(0, 8)}`,
+    type: 'synra',
+    protocol: 'tcp',
+    port: DEFAULT_TCP_PORT,
+    txt: {
+      appId: SYNRA_APP_ID
+    }
+  })
+  mdnsPublishedService?.start?.()
+
+  const udpResponder = createSocket('udp4')
+  udpResponder.on('message', (message, remote) => {
+    if (message.toString('utf8').trim() !== UDP_DISCOVERY_MAGIC) {
+      return
+    }
+    const payload = Buffer.from(
+      JSON.stringify({
+        appId: SYNRA_APP_ID,
+        protocolVersion: SYNRA_PROTOCOL_VERSION,
+        port: DEFAULT_TCP_PORT
+      }),
+      'utf8'
+    )
+    udpResponder.send(payload, remote.port, remote.address)
+  })
+  udpResponder.on('error', () => {
+    // ignore discovery responder errors
+  })
+  udpResponder.bind(UDP_DISCOVERY_PORT, () => {
+    udpResponder.setBroadcast(true)
+  })
+
+  async function discoverViaMdns(
+    options: {
+      serviceType?: string
+      timeoutMs: number
+    } = { timeoutMs: DEFAULT_DISCOVERY_TIMEOUT_MS }
+  ): Promise<DiscoveredDevice[]> {
+    const discovered = new Map<string, DiscoveredDevice>()
+    const service = parseMdnsServiceType(options.serviceType)
+    const browser = bonjour.find({
+      type: service.type,
+      protocol: service.protocol
+    })
+    browser.on('up', (entry) => {
+      const name = typeof entry.name === 'string' ? entry.name : undefined
+      for (const address of entry.addresses ?? []) {
+        if (typeof address !== 'string' || !/^\d+\.\d+\.\d+\.\d+$/.test(address)) {
+          continue
+        }
+        discovered.set(address, toAutoDiscoveredDevice(address, 'mdns', name))
+      }
+    })
+
+    await new Promise<void>((resolve) => {
+      setTimeout(
+        () => {
+          browser.stop()
+          resolve()
+        },
+        Math.max(200, options.timeoutMs)
+      )
+    })
+    return [...discovered.values()]
+  }
+
+  async function discoverViaUdp(timeoutMs: number): Promise<DiscoveredDevice[]> {
+    return new Promise<DiscoveredDevice[]>((resolve) => {
+      const socket = createSocket('udp4')
+      const discovered = new Map<string, DiscoveredDevice>()
+      const finish = (): void => {
+        socket.close()
+        resolve([...discovered.values()])
+      }
+
+      socket.on('message', (message, remote) => {
+        try {
+          const payload = JSON.parse(message.toString('utf8')) as {
+            appId?: string
+            protocolVersion?: string
+            port?: number
+          }
+          if (payload.appId !== SYNRA_APP_ID) {
+            return
+          }
+          discovered.set(
+            remote.address,
+            toAutoDiscoveredDevice(remote.address, 'probe', `Synra Device ${remote.address}`)
+          )
+        } catch {
+          // ignore malformed payload
+        }
+      })
+      socket.on('error', () => finish())
+
+      socket.bind(0, () => {
+        socket.setBroadcast(true)
+        socket.send(Buffer.from(UDP_DISCOVERY_MAGIC, 'utf8'), UDP_DISCOVERY_PORT, '255.255.255.255')
+      })
+
+      setTimeout(finish, Math.max(200, timeoutMs))
+    })
+  }
 
   function enqueueSocketFrame(socket: Socket, frame: LanFrame): Promise<void> {
     const previous = queuedWriteBySocket.get(socket) ?? Promise.resolve()
@@ -542,10 +675,52 @@ export function createDeviceDiscoveryService(
     })
   }
 
+  async function probeDevicesWithLimit(
+    devices: DiscoveredDevice[],
+    options: {
+      port: number
+      timeoutMs: number
+      concurrency: number
+      deadlineAt?: number
+    }
+  ): Promise<DiscoveredDevice[]> {
+    const pending = [...devices]
+    const results: DiscoveredDevice[] = []
+    const workerCount = Math.max(1, Math.min(options.concurrency, pending.length || 1))
+
+    await Promise.all(
+      Array.from({ length: workerCount }, async () => {
+        while (pending.length > 0) {
+          if (options.deadlineAt && Date.now() >= options.deadlineAt) {
+            break
+          }
+          const next = pending.shift()
+          if (!next) {
+            break
+          }
+          const probed = await probeSingleDevice(next, options.port, options.timeoutMs)
+          results.push(probed)
+        }
+      })
+    )
+
+    return results
+  }
+
   return {
     async startDiscovery(
       options: DeviceDiscoveryStartOptions = {}
     ): Promise<DeviceDiscoveryStartResult> {
+      const discoveryMode: DiscoveryMode = options.discoveryMode ?? 'hybrid'
+      const shouldIncludeMdns = discoveryMode === 'hybrid' || discoveryMode === 'mdns'
+      const shouldIncludeUdpFallback = discoveryMode === 'hybrid'
+      const shouldIncludeManual = discoveryMode !== 'mdns'
+      const concurrency = Math.max(1, options.concurrency ?? DEFAULT_PROBE_CONCURRENCY)
+      const discoveryTimeoutMs =
+        options.discoveryTimeoutMs && options.discoveryTimeoutMs > 0
+          ? options.discoveryTimeoutMs
+          : DEFAULT_DISCOVERY_TIMEOUT_MS
+
       const reset = options.reset !== false
       if (reset) {
         state.devices.clear()
@@ -555,20 +730,39 @@ export function createDeviceDiscoveryService(
       state.state = 'scanning'
       state.scanWindowMs = options.scanWindowMs ?? DEFAULT_SCAN_WINDOW_MS
 
-      const interfaceDevices = collectInterfaceDevices(Boolean(options.includeLoopback))
-      mergeDevices(state.devices, interfaceDevices)
+      const autoDiscoveredDevices: DiscoveredDevice[] = []
+      if (shouldIncludeMdns) {
+        autoDiscoveredDevices.push(
+          ...(await discoverViaMdns({
+            serviceType: options.mdnsServiceType,
+            timeoutMs: discoveryTimeoutMs
+          }))
+        )
+      }
+      if (autoDiscoveredDevices.length === 0 && shouldIncludeUdpFallback) {
+        autoDiscoveredDevices.push(...(await discoverViaUdp(discoveryTimeoutMs)))
+      }
+      mergeDevices(state.devices, autoDiscoveredDevices)
 
-      const manualDevices = collectManualDevices(options.manualTargets ?? [])
-      mergeDevices(state.devices, manualDevices)
-
-      if (options.enableProbeFallback !== false) {
-        mergeDevices(state.devices, collectProbeCandidates(interfaceDevices))
+      if (shouldIncludeManual) {
+        const manualDevices = collectManualDevices(options.manualTargets ?? [])
+        mergeDevices(state.devices, manualDevices)
       }
 
-      await this.probeConnectable({
+      const probeResult = await probeDevicesWithLimit([...state.devices.values()], {
         port: options.port ?? DEFAULT_TCP_PORT,
-        timeoutMs: options.timeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS
+        timeoutMs: options.timeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS,
+        concurrency,
+        deadlineAt:
+          options.discoveryTimeoutMs && options.discoveryTimeoutMs > 0
+            ? Date.now() + options.discoveryTimeoutMs
+            : undefined
       })
+
+      for (const device of probeResult) {
+        state.devices.set(device.deviceId, device)
+      }
+      pruneSelfDevices(state.devices, collectLocalIpSet(Boolean(options.includeLoopback)))
 
       return {
         requestId: randomUUID(),
@@ -583,6 +777,7 @@ export function createDeviceDiscoveryService(
       return { success: true }
     },
     async listDevices(): Promise<DeviceDiscoveryListResult> {
+      pruneSelfDevices(state.devices, collectLocalIpSet(false))
       return {
         state: state.state,
         startedAt: state.startedAt,
@@ -617,13 +812,16 @@ export function createDeviceDiscoveryService(
       const timeoutMs = options.timeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS
       const checkedAt = Date.now()
       const entries = [...state.devices.values()]
-      const nextDevices = await Promise.all(
-        entries.map((device) => probeSingleDevice(device, port, timeoutMs))
-      )
+      const nextDevices = await probeDevicesWithLimit(entries, {
+        port,
+        timeoutMs,
+        concurrency: DEFAULT_PROBE_CONCURRENCY
+      })
 
       for (const device of nextDevices) {
         state.devices.set(device.deviceId, device)
       }
+      pruneSelfDevices(state.devices, collectLocalIpSet(false))
 
       return {
         checkedAt,

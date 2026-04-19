@@ -1,4 +1,5 @@
 import { useSynraHooksAdapter } from './context'
+import type { SynraDiscoveryStartOptions } from './types'
 
 export function useDiscovery() {
   const adapter = useSynraHooksAdapter()
@@ -10,7 +11,8 @@ export function useDiscovery() {
     loading: adapter.loading,
     error: adapter.error,
     ensureListeners: () => adapter.ensureListeners(),
-    startDiscovery: (manualTargets?: string[]) => adapter.startDiscovery(manualTargets),
+    startDiscovery: (options?: string[] | SynraDiscoveryStartOptions) =>
+      adapter.startDiscovery(options),
     stopDiscovery: () => adapter.stopDiscovery(),
     refreshDevices: () => adapter.refreshDevices(),
     probeConnectable: (port?: number, timeoutMs?: number) =>

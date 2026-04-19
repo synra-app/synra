@@ -37,6 +37,24 @@ export type SynraHookSendMessageInput = {
   messageId?: string
 }
 
+export type SynraDiscoveryStartMode = 'hybrid' | 'mdns' | 'subnet' | 'manual'
+
+export type SynraDiscoveryStartOptions = {
+  includeLoopback?: boolean
+  manualTargets?: string[]
+  enableProbeFallback?: boolean
+  discoveryMode?: SynraDiscoveryStartMode
+  mdnsServiceType?: string
+  subnetCidrs?: string[]
+  maxProbeHosts?: number
+  concurrency?: number
+  discoveryTimeoutMs?: number
+  reset?: boolean
+  scanWindowMs?: number
+  port?: number
+  timeoutMs?: number
+}
+
 export type SynraHooksAdapter = {
   scanState: Ref<string>
   startedAt: Ref<number | undefined>
@@ -48,7 +66,7 @@ export type SynraHooksAdapter = {
   connectedSessions: Ref<SynraHookConnectedSession[]>
   eventLogs: Ref<SynraHookEventLog[]>
   ensureListeners(): Promise<void>
-  startDiscovery(manualTargets?: string[]): Promise<void>
+  startDiscovery(options?: string[] | SynraDiscoveryStartOptions): Promise<void>
   stopDiscovery(): Promise<void>
   refreshDevices(): Promise<void>
   pairDevice(deviceId: string): Promise<void>

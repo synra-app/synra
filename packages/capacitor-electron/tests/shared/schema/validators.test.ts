@@ -83,6 +83,12 @@ describe('shared/schema/validators', () => {
         includeLoopback: true,
         manualTargets: ['192.168.1.100'],
         enableProbeFallback: true,
+        discoveryMode: 'hybrid',
+        mdnsServiceType: '_synra._tcp.local',
+        subnetCidrs: ['192.168.1.0/24'],
+        maxProbeHosts: 64,
+        concurrency: 16,
+        discoveryTimeoutMs: 2000,
         reset: false,
         scanWindowMs: 3000
       })
@@ -100,7 +106,7 @@ describe('shared/schema/validators', () => {
     expect(
       validateDiscoverySendMessagePayload({
         sessionId: 'session-1',
-        type: 'chat',
+        messageType: 'chat',
         payload: 'hello'
       })
     ).toBe(true)

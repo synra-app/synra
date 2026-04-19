@@ -27,6 +27,24 @@ function now(): number {
   return Date.now()
 }
 
+function toManualWebDevices(manualTargets: string[]) {
+  return manualTargets
+    .map((target) => target.trim())
+    .filter((target) => target.length > 0)
+    .map((target, index) => ({
+      deviceId: `web-manual-${index + 1}-${target}`,
+      name: `Manual Target ${index + 1}`,
+      ipAddress: target,
+      source: 'manual' as const,
+      paired: false,
+      connectable: false,
+      connectCheckAt: now(),
+      connectCheckError: 'CAPABILITY_UNAVAILABLE_ON_WEB',
+      discoveredAt: now(),
+      lastSeenAt: now()
+    }))
+}
+
 export class LanDiscoveryWeb extends WebPlugin implements LanDiscoveryPlugin {
   private scanState: ListDiscoveredDevicesResult = {
     state: 'idle',
@@ -38,11 +56,12 @@ export class LanDiscoveryWeb extends WebPlugin implements LanDiscoveryPlugin {
   }
 
   async startDiscovery(options: StartDiscoveryOptions = {}): Promise<StartDiscoveryResult> {
+    const manualDevices = toManualWebDevices(options.manualTargets ?? [])
     this.scanState = {
       state: 'scanning',
       startedAt: now(),
       scanWindowMs: options.scanWindowMs ?? DEFAULT_SCAN_WINDOW_MS,
-      devices: []
+      devices: manualDevices
     }
 
     this.notifyListeners('scanStateChanged', {

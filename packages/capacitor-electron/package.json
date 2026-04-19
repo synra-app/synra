@@ -42,7 +42,8 @@
   "dependencies": {
     "@synra-plugin/chat": "workspace:*",
     "@synra/plugin-sdk": "workspace:*",
-    "@synra/protocol": "workspace:*"
+    "@synra/protocol": "workspace:*",
+    "bonjour-service": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:types",

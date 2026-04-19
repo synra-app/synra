@@ -9,6 +9,7 @@ import {
   type SessionClosedEvent,
   type SessionOpenedEvent,
   type SendMessageOptions,
+  type StartDiscoveryOptions,
   type TransportErrorEvent
 } from '@synra/capacitor-lan-discovery'
 import type { SynraMessageType } from '@synra/protocol'
@@ -120,13 +121,19 @@ export const useLanDiscoveryStore = defineStore('lan-discovery', () => {
     }
   }
 
-  async function startDiscovery(manualTargets: string[] = []): Promise<void> {
+  async function startDiscovery(options: string[] | StartDiscoveryOptions = []): Promise<void> {
     loading.value = true
     try {
+      const normalizedOptions: StartDiscoveryOptions = Array.isArray(options)
+        ? {
+            manualTargets: options
+          }
+        : options
       const result = await LanDiscovery.startDiscovery({
+        discoveryMode: 'hybrid',
         includeLoopback: false,
-        manualTargets,
-        enableProbeFallback: true
+        enableProbeFallback: true,
+        ...normalizedOptions
       })
       scanState.value = result.state
       startedAt.value = result.startedAt

@@ -76,6 +76,7 @@ export type {
   MethodPayloadMap,
   MethodResultMap,
   OpenExternalOptions,
+  DiscoveryMode,
   DiscoverySource,
   DiscoveryState,
   DiscoveredDevice,
