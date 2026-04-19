@@ -1,7 +1,7 @@
-import type { HostEvent, MessageReceivedEvent } from '@synra/capacitor-device-connection'
+import type { MessageReceivedEvent } from '@synra/capacitor-device-connection'
 import type { DiscoveredDevice } from '@synra/capacitor-lan-discovery'
-import { unknownToErrorMessage, type SynraMessageType } from '@synra/protocol'
-import { computed, ref, type Ref } from 'vue'
+import { unknownToErrorMessage } from '@synra/protocol'
+import { ref, type Ref } from 'vue'
 import type {
   SynraConnectionFilter,
   SynraConnectionMessage,
@@ -21,6 +21,17 @@ const MAX_SEEN_EVENT_IDS = 1000
 type RuntimeMessageHandler = {
   filter?: SynraConnectionFilter
   handler: (message: SynraConnectionMessage) => void | Promise<void>
+}
+
+type ReconnectTask = {
+  id: string
+  deviceId: string
+  host: string
+  port: number
+  status: 'idle' | 'running' | 'failed' | 'success'
+  attempts: number
+  updatedAt: number
+  error?: string
 }
 
 function sortDevices(devices: DiscoveredDevice[]): DiscoveredDevice[] {
@@ -50,12 +61,11 @@ function resolveMessageEventId(event: {
 }
 
 export type ConnectionRuntime = SynraConnectionRuntimeState & {
-  pairedDevices: Readonly<Ref<DiscoveredDevice[]>>
+  reconnectTasks: Readonly<Ref<ReconnectTask[]>>
   ensureListeners(): Promise<void>
   startDiscovery(options?: string[] | SynraDiscoveryStartOptions): Promise<void>
   stopDiscovery(): Promise<void>
   refreshDevices(): Promise<void>
-  pairDevice(deviceId: string): Promise<void>
   probeConnectable(port?: number, timeoutMs?: number): Promise<void>
   openSession(options: {
     deviceId: string
@@ -66,6 +76,7 @@ export type ConnectionRuntime = SynraConnectionRuntimeState & {
   closeSession(sessionId?: string): Promise<void>
   syncSessionState(sessionId?: string): Promise<void>
   sendMessage(input: SynraConnectionSendInput): Promise<void>
+  reconnectDevice(options: { deviceId: string; host: string; port: number }): Promise<void>
   onMessage(
     handler: (message: SynraConnectionMessage) => void | Promise<void>,
     filter?: SynraConnectionFilter
@@ -85,16 +96,16 @@ function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionR
   })
   const connectedSessions = ref<SynraHookConnectedSession[]>([])
   const eventLogs = ref<SynraHookEventLog[]>([])
+  const reconnectTasks = ref<ReconnectTask[]>([])
+  const reconnectLocks = new Set<string>()
   const listeners = new Set<RuntimeMessageHandler>()
   const seenEventIds = new Set<string>()
   let listenersRegistered = false
 
-  const pairedDevices = computed(() => devices.value.filter((device) => Boolean(device.paired)))
-
-  function appendEventLog(type: SynraHookEventLog['type'], payload: unknown, id?: string): void {
+  function appendEventLog(type: SynraHookEventLog['type'], payload: unknown, id?: string): boolean {
     const eventId = id ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`
     if (seenEventIds.has(eventId)) {
-      return
+      return false
     }
     seenEventIds.add(eventId)
     if (seenEventIds.size > MAX_SEEN_EVENT_IDS) {
@@ -112,6 +123,7 @@ function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionR
     if (eventLogs.value.length > MAX_EVENT_LOGS) {
       eventLogs.value.length = MAX_EVENT_LOGS
     }
+    return true
   }
 
   function upsertConnectedSession(next: SynraHookConnectedSession): void {
@@ -152,6 +164,23 @@ function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionR
     })
   }
 
+  function touchSessionActivity(
+    sessionId: string,
+    updatedAt: number,
+    fallbackDirection: 'inbound' | 'outbound'
+  ): void {
+    const existing = connectedSessions.value.find((item) => item.sessionId === sessionId)
+    if (!existing) {
+      return
+    }
+    upsertConnectedSession({
+      ...existing,
+      status: 'open',
+      lastActiveAt: updatedAt,
+      direction: existing.direction ?? fallbackDirection
+    })
+  }
+
   function emitIncomingMessage(event: MessageReceivedEvent, deviceId?: string): void {
     const normalized: SynraConnectionMessage = {
       eventId: resolveMessageEventId({
@@ -179,68 +208,6 @@ function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionR
         continue
       }
       void Promise.resolve(listener.handler(normalized))
-    }
-  }
-
-  function replayHostEvent(event: HostEvent): void {
-    const replayEventId = `host:${event.id}`
-    if (event.type === 'transport.message.received' && event.sessionId) {
-      appendEventLog('messageReceived', event, replayEventId)
-      upsertConnectedSession({
-        sessionId: event.sessionId,
-        status: 'open',
-        lastActiveAt: Date.now()
-      })
-      emitIncomingMessage(
-        {
-          sessionId: event.sessionId,
-          messageType: (event.messageType ?? 'transport.message.received') as SynraMessageType,
-          payload:
-            event.payload && typeof event.payload === 'object' && 'payload' in event.payload
-              ? (event.payload as { payload: unknown }).payload
-              : event.payload,
-          messageId: event.messageId,
-          timestamp: event.timestamp,
-          transport: 'tcp'
-        },
-        undefined
-      )
-      return
-    }
-
-    if (event.type === 'transport.message.ack' && event.sessionId) {
-      appendEventLog('messageAck', event, replayEventId)
-      upsertConnectedSession({
-        sessionId: event.sessionId,
-        status: 'open',
-        lastActiveAt: Date.now()
-      })
-      return
-    }
-
-    if (event.type === 'transport.session.opened' && event.sessionId) {
-      appendEventLog('sessionOpened', event, replayEventId)
-      upsertConnectedSession({
-        sessionId: event.sessionId,
-        status: 'open',
-        remote: event.remote,
-        openedAt: event.timestamp,
-        lastActiveAt: Date.now()
-      })
-      return
-    }
-
-    if (event.type === 'transport.session.closed') {
-      appendEventLog('sessionClosed', event, replayEventId)
-      markConnectionClosed(event.sessionId, Date.now())
-      return
-    }
-
-    if (event.type === 'transport.error') {
-      appendEventLog('transportError', event, replayEventId)
-      if (typeof event.payload === 'string') {
-        error.value = event.payload
-      }
     }
   }
 
@@ -300,21 +267,6 @@ function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionR
     }
   }
 
-  async function pairDevice(deviceId: string): Promise<void> {
-    loading.value = true
-    try {
-      const result = await adapter.pairDevice(deviceId)
-      devices.value = sortDevices(
-        devices.value.map((device) => (device.deviceId === deviceId ? result.device : device))
-      )
-      error.value = null
-    } catch (unknownError) {
-      error.value = unknownToErrorMessage(unknownError, 'Failed to pair device.')
-    } finally {
-      loading.value = false
-    }
-  }
-
   async function probeConnectable(port = 32100, timeoutMs = 1500): Promise<void> {
     try {
       const result = await adapter.probeConnectable(port, timeoutMs)
@@ -356,6 +308,7 @@ function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionR
       error.value = null
     } catch (unknownError) {
       error.value = unknownToErrorMessage(unknownError, 'Failed to open session.')
+      throw unknownError
     } finally {
       loading.value = false
     }
@@ -365,9 +318,14 @@ function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionR
     loading.value = true
     try {
       await adapter.closeSession(sessionId)
+      const shouldClearCurrentSession =
+        !sessionState.value.sessionId || !sessionId || sessionState.value.sessionId === sessionId
       sessionState.value = {
         ...sessionState.value,
-        sessionId,
+        sessionId: shouldClearCurrentSession ? undefined : sessionState.value.sessionId,
+        deviceId: shouldClearCurrentSession ? undefined : sessionState.value.deviceId,
+        host: shouldClearCurrentSession ? undefined : sessionState.value.host,
+        port: shouldClearCurrentSession ? undefined : sessionState.value.port,
         state: 'closed',
         closedAt: Date.now()
       }
@@ -399,14 +357,7 @@ function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionR
           timestamp: Date.now()
         })
       )
-      upsertConnectedSession({
-        sessionId: input.sessionId,
-        status: 'open',
-        lastActiveAt: Date.now(),
-        direction:
-          connectedSessions.value.find((item) => item.sessionId === input.sessionId)?.direction ??
-          'outbound'
-      })
+      touchSessionActivity(input.sessionId, Date.now(), 'outbound')
       await adapter.sendMessage({
         sessionId: input.sessionId,
         messageId: input.messageId,
@@ -419,6 +370,66 @@ function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionR
       throw unknownError
     } finally {
       loading.value = false
+    }
+  }
+
+  async function reconnectDevice(options: {
+    deviceId: string
+    host: string
+    port: number
+  }): Promise<void> {
+    const taskId = `${options.deviceId}:${options.host}:${options.port}`
+    if (reconnectLocks.has(taskId)) {
+      return
+    }
+    reconnectLocks.add(taskId)
+    let attempts = 0
+    let delayMs = 200
+    reconnectTasks.value = [
+      {
+        id: taskId,
+        deviceId: options.deviceId,
+        host: options.host,
+        port: options.port,
+        status: 'running',
+        attempts,
+        updatedAt: Date.now()
+      },
+      ...reconnectTasks.value.filter((item) => item.id !== taskId)
+    ]
+    try {
+      while (attempts < 4) {
+        attempts += 1
+        try {
+          await openSession({
+            deviceId: options.deviceId,
+            host: options.host,
+            port: options.port
+          })
+          reconnectTasks.value = reconnectTasks.value.map((item) =>
+            item.id === taskId
+              ? { ...item, status: 'success', attempts, updatedAt: Date.now(), error: undefined }
+              : item
+          )
+          return
+        } catch (unknownError) {
+          const message = unknownToErrorMessage(unknownError, 'Reconnect failed.')
+          reconnectTasks.value = reconnectTasks.value.map((item) =>
+            item.id === taskId
+              ? { ...item, status: 'running', attempts, updatedAt: Date.now(), error: message }
+              : item
+          )
+          await new Promise<void>((resolve) =>
+            setTimeout(resolve, delayMs + Math.floor(Math.random() * 100))
+          )
+          delayMs *= 2
+        }
+      }
+      reconnectTasks.value = reconnectTasks.value.map((item) =>
+        item.id === taskId ? { ...item, status: 'failed', attempts, updatedAt: Date.now() } : item
+      )
+    } finally {
+      reconnectLocks.delete(taskId)
     }
   }
 
@@ -446,6 +457,8 @@ function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionR
 
     await adapter.addSessionOpenedListener((event) => {
       appendEventLog('sessionOpened', event)
+      const inferredDirection =
+        typeof event.deviceId === 'string' && event.deviceId.length > 0 ? 'outbound' : 'inbound'
       sessionState.value = {
         ...sessionState.value,
         sessionId: event.sessionId,
@@ -464,17 +477,29 @@ function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionR
         port: event.port,
         openedAt: Date.now(),
         lastActiveAt: Date.now(),
-        direction: 'outbound'
+        direction: inferredDirection
       })
     })
 
     await adapter.addSessionClosedListener((event) => {
       appendEventLog('sessionClosed', event)
-      sessionState.value = {
-        ...sessionState.value,
-        state: 'closed',
-        closedAt: Date.now()
-      }
+      const shouldClearCurrentSession =
+        !sessionState.value.sessionId || sessionState.value.sessionId === event.sessionId
+      sessionState.value = shouldClearCurrentSession
+        ? {
+            ...sessionState.value,
+            sessionId: undefined,
+            deviceId: undefined,
+            host: undefined,
+            port: undefined,
+            state: 'closed',
+            closedAt: Date.now()
+          }
+        : {
+            ...sessionState.value,
+            state: 'closed',
+            closedAt: Date.now()
+          }
       markConnectionClosed(event.sessionId, Date.now())
     })
 
@@ -489,14 +514,7 @@ function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionR
           timestamp: event.timestamp
         })
       )
-      upsertConnectedSession({
-        sessionId: event.sessionId,
-        status: 'open',
-        lastActiveAt: Date.now(),
-        direction:
-          connectedSessions.value.find((item) => item.sessionId === event.sessionId)?.direction ??
-          'inbound'
-      })
+      touchSessionActivity(event.sessionId, Date.now(), 'inbound')
       emitIncomingMessage(event)
     })
 
@@ -511,25 +529,13 @@ function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionR
           timestamp: event.timestamp
         })
       )
-      upsertConnectedSession({
-        sessionId: event.sessionId,
-        status: 'open',
-        lastActiveAt: Date.now(),
-        direction:
-          connectedSessions.value.find((item) => item.sessionId === event.sessionId)?.direction ??
-          'outbound'
-      })
+      touchSessionActivity(event.sessionId, Date.now(), 'outbound')
     })
 
     await adapter.addTransportErrorListener((event) => {
       appendEventLog('transportError', event)
       error.value = event.message
     })
-
-    const hostReplay = await adapter.pullHostEvents()
-    for (const hostEvent of hostReplay.events) {
-      replayHostEvent(hostEvent)
-    }
 
     const snapshot = await adapter.getSessionState()
     sessionState.value = snapshot
@@ -569,7 +575,7 @@ function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionR
     startedAt,
     scanWindowMs,
     devices,
-    pairedDevices,
+    reconnectTasks,
     loading,
     error,
     sessionState,
@@ -579,12 +585,12 @@ function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionR
     startDiscovery,
     stopDiscovery,
     refreshDevices,
-    pairDevice,
     probeConnectable,
     openSession,
     closeSession,
     syncSessionState,
     sendMessage,
+    reconnectDevice,
     onMessage
   }
 }

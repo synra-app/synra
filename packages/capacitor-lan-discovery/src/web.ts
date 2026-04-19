@@ -2,8 +2,6 @@ import { WebPlugin } from '@capacitor/core'
 import type {
   LanDiscoveryPlugin,
   ListDiscoveredDevicesResult,
-  PairDeviceOptions,
-  PairDeviceResult,
   ProbeConnectableOptions,
   ProbeConnectableResult,
   StartDiscoveryOptions,
@@ -26,7 +24,6 @@ function toManualWebDevices(manualTargets: string[]) {
       name: `Manual Target ${index + 1}`,
       ipAddress: target,
       source: 'manual' as const,
-      paired: false,
       connectable: false,
       connectCheckAt: now(),
       connectCheckError: 'CAPABILITY_UNAVAILABLE_ON_WEB',
@@ -81,27 +78,6 @@ export class LanDiscoveryWeb extends WebPlugin implements LanDiscoveryPlugin {
 
   async getDiscoveredDevices(): Promise<ListDiscoveredDevicesResult> {
     return this.scanState
-  }
-
-  async pairDevice(options: PairDeviceOptions): Promise<PairDeviceResult> {
-    const matched = this.scanState.devices.find((device) => device.deviceId === options.deviceId)
-    if (!matched) {
-      throw this.unavailable('Device is not available on web fallback.')
-    }
-
-    const paired = {
-      ...matched,
-      paired: true,
-      lastSeenAt: now()
-    }
-    this.scanState = {
-      ...this.scanState,
-      devices: this.scanState.devices.map((device) =>
-        device.deviceId === paired.deviceId ? paired : device
-      )
-    }
-    this.notifyListeners('deviceUpdated', { device: paired })
-    return { success: true, device: paired }
   }
 
   async probeConnectable(options: ProbeConnectableOptions = {}): Promise<ProbeConnectableResult> {

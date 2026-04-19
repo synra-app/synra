@@ -115,7 +115,6 @@ export type DiscoveredDevice = {
   name: string
   ipAddress: string
   source: DiscoverySource
-  paired: boolean
   connectable: boolean
   connectCheckAt?: number
   connectCheckError?: string
@@ -152,15 +151,6 @@ export type DeviceDiscoveryListResult = {
   startedAt?: number
   scanWindowMs: number
   devices: DiscoveredDevice[]
-}
-
-export type DeviceDiscoveryPairOptions = {
-  deviceId: string
-}
-
-export type DeviceDiscoveryPairResult = {
-  success: true
-  device: DiscoveredDevice
 }
 
 export type DeviceDiscoveryProbeConnectableOptions = {
@@ -268,7 +258,6 @@ export type MethodPayloadMap = {
   'discovery.start': DeviceDiscoveryStartOptions
   'discovery.stop': Record<string, never>
   'discovery.list': Record<string, never>
-  'discovery.pair': DeviceDiscoveryPairOptions
   'discovery.probeConnectable': DeviceDiscoveryProbeConnectableOptions
   'discovery.openSession': DeviceSessionOpenOptions
   'discovery.closeSession': DeviceSessionCloseOptions
@@ -292,7 +281,6 @@ export type MethodResultMap = {
   'discovery.start': DeviceDiscoveryStartResult
   'discovery.stop': OperationResult
   'discovery.list': DeviceDiscoveryListResult
-  'discovery.pair': DeviceDiscoveryPairResult
   'discovery.probeConnectable': DeviceDiscoveryProbeConnectableResult
   'discovery.openSession': DeviceSessionOpenResult
   'discovery.closeSession': DeviceSessionCloseResult

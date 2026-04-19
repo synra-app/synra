@@ -4,8 +4,6 @@ import type {
   DeviceDiscoveryListResult,
   DeviceDiscoveryProbeConnectableOptions,
   DeviceDiscoveryProbeConnectableResult,
-  DeviceDiscoveryPairOptions,
-  DeviceDiscoveryPairResult,
   DeviceSessionCloseOptions,
   DeviceSessionCloseResult,
   DeviceSessionGetStateOptions,
@@ -74,10 +72,6 @@ export interface ElectronBridgePlugin {
     timeoutMs?: number
     signal?: AbortSignal
   }): Promise<DeviceDiscoveryListResult>
-  pairDiscoveredDevice(
-    options: DeviceDiscoveryPairOptions,
-    invokeOptions?: { timeoutMs?: number; signal?: AbortSignal }
-  ): Promise<DeviceDiscoveryPairResult>
   probeDiscoveredDevicesConnectable(
     options?: DeviceDiscoveryProbeConnectableOptions,
     invokeOptions?: { timeoutMs?: number; signal?: AbortSignal }
@@ -174,13 +168,6 @@ export function createElectronBridgePlugin(invoke: BridgeInvoke): ElectronBridge
       invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {}
     ): Promise<DeviceDiscoveryListResult> {
       return invoke(API_METHODS.listDiscoveredDevices, {}, invokeOptions)
-    },
-    async pairDiscoveredDevice(
-      options: DeviceDiscoveryPairOptions,
-      invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {}
-    ): Promise<DeviceDiscoveryPairResult> {
-      ensureObject(options, 'pairDiscoveredDevice options must be an object.')
-      return invoke(API_METHODS.pairDiscoveredDevice, options, invokeOptions)
     },
     async probeDiscoveredDevicesConnectable(
       options: DeviceDiscoveryProbeConnectableOptions = {},

@@ -10,7 +10,6 @@ export type DiscoveredDevice = {
   name: string
   ipAddress: string
   source: DiscoverySource
-  paired: boolean
   connectable: boolean
   connectCheckAt?: number
   connectCheckError?: string
@@ -53,15 +52,6 @@ export type ListDiscoveredDevicesResult = {
   devices: DiscoveredDevice[]
 }
 
-export type PairDeviceOptions = {
-  deviceId: string
-}
-
-export type PairDeviceResult = {
-  success: true
-  device: DiscoveredDevice
-}
-
 export type ProbeConnectableOptions = {
   port?: number
   timeoutMs?: number
@@ -87,7 +77,6 @@ export interface LanDiscoveryPlugin {
   startDiscovery(options?: StartDiscoveryOptions): Promise<StartDiscoveryResult>
   stopDiscovery(): Promise<StopDiscoveryResult>
   getDiscoveredDevices(): Promise<ListDiscoveredDevicesResult>
-  pairDevice(options: PairDeviceOptions): Promise<PairDeviceResult>
   probeConnectable(options?: ProbeConnectableOptions): Promise<ProbeConnectableResult>
   addListener(
     eventName: 'deviceFound',

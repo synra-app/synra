@@ -2,8 +2,6 @@ import { WebPlugin } from '@capacitor/core'
 import type {
   LanDiscoveryPlugin,
   ListDiscoveredDevicesResult,
-  PairDeviceOptions,
-  PairDeviceResult,
   ProbeConnectableOptions,
   ProbeConnectableResult,
   StartDiscoveryOptions,
@@ -38,11 +36,6 @@ type DiscoveryListBridgeResult = {
   devices: ListDiscoveredDevicesResult['devices']
 }
 
-type PairBridgeResult = {
-  success: true
-  device: PairDeviceResult['device']
-}
-
 type ProbeConnectableBridgeResult = ProbeConnectableResult
 
 type DiscoveryBridgeMethods = {
@@ -57,10 +50,6 @@ type DiscoveryBridgeMethods = {
   'discovery.list': {
     payload: Record<string, never>
     result: DiscoveryListBridgeResult
-  }
-  'discovery.pair': {
-    payload: PairDeviceOptions
-    result: PairBridgeResult
   }
   'discovery.probeConnectable': {
     payload: ProbeConnectableOptions
@@ -78,7 +67,6 @@ function toListResult(result: DiscoveryListBridgeResult) {
       name: device.name,
       ipAddress: device.ipAddress,
       source: device.source,
-      paired: device.paired,
       connectable: device.connectable,
       connectCheckAt: device.connectCheckAt,
       connectCheckError: device.connectCheckError,
@@ -144,27 +132,6 @@ export class LanDiscoveryElectron extends WebPlugin implements LanDiscoveryPlugi
   async getDiscoveredDevices(): Promise<ListDiscoveredDevicesResult> {
     const result = await this.invokeBridge('discovery.list', {})
     return toListResult(result)
-  }
-
-  async pairDevice(options: PairDeviceOptions): Promise<PairDeviceResult> {
-    const result = await this.invokeBridge('discovery.pair', options)
-    const mapped = {
-      success: result.success,
-      device: {
-        deviceId: result.device.deviceId,
-        name: result.device.name,
-        ipAddress: result.device.ipAddress,
-        source: result.device.source,
-        paired: result.device.paired,
-        connectable: result.device.connectable,
-        connectCheckAt: result.device.connectCheckAt,
-        connectCheckError: result.device.connectCheckError,
-        discoveredAt: result.device.discoveredAt,
-        lastSeenAt: result.device.lastSeenAt
-      }
-    } satisfies PairDeviceResult
-    this.notifyListeners('deviceUpdated', { device: mapped.device })
-    return mapped
   }
 
   async probeConnectable(options: ProbeConnectableOptions = {}): Promise<ProbeConnectableResult> {

@@ -33,7 +33,6 @@ export interface ConnectionRuntimeAdapter {
     devices: DiscoveredDevice[]
   }>
   stopDiscovery(): Promise<void>
-  pairDevice(deviceId: string): Promise<{ device: DiscoveredDevice }>
   probeConnectable(port: number, timeoutMs: number): Promise<{ devices: DiscoveredDevice[] }>
   openSession(options: OpenSessionOptions): Promise<{
     sessionId: string

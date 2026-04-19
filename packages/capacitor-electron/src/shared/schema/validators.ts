@@ -64,7 +64,6 @@ export function isSupportedMethod(method: string): boolean {
     method === BRIDGE_METHODS.discoveryStart ||
     method === BRIDGE_METHODS.discoveryStop ||
     method === BRIDGE_METHODS.discoveryList ||
-    method === BRIDGE_METHODS.discoveryPair ||
     method === BRIDGE_METHODS.discoveryProbeConnectable ||
     method === BRIDGE_METHODS.discoveryOpenSession ||
     method === BRIDGE_METHODS.discoveryCloseSession ||
@@ -224,10 +223,6 @@ export function validateDiscoveryStartPayload(payload: unknown): payload is {
   }
 
   return true
-}
-
-export function validateDiscoveryPairPayload(payload: unknown): payload is { deviceId: string } {
-  return isObject(payload) && typeof payload.deviceId === 'string' && payload.deviceId.length > 0
 }
 
 export function validateDiscoveryOpenSessionPayload(payload: unknown): payload is {

@@ -55,9 +55,6 @@ function createHandlers() {
         scanWindowMs: 10_000,
         devices: []
       })),
-      pairDevice: vi.fn(async () => {
-        throw new Error('pairDevice mock not configured')
-      }),
       probeConnectable: vi.fn(async () => ({
         checkedAt: Date.now(),
         port: 32100,
@@ -196,9 +193,6 @@ describe('bridge/main/dispatch', () => {
           scanWindowMs: 10_000,
           devices: []
         })),
-        pairDevice: vi.fn(async () => {
-          throw new Error('pairDevice mock not configured')
-        }),
         probeConnectable: vi.fn(async () => ({
           checkedAt: Date.now(),
           port: 32100,

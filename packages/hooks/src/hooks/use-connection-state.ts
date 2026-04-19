@@ -20,10 +20,13 @@ export function useConnectionState() {
   return {
     connectedSessions,
     activeSessions,
+    reconnectTasks: runtime.reconnectTasks,
     sessionState: runtime.sessionState,
     ensureListeners: () => runtime.ensureListeners(),
     openSession: (options: { deviceId: string; host: string; port: number; transport?: 'tcp' }) =>
       runtime.openSession(options),
+    reconnectDevice: (options: { deviceId: string; host: string; port: number }) =>
+      runtime.reconnectDevice(options),
     closeSession: (sessionId?: string) => runtime.closeSession(sessionId),
     syncSessionState: (sessionId?: string) => runtime.syncSessionState(sessionId)
   }

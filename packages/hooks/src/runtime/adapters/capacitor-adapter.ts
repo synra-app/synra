@@ -9,7 +9,6 @@ export function createCapacitorRuntimeAdapter(): ConnectionRuntimeAdapter {
     stopDiscovery: async () => {
       await LanDiscovery.stopDiscovery()
     },
-    pairDevice: (deviceId) => LanDiscovery.pairDevice({ deviceId }),
     probeConnectable: (port, timeoutMs) => LanDiscovery.probeConnectable({ port, timeoutMs }),
     openSession: (options) => DeviceConnection.openSession(options),
     closeSession: async (sessionId) => {

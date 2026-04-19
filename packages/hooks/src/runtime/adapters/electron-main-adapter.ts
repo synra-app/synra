@@ -30,7 +30,6 @@ type MainHooksBridge = {
     scanWindowMs: number
     devices: DiscoveredDevice[]
   }>
-  pairDevice: (deviceId: string) => Promise<{ device: DiscoveredDevice }>
   probeConnectable: (options?: {
     port?: number
     timeoutMs?: number
@@ -97,7 +96,6 @@ export function createElectronMainRuntimeAdapter(): ConnectionRuntimeAdapter {
     stopDiscovery: async () => {
       await bridge.stopDiscovery()
     },
-    pairDevice: (deviceId) => bridge.pairDevice(deviceId),
     probeConnectable: (port, timeoutMs) => bridge.probeConnectable({ port, timeoutMs }),
     openSession: (options) => bridge.openSession(options),
     closeSession: async (sessionId) => {
@@ -114,8 +112,12 @@ export function createElectronMainRuntimeAdapter(): ConnectionRuntimeAdapter {
     addSessionOpenedListener: async (listener: (event: SessionOpenedEvent) => void) =>
       addHostListener((event) => {
         if (event.type === 'transport.session.opened' && event.sessionId) {
+          const [host, portText] = (event.remote ?? '').split(':')
+          const parsedPort = Number.parseInt(portText ?? '', 10)
           listener({
             sessionId: event.sessionId,
+            host: host || undefined,
+            port: Number.isFinite(parsedPort) ? parsedPort : undefined,
             transport: event.transport
           })
         }

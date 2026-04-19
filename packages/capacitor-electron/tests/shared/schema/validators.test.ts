@@ -9,7 +9,6 @@ import {
   validateExternalOpenPayload,
   validateDiscoveryOpenSessionPayload,
   validateDiscoverySendMessagePayload,
-  validateDiscoveryPairPayload,
   validateDiscoveryStartPayload,
   validateReadFilePayload
 } from '../../../src/shared/schema/validators'
@@ -40,7 +39,6 @@ describe('shared/schema/validators', () => {
     expect(isSupportedProtocolVersion('9.9')).toBe(false)
     expect(isSupportedMethod(BRIDGE_METHODS.fileRead)).toBe(true)
     expect(isSupportedMethod(BRIDGE_METHODS.discoveryStart)).toBe(true)
-    expect(isSupportedMethod(BRIDGE_METHODS.discoveryPair)).toBe(true)
     expect(isSupportedMethod(BRIDGE_METHODS.discoveryProbeConnectable)).toBe(true)
     expect(isSupportedMethod(BRIDGE_METHODS.discoveryOpenSession)).toBe(true)
     expect(isSupportedMethod(BRIDGE_METHODS.discoverySendMessage)).toBe(true)
@@ -94,8 +92,6 @@ describe('shared/schema/validators', () => {
       })
     ).toBe(true)
     expect(validateDiscoveryStartPayload({ manualTargets: [1] })).toBe(false)
-    expect(validateDiscoveryPairPayload({ deviceId: 'device-1' })).toBe(true)
-    expect(validateDiscoveryPairPayload({ deviceId: '' })).toBe(false)
     expect(
       validateDiscoveryOpenSessionPayload({
         deviceId: 'device-1',

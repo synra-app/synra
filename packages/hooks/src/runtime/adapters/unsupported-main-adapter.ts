@@ -17,9 +17,6 @@ export function createUnsupportedMainAdapter(): ConnectionRuntimeAdapter {
     async stopDiscovery() {
       throw unsupportedError()
     },
-    async pairDevice() {
-      throw unsupportedError()
-    },
     async probeConnectable() {
       throw unsupportedError()
     },

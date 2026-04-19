@@ -75,20 +75,6 @@ public class LanDiscoveryPlugin {
         return result;
     }
 
-    public synchronized JSObject pairDevice(String deviceId) {
-        DeviceRecord selected = this.devices.get(deviceId);
-        if (selected == null) {
-            return null;
-        }
-
-        DeviceRecord paired = selected.withPaired(true);
-        this.devices.put(paired.deviceId, paired);
-        JSObject result = new JSObject();
-        result.put("success", true);
-        result.put("device", paired.toJSObject());
-        return result;
-    }
-
     public synchronized DeviceRecord getDevice(String deviceId) {
         return this.devices.get(deviceId);
     }
@@ -186,7 +172,6 @@ public class LanDiscoveryPlugin {
                         ipAddress,
                         "mdns",
                         false,
-                        false,
                         null,
                         null,
                         System.currentTimeMillis(),
@@ -219,7 +204,6 @@ public class LanDiscoveryPlugin {
                 "Manual Target " + index,
                 trimmed,
                 "manual",
-                false,
                 false,
                 null,
                 null,
@@ -263,7 +247,6 @@ public class LanDiscoveryPlugin {
         private final String name;
         private final String ipAddress;
         private final String source;
-        private final boolean paired;
         private final boolean connectable;
         private final Long connectCheckAt;
         private final String connectCheckError;
@@ -275,7 +258,6 @@ public class LanDiscoveryPlugin {
             String name,
             String ipAddress,
             String source,
-            boolean paired,
             boolean connectable,
             Long connectCheckAt,
             String connectCheckError,
@@ -286,7 +268,6 @@ public class LanDiscoveryPlugin {
             this.name = name;
             this.ipAddress = ipAddress;
             this.source = source;
-            this.paired = paired;
             this.connectable = connectable;
             this.connectCheckAt = connectCheckAt;
             this.connectCheckError = connectCheckError;
@@ -300,25 +281,9 @@ public class LanDiscoveryPlugin {
                 incoming.name,
                 incoming.ipAddress,
                 incoming.source,
-                this.paired || incoming.paired,
                 incoming.connectable,
                 incoming.connectCheckAt,
                 incoming.connectCheckError,
-                this.discoveredAt,
-                System.currentTimeMillis()
-            );
-        }
-
-        private DeviceRecord withPaired(boolean paired) {
-            return new DeviceRecord(
-                this.deviceId,
-                this.name,
-                this.ipAddress,
-                this.source,
-                paired,
-                this.connectable,
-                this.connectCheckAt,
-                this.connectCheckError,
                 this.discoveredAt,
                 System.currentTimeMillis()
             );
@@ -330,7 +295,6 @@ public class LanDiscoveryPlugin {
                 this.name,
                 this.ipAddress,
                 this.source,
-                this.paired,
                 connectable,
                 System.currentTimeMillis(),
                 connectCheckError,
@@ -345,7 +309,6 @@ public class LanDiscoveryPlugin {
             object.put("name", this.name);
             object.put("ipAddress", this.ipAddress);
             object.put("source", this.source);
-            object.put("paired", this.paired);
             object.put("connectable", this.connectable);
             if (this.connectCheckAt != null) {
                 object.put("connectCheckAt", this.connectCheckAt);

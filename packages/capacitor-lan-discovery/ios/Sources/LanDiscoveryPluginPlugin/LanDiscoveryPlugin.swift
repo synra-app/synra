@@ -105,19 +105,6 @@ import Darwin
         return result
     }
 
-    @objc public func pairDevice(deviceId: String) -> [String: Any]? {
-        guard let selected = devices[deviceId] else {
-            return nil
-        }
-
-        let paired = selected.withPaired(true)
-        devices[deviceId] = paired
-        return [
-            "success": true,
-            "device": paired.toDictionary(),
-        ]
-    }
-
     @objc public func updateDeviceConnectable(
         deviceId: String,
         connectable: Bool,
@@ -358,7 +345,6 @@ import Darwin
                     name: "\(host) (\(interfaceName))",
                     ipAddress: addressValue,
                     source: "mdns",
-                    paired: false,
                     connectable: false,
                     connectCheckAt: nil,
                     connectCheckError: nil,
@@ -384,7 +370,6 @@ import Darwin
                 name: "Manual Target \(index)",
                 ipAddress: trimmed,
                 source: "manual",
-                paired: false,
                 connectable: false,
                 connectCheckAt: nil,
                 connectCheckError: nil,
@@ -897,12 +882,33 @@ private struct DeviceRecord {
     let name: String
     let ipAddress: String
     let source: String
-    let paired: Bool
     let connectable: Bool
     let connectCheckAt: Int?
     let connectCheckError: String?
     let discoveredAt: Int
     let lastSeenAt: Int
+
+    init(
+        deviceId: String,
+        name: String,
+        ipAddress: String,
+        source: String,
+        connectable: Bool,
+        connectCheckAt: Int?,
+        connectCheckError: String?,
+        discoveredAt: Int,
+        lastSeenAt: Int
+    ) {
+        self.deviceId = deviceId
+        self.name = name
+        self.ipAddress = ipAddress
+        self.source = source
+        self.connectable = connectable
+        self.connectCheckAt = connectCheckAt
+        self.connectCheckError = connectCheckError
+        self.discoveredAt = discoveredAt
+        self.lastSeenAt = lastSeenAt
+    }
 
     func merge(with incoming: DeviceRecord) -> DeviceRecord {
         DeviceRecord(
@@ -910,25 +916,9 @@ private struct DeviceRecord {
             name: incoming.name,
             ipAddress: incoming.ipAddress,
             source: incoming.source,
-            paired: paired || incoming.paired,
             connectable: incoming.connectable,
             connectCheckAt: incoming.connectCheckAt,
             connectCheckError: incoming.connectCheckError,
-            discoveredAt: discoveredAt,
-            lastSeenAt: Int(Date().timeIntervalSince1970 * 1000)
-        )
-    }
-
-    func withPaired(_ value: Bool) -> DeviceRecord {
-        DeviceRecord(
-            deviceId: deviceId,
-            name: name,
-            ipAddress: ipAddress,
-            source: source,
-            paired: value,
-            connectable: connectable,
-            connectCheckAt: connectCheckAt,
-            connectCheckError: connectCheckError,
             discoveredAt: discoveredAt,
             lastSeenAt: Int(Date().timeIntervalSince1970 * 1000)
         )
@@ -940,7 +930,6 @@ private struct DeviceRecord {
             name: name,
             ipAddress: ipAddress,
             source: source,
-            paired: paired,
             connectable: value,
             connectCheckAt: Int(Date().timeIntervalSince1970 * 1000),
             connectCheckError: error,
@@ -949,13 +938,37 @@ private struct DeviceRecord {
         )
     }
 
+    init?(
+        dictionary: [String: Any]
+    ) {
+        guard
+            let deviceId = dictionary["deviceId"] as? String,
+            let name = dictionary["name"] as? String,
+            let ipAddress = dictionary["ipAddress"] as? String,
+            let source = dictionary["source"] as? String,
+            let connectable = dictionary["connectable"] as? Bool,
+            let discoveredAt = dictionary["discoveredAt"] as? Int,
+            let lastSeenAt = dictionary["lastSeenAt"] as? Int
+        else {
+            return nil
+        }
+        self.deviceId = deviceId
+        self.name = name
+        self.ipAddress = ipAddress
+        self.source = source
+        self.connectable = connectable
+        self.connectCheckAt = dictionary["connectCheckAt"] as? Int
+        self.connectCheckError = dictionary["connectCheckError"] as? String
+        self.discoveredAt = discoveredAt
+        self.lastSeenAt = lastSeenAt
+    }
+
     func toDictionary() -> [String: Any] {
         [
             "deviceId": deviceId,
             "name": name,
             "ipAddress": ipAddress,
             "source": source,
-            "paired": paired,
             "connectable": connectable,
             "connectCheckAt": connectCheckAt as Any,
             "connectCheckError": connectCheckError as Any,
@@ -993,3 +1006,4 @@ private struct SessionState {
         ]
     }
 }
+

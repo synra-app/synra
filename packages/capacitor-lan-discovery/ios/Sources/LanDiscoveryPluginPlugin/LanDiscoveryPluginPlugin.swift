@@ -13,7 +13,6 @@ public class LanDiscoveryPluginPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "startDiscovery", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "stopDiscovery", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getDiscoveredDevices", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "pairDevice", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "probeConnectable", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "openSession", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "closeSession", returnType: CAPPluginReturnPromise),
@@ -86,23 +85,6 @@ public class LanDiscoveryPluginPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func getDiscoveredDevices(_ call: CAPPluginCall) {
         call.resolve(implementation.listDevices())
-    }
-
-    @objc func pairDevice(_ call: CAPPluginCall) {
-        guard let deviceId = call.getString("deviceId"), !deviceId.isEmpty else {
-            call.reject("deviceId is required.")
-            return
-        }
-
-        guard let result = implementation.pairDevice(deviceId: deviceId) else {
-            call.reject("Target device was not found.")
-            return
-        }
-
-        if let device = result["device"] as? [String: Any] {
-            notifyListeners("deviceUpdated", data: ["device": device])
-        }
-        call.resolve(result)
     }
 
     @objc func probeConnectable(_ call: CAPPluginCall) {

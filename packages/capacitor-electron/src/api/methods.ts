@@ -10,7 +10,6 @@ export const API_METHODS = {
   startDeviceDiscovery: BRIDGE_METHODS.discoveryStart,
   stopDeviceDiscovery: BRIDGE_METHODS.discoveryStop,
   listDiscoveredDevices: BRIDGE_METHODS.discoveryList,
-  pairDiscoveredDevice: BRIDGE_METHODS.discoveryPair,
   probeDiscoveredDevicesConnectable: BRIDGE_METHODS.discoveryProbeConnectable,
   openDiscoverySession: BRIDGE_METHODS.discoveryOpenSession,
   closeDiscoverySession: BRIDGE_METHODS.discoveryCloseSession,

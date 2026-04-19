@@ -84,8 +84,6 @@ export type {
   DeviceDiscoveryListResult,
   DeviceDiscoveryProbeConnectableOptions,
   DeviceDiscoveryProbeConnectableResult,
-  DeviceDiscoveryPairOptions,
-  DeviceDiscoveryPairResult,
   DeviceSessionOpenOptions,
   DeviceSessionOpenResult,
   ConnectionTransport,
@@ -120,7 +118,6 @@ export {
   validateExternalOpenPayload,
   validateReadFilePayload,
   validateDiscoveryStartPayload,
-  validateDiscoveryPairPayload,
   validateDiscoveryOpenSessionPayload,
   validateDiscoverySendMessagePayload
 } from './shared/schema/validators'

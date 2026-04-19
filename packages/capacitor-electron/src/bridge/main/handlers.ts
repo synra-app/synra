@@ -51,8 +51,6 @@ export function createBridgeHandlers(deps: BridgeHandlerDependencies): BridgeHan
       deps.deviceDiscoveryService.startDiscovery(request.payload),
     [BRIDGE_METHODS.discoveryStop]: async () => deps.deviceDiscoveryService.stopDiscovery(),
     [BRIDGE_METHODS.discoveryList]: async () => deps.deviceDiscoveryService.listDevices(),
-    [BRIDGE_METHODS.discoveryPair]: async (request) =>
-      deps.deviceDiscoveryService.pairDevice(request.payload),
     [BRIDGE_METHODS.discoveryProbeConnectable]: async (request) =>
       deps.deviceDiscoveryService.probeConnectable(request.payload),
     [BRIDGE_METHODS.discoveryOpenSession]: async (request) =>

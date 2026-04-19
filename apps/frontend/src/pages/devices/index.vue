@@ -1,21 +1,26 @@
 <script setup lang="ts">
 const {
   activeConnections,
-  canConnect,
   connectableDevices,
   connectedDevice,
+  connectedDeviceIds,
   error,
+  isRemoveDialogOpen,
   loading,
   manualTarget,
+  onCancelRemoveDevice,
+  onConfirmRemoveDevice,
+  reconnectTasks,
+  removeDialogMessage,
   onConnect,
   onDisconnect,
-  onPairDevice,
+  onDisconnectSession,
+  onRemoveDevice,
   onRefreshDiscovery,
   onStartDiscovery,
   onStopDiscovery,
   openMessagePage,
   scanWindowMs,
-  selectedDeviceId,
   sessionState,
   socketPort,
   startedAt,
@@ -28,7 +33,7 @@ const {
     <div class="space-y-4 lg:col-span-8">
       <PanelCard
         title="Device Network"
-        description="Discover nearby devices and manage pairing sessions."
+        description="Discover nearby devices and manage active connection sessions."
       >
         <div class="grid grid-cols-1 gap-2 text-sm md:grid-cols-2">
           <p><strong>Scan status:</strong> {{ statusLabel }}</p>
@@ -55,19 +60,36 @@ const {
       />
 
       <DeviceDiscoveryList
-        v-model:selected-device-id="selectedDeviceId"
         :devices="connectableDevices"
         :loading="loading"
-        :can-connect="canConnect"
-        :has-connected-device="Boolean(connectedDevice)"
-        @pair="onPairDevice"
+        :connected-device-ids="connectedDeviceIds"
         @connect="onConnect"
         @disconnect="onDisconnect"
+        @remove="onRemoveDevice"
       />
+
+      <PanelCard title="Reconnect Queue">
+        <ul v-if="reconnectTasks.length > 0" class="space-y-2 text-sm">
+          <li
+            v-for="task in reconnectTasks"
+            :key="task.id"
+            class="rounded-md border border-gray-200 p-2"
+          >
+            {{ task.deviceId }} · {{ task.host }}:{{ task.port }} · {{ task.status }} · attempts:
+            {{ task.attempts }}
+          </li>
+        </ul>
+        <p v-else class="text-sm text-gray-600">No reconnect tasks yet.</p>
+      </PanelCard>
     </div>
 
     <div class="space-y-4 lg:col-span-4">
-      <SessionList :sessions="activeConnections" mode="connect" @open-messages="openMessagePage" />
+      <SessionList
+        :sessions="activeConnections"
+        mode="connect"
+        @open-messages="openMessagePage"
+        @disconnect="onDisconnectSession"
+      />
       <PanelCard>
         <p class="text-sm text-muted-5">
           Open the built-in Chat plugin page to continue the active session.
@@ -75,4 +97,14 @@ const {
       </PanelCard>
     </div>
   </section>
+
+  <ConfirmDialog
+    :visible="isRemoveDialogOpen"
+    title="Confirm Removal"
+    :message="removeDialogMessage"
+    confirm-text="Remove"
+    cancel-text="Cancel"
+    @confirm="onConfirmRemoveDevice"
+    @cancel="onCancelRemoveDevice"
+  />
 </template>

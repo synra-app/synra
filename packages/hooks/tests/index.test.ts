@@ -41,7 +41,6 @@ function createMockAdapter(): ConnectionRuntimeAdapter {
       name: 'Device 1',
       ipAddress: '127.0.0.1',
       source: 'manual',
-      paired: true,
       connectable: true,
       discoveredAt: Date.now(),
       lastSeenAt: Date.now()
@@ -66,14 +65,6 @@ function createMockAdapter(): ConnectionRuntimeAdapter {
       }
     },
     async stopDiscovery() {},
-    async pairDevice(deviceId: string) {
-      return {
-        device: {
-          ...devices[0],
-          deviceId
-        }
-      }
-    },
     async probeConnectable(_port: number, _timeoutMs: number) {
       return { devices }
     },

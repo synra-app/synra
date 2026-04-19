@@ -7,7 +7,6 @@ export type SynraHookDevice = {
   name?: string
   source?: string
   lastSeenAt?: number
-  paired?: boolean
   connectable?: boolean
   [key: string]: unknown
 }

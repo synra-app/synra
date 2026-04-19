@@ -14,7 +14,6 @@ type MainHooksBridge = {
   startDiscovery: (options?: DeviceDiscoveryStartOptions) => Promise<unknown>
   stopDiscovery: () => Promise<unknown>
   getDiscoveredDevices: () => Promise<unknown>
-  pairDevice: (deviceId: string) => Promise<unknown>
   probeConnectable: (options?: DeviceDiscoveryProbeConnectableOptions) => Promise<unknown>
   openSession: (options: DeviceSessionOpenOptions) => Promise<unknown>
   closeSession: (sessionId?: string) => Promise<unknown>
@@ -146,7 +145,6 @@ function registerCapacitorElectronBridge(): void {
     startDiscovery: (options) => runtime.deviceDiscoveryService.startDiscovery(options),
     stopDiscovery: () => runtime.deviceDiscoveryService.stopDiscovery(),
     getDiscoveredDevices: () => runtime.deviceDiscoveryService.listDevices(),
-    pairDevice: (deviceId) => runtime.deviceDiscoveryService.pairDevice({ deviceId }),
     probeConnectable: (options) => runtime.deviceDiscoveryService.probeConnectable(options),
     openSession: (options) => runtime.connectionService.openSession(options),
     closeSession: (sessionId) => runtime.connectionService.closeSession({ sessionId }),

@@ -29,6 +29,7 @@ import java.net.NetworkInterface;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -167,26 +168,7 @@ public class LanDiscoveryPluginPlugin extends Plugin {
 
     @PluginMethod
     public void getDiscoveredDevices(PluginCall call) {
-        call.resolve(implementation.listDevices());
-    }
-
-    @PluginMethod
-    public void pairDevice(PluginCall call) {
-        String deviceId = call.getString("deviceId");
-        if (deviceId == null || deviceId.isEmpty()) {
-            call.reject("deviceId is required.");
-            return;
-        }
-
-        JSObject result = implementation.pairDevice(deviceId);
-        if (result == null) {
-            call.reject("Target device was not found.");
-            return;
-        }
-
-        JSObject payload = new JSObject();
-        payload.put("device", result.optJSONObject("device"));
-        notifyListeners("deviceUpdated", payload);
+        JSObject result = implementation.listDevices();
         call.resolve(result);
     }
 
@@ -592,4 +574,5 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             this.error = error;
         }
     }
+
 }

@@ -9,8 +9,6 @@ import type {
   DeviceDiscoveryListResult,
   DeviceDiscoveryProbeConnectableOptions,
   DeviceDiscoveryProbeConnectableResult,
-  DeviceDiscoveryPairOptions,
-  DeviceDiscoveryPairResult,
   DeviceSessionCloseOptions,
   DeviceSessionCloseResult,
   DeviceSessionGetStateOptions,
@@ -35,6 +33,7 @@ const UDP_DISCOVERY_PORT = 32101
 const UDP_DISCOVERY_MAGIC = 'SYNRA_DISCOVERY_V1'
 const DEFAULT_MDNS_SERVICE_TYPE = '_synra._tcp.local'
 const DEFAULT_ACK_TIMEOUT_MS = 3000
+const INBOUND_SESSION_STABLE_MS = 400
 const MAX_FRAME_BYTES = 256 * 1024
 const MAX_SEND_RETRIES = 3
 const SYNRA_APP_ID = 'synra'
@@ -57,7 +56,6 @@ export interface DeviceDiscoveryService {
   startDiscovery(options?: DeviceDiscoveryStartOptions): Promise<DeviceDiscoveryStartResult>
   stopDiscovery(): Promise<{ success: true }>
   listDevices(): Promise<DeviceDiscoveryListResult>
-  pairDevice(options: DeviceDiscoveryPairOptions): Promise<DeviceDiscoveryPairResult>
   probeConnectable(
     options?: DeviceDiscoveryProbeConnectableOptions
   ): Promise<DeviceDiscoveryProbeConnectableResult>
@@ -159,15 +157,13 @@ function toDevice(
   key: string,
   name: string,
   ipAddress: string,
-  source: DeviceSource,
-  paired = false
+  source: DeviceSource
 ): DiscoveredDevice {
   return {
     deviceId: hashDeviceId(key),
     name,
     ipAddress,
     source,
-    paired,
     connectable: false,
     discoveredAt: Date.now(),
     lastSeenAt: Date.now()
@@ -242,7 +238,6 @@ function mergeDevices(target: DeviceDiscoveryMap, devices: DiscoveredDevice[]): 
       target.set(device.deviceId, {
         ...existing,
         ...device,
-        paired: existing.paired || device.paired,
         lastSeenAt: Date.now()
       })
       continue
@@ -290,6 +285,7 @@ export function createDeviceDiscoveryService(
   const queuedWriteBySocket = new WeakMap<Socket, Promise<void>>()
   const inboundSessions = new Map<string, InboundSessionState>()
   const socketSessionIds = new Map<Socket, Set<string>>()
+  const emittedInboundSessionOpenIds = new Set<string>()
   const hostEvents: DeviceDiscoveryHostEvent[] = []
   let hostEventId = 0
   function pushHostEvent(
@@ -312,7 +308,6 @@ export function createDeviceDiscoveryService(
     const decoder = new FrameDecoder()
     const remote = `${socket.remoteAddress ?? 'unknown'}:${socket.remotePort ?? 'unknown'}`
     console.log('[transport] tcp client connected:', remote)
-    pushHostEvent('transport.session.opened', { remote })
     socket.on('data', (chunk: Buffer) => {
       const frames = decoder.push(chunk)
       for (const frame of frames) {
@@ -350,12 +345,13 @@ export function createDeviceDiscoveryService(
             frame.payload && typeof frame.payload === 'object'
               ? (frame.payload as { messageType?: string; payload?: unknown })
               : undefined
+          let normalizedPayload = envelope?.payload ?? frame.payload
           pushHostEvent('transport.message.received', {
             remote,
             sessionId: frame.sessionId,
             messageId: frame.messageId,
             messageType: envelope?.messageType as DeviceDiscoveryHostEvent['messageType'],
-            payload: envelope?.payload ?? frame.payload
+            payload: normalizedPayload
           })
           if (frame.messageId) {
             const ack: LanFrame = {
@@ -379,12 +375,32 @@ export function createDeviceDiscoveryService(
           })
           continue
         }
+
+        if (frame.type === 'close') {
+          if (frame.sessionId) {
+            inboundSessions.delete(frame.sessionId)
+            const ids = socketSessionIds.get(socket)
+            ids?.delete(frame.sessionId)
+            pushHostEvent('transport.session.closed', {
+              remote,
+              sessionId: frame.sessionId
+            })
+          }
+          socket.destroy()
+          continue
+        }
       }
     })
     socket.on('close', () => {
       console.log('[transport] tcp client closed:', remote)
+      const closedSessionIds = [...(socketSessionIds.get(socket) ?? new Set<string>())]
       releaseSocketInboundSessions(socket)
-      pushHostEvent('transport.session.closed', { remote })
+      for (const closedSessionId of closedSessionIds) {
+        pushHostEvent('transport.session.closed', {
+          remote,
+          sessionId: closedSessionId
+        })
+      }
     })
   })
   tcpServer.listen(DEFAULT_TCP_PORT, '0.0.0.0')
@@ -561,6 +577,19 @@ export function createDeviceDiscoveryService(
       socketSessionIds.set(socket, ids)
     }
     ids.add(sessionId)
+    if (!emittedInboundSessionOpenIds.has(sessionId)) {
+      setTimeout(() => {
+        const inbound = inboundSessions.get(sessionId)
+        if (!inbound || inbound.socket.destroyed || emittedInboundSessionOpenIds.has(sessionId)) {
+          return
+        }
+        emittedInboundSessionOpenIds.add(sessionId)
+        pushHostEvent('transport.session.opened', {
+          remote: inbound.remote,
+          sessionId: inbound.sessionId
+        })
+      }, INBOUND_SESSION_STABLE_MS)
+    }
   }
 
   function releaseSocketInboundSessions(socket: Socket): void {
@@ -570,6 +599,7 @@ export function createDeviceDiscoveryService(
     }
     for (const id of ids) {
       inboundSessions.delete(id)
+      emittedInboundSessionOpenIds.delete(id)
     }
     socketSessionIds.delete(socket)
   }
@@ -788,26 +818,6 @@ export function createDeviceDiscoveryService(
         startedAt: state.startedAt,
         scanWindowMs: state.scanWindowMs,
         devices: [...state.devices.values()]
-      }
-    },
-    async pairDevice(options: DeviceDiscoveryPairOptions): Promise<DeviceDiscoveryPairResult> {
-      const selected = state.devices.get(options.deviceId)
-      if (!selected) {
-        throw new BridgeError(BRIDGE_ERROR_CODES.notFound, 'Target device was not found.', {
-          deviceId: options.deviceId
-        })
-      }
-
-      const paired = {
-        ...selected,
-        paired: true,
-        lastSeenAt: Date.now()
-      }
-      state.devices.set(selected.deviceId, paired)
-
-      return {
-        success: true,
-        device: paired
       }
     },
     async probeConnectable(

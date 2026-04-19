@@ -10,6 +10,7 @@ defineProps<{
 const emit = defineEmits<{
   select: [sessionId: string]
   openMessages: [sessionId: string]
+  disconnect: [sessionId: string]
 }>()
 </script>
 
@@ -27,8 +28,27 @@ const emit = defineEmits<{
               {{ session.deviceId ?? session.remote ?? session.sessionId }}
             </p>
             <p class="text-muted-6">Session: {{ session.sessionId }}</p>
+            <p class="text-muted-6">
+              Endpoint:
+              {{
+                session.host
+                  ? `${session.host}${typeof session.port === 'number' ? `:${session.port}` : ''}`
+                  : (session.remote ?? '-')
+              }}
+            </p>
             <p class="text-muted-5">
-              Direction: {{ session.direction }} | Last Active: {{ session.lastActiveAt }}
+              Direction:
+              <span
+                class="rounded px-1.5 py-0.5 text-xs"
+                :class="
+                  session.direction === 'inbound'
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'bg-emerald-100 text-emerald-700'
+                "
+              >
+                {{ session.direction ?? 'outbound' }}
+              </span>
+              | Last Active: {{ session.lastActiveAt }}
             </p>
           </div>
           <button
@@ -37,6 +57,13 @@ const emit = defineEmits<{
             @click="emit('openMessages', session.sessionId)"
           >
             Open Messages
+          </button>
+          <button
+            v-if="mode === 'connect'"
+            class="rounded-md border border-gray-300 px-3 py-2"
+            @click="emit('disconnect', session.sessionId)"
+          >
+            Disconnect
           </button>
           <button
             v-else

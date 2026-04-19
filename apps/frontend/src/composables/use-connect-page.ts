@@ -22,38 +22,51 @@ export function useConnectPage() {
     loading,
     error,
     sessionState,
-    connectedSessions
+    connectedSessions,
+    reconnectTasks
   } = storeToRefs(store)
 
   const manualTarget = ref('')
-  const selectedDeviceId = ref<string>('')
   const socketPort = ref(32100)
+  const removeDialogOpen = ref(false)
+  const removeDialogMessage = ref('')
+  const removeDialogResolver = ref<((confirmed: boolean) => void) | null>(null)
 
   const statusLabel = computed(() => (scanState.value === 'scanning' ? 'Scanning' : 'Idle'))
-  const selectedDevice = computed(() =>
-    devices.value.find((device) => device.deviceId === selectedDeviceId.value)
-  )
   const connectableDevices = computed(() => devices.value.filter((device) => device.connectable))
   const connectedDevice = computed(() => {
-    if (!sessionState.value.deviceId) {
+    if (sessionState.value.state !== 'open' || !sessionState.value.deviceId) {
       return null
     }
 
     return devices.value.find((device) => device.deviceId === sessionState.value.deviceId) ?? null
   })
 
-  const canConnect = computed(
-    () =>
-      Boolean(selectedDevice.value) &&
-      Boolean(selectedDevice.value?.connectable) &&
-      selectedDevice.value?.paired &&
-      sessionState.value.state !== 'open' &&
-      !loading.value
-  )
-
   const activeConnections = computed(() =>
     connectedSessions.value.filter((session) => session.status === 'open')
   )
+  const connectedDeviceIds = computed(() =>
+    activeConnections.value
+      .map((session) => session.deviceId)
+      .filter((deviceId): deviceId is string => typeof deviceId === 'string' && deviceId.length > 0)
+  )
+  const isRemoveDialogOpen = computed(() => removeDialogOpen.value)
+
+  function askRemoveConfirmation(message: string): Promise<boolean> {
+    removeDialogMessage.value = message
+    removeDialogOpen.value = true
+    return new Promise<boolean>((resolve) => {
+      removeDialogResolver.value = resolve
+    })
+  }
+
+  function resolveRemoveDialog(confirmed: boolean): void {
+    const resolve = removeDialogResolver.value
+    removeDialogResolver.value = null
+    removeDialogOpen.value = false
+    removeDialogMessage.value = ''
+    resolve?.(confirmed)
+  }
 
   async function onStartDiscovery(): Promise<void> {
     await store.startDiscovery(parseManualTargets(manualTarget.value))
@@ -67,31 +80,62 @@ export function useConnectPage() {
     await store.refreshDevices()
   }
 
-  async function onPairDevice(deviceId: string): Promise<void> {
-    await store.pairDevice(deviceId)
-  }
-
-  async function onConnect(): Promise<void> {
-    if (!selectedDevice.value || !canConnect.value) {
+  async function onConnect(deviceId: string): Promise<void> {
+    const selectedDevice = devices.value.find((device) => device.deviceId === deviceId)
+    if (!selectedDevice || !selectedDevice.connectable || loading.value) {
       return
     }
-    if (
-      typeof selectedDevice.value.ipAddress !== 'string' ||
-      selectedDevice.value.ipAddress.length === 0
-    ) {
+    if (sessionState.value.state === 'open') {
+      return
+    }
+    if (typeof selectedDevice.ipAddress !== 'string' || selectedDevice.ipAddress.length === 0) {
       return
     }
 
     await store.openSession({
-      deviceId: selectedDevice.value.deviceId,
-      host: selectedDevice.value.ipAddress,
+      deviceId: selectedDevice.deviceId,
+      host: selectedDevice.ipAddress,
       port: socketPort.value
     })
     await store.syncSessionState()
   }
 
-  async function onDisconnect(): Promise<void> {
-    await store.closeSession(sessionState.value.sessionId)
+  async function onDisconnect(deviceId: string): Promise<void> {
+    const targetSession =
+      activeConnections.value.find((session) => session.deviceId === deviceId) ??
+      (sessionState.value.sessionId ? { sessionId: sessionState.value.sessionId } : undefined)
+    if (!targetSession?.sessionId) {
+      return
+    }
+    await store.closeSession(targetSession.sessionId)
+  }
+
+  async function onDisconnectSession(sessionId: string): Promise<void> {
+    if (!sessionId) {
+      return
+    }
+    await store.closeSession(sessionId)
+  }
+
+  async function onRemoveDevice(deviceId: string): Promise<void> {
+    const targetDevice = devices.value.find((device) => device.deviceId === deviceId)
+    const targetLabel = targetDevice?.name ?? deviceId
+    const confirmed = await askRemoveConfirmation(
+      `Remove device "${targetLabel}" from the current list?`
+    )
+    if (!confirmed) {
+      return
+    }
+    await onDisconnect(deviceId)
+    devices.value = devices.value.filter((device) => device.deviceId !== deviceId)
+  }
+
+  function onConfirmRemoveDevice(): void {
+    resolveRemoveDialog(true)
+  }
+
+  function onCancelRemoveDevice(): void {
+    resolveRemoveDialog(false)
   }
 
   function openMessagePage(sessionId: string): void {
@@ -105,21 +149,26 @@ export function useConnectPage() {
 
   return {
     activeConnections,
-    canConnect,
     connectableDevices,
     connectedDevice,
+    connectedDeviceIds,
     error,
+    isRemoveDialogOpen,
     loading,
     manualTarget,
     onConnect,
+    onCancelRemoveDevice,
+    onConfirmRemoveDevice,
     onDisconnect,
-    onPairDevice,
+    onDisconnectSession,
+    onRemoveDevice,
     onRefreshDiscovery,
     onStartDiscovery,
     onStopDiscovery,
     openMessagePage,
     scanWindowMs,
-    selectedDeviceId,
+    reconnectTasks,
+    removeDialogMessage,
     sessionState,
     socketPort,
     startedAt,
