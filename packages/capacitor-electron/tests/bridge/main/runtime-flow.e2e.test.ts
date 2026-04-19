@@ -90,6 +90,31 @@ describe('bridge/main runtime e2e flow', () => {
           state: 'open' as const
         })),
         pullHostEvents: vi.fn(async () => ({ events: [] }))
+      },
+      connectionService: {
+        openSession: vi.fn(async () => ({
+          success: true as const,
+          sessionId: 'session-e2e-1',
+          state: 'open' as const,
+          transport: 'tcp' as const
+        })),
+        closeSession: vi.fn(async () => ({
+          success: true as const,
+          sessionId: 'session-e2e-1',
+          transport: 'tcp' as const
+        })),
+        sendMessage: vi.fn(async () => ({
+          success: true as const,
+          messageId: 'msg-e2e-1',
+          sessionId: 'session-e2e-1',
+          transport: 'tcp' as const
+        })),
+        getSessionState: vi.fn(async () => ({
+          sessionId: 'session-e2e-1',
+          state: 'open' as const,
+          transport: 'tcp' as const
+        })),
+        pullHostEvents: vi.fn(async () => ({ events: [] }))
       }
     })
     const dispatch = createMainDispatcher(handlers)
@@ -200,6 +225,31 @@ describe('bridge/main runtime e2e flow', () => {
         getSessionState: vi.fn(async () => ({
           sessionId: 'session-e2e-2',
           state: 'open' as const
+        })),
+        pullHostEvents: vi.fn(async () => ({ events: [] }))
+      },
+      connectionService: {
+        openSession: vi.fn(async () => ({
+          success: true as const,
+          sessionId: 'session-e2e-2',
+          state: 'open' as const,
+          transport: 'tcp' as const
+        })),
+        closeSession: vi.fn(async () => ({
+          success: true as const,
+          sessionId: 'session-e2e-2',
+          transport: 'tcp' as const
+        })),
+        sendMessage: vi.fn(async () => ({
+          success: true as const,
+          messageId: 'msg-e2e-2',
+          sessionId: 'session-e2e-2',
+          transport: 'tcp' as const
+        })),
+        getSessionState: vi.fn(async () => ({
+          sessionId: 'session-e2e-2',
+          state: 'open' as const,
+          transport: 'tcp' as const
         })),
         pullHostEvents: vi.fn(async () => ({ events: [] }))
       }

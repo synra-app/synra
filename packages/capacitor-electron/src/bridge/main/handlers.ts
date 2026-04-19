@@ -2,6 +2,7 @@ import { BRIDGE_METHODS } from '../../shared/protocol/constants'
 import type { BridgeRequest, MethodPayloadMap, MethodResultMap } from '../../shared/protocol/types'
 import type { ExternalLinkService } from '../../host/services/external-link.service'
 import type { FileService } from '../../host/services/file.service'
+import type { ConnectionService } from '../../host/services/connection.service'
 import type { DeviceDiscoveryService } from '../../host/services/device-discovery.service'
 import type { PluginCatalogService } from '../../host/services/plugin-catalog.service'
 import type { PluginRuntimeService } from '../../host/services/plugin-runtime.service'
@@ -17,6 +18,7 @@ export type BridgeHandlerDependencies = {
   pluginRuntimeService: PluginRuntimeService
   pluginCatalogService: PluginCatalogService
   deviceDiscoveryService: DeviceDiscoveryService
+  connectionService: ConnectionService
 }
 
 export type BridgeHandlerMap = {
@@ -62,6 +64,15 @@ export function createBridgeHandlers(deps: BridgeHandlerDependencies): BridgeHan
     [BRIDGE_METHODS.discoveryGetSessionState]: async (request) =>
       deps.deviceDiscoveryService.getSessionState(request.payload),
     [BRIDGE_METHODS.discoveryPullHostEvents]: async () =>
-      deps.deviceDiscoveryService.pullHostEvents()
+      deps.deviceDiscoveryService.pullHostEvents(),
+    [BRIDGE_METHODS.connectionOpenSession]: async (request) =>
+      deps.connectionService.openSession(request.payload),
+    [BRIDGE_METHODS.connectionCloseSession]: async (request) =>
+      deps.connectionService.closeSession(request.payload),
+    [BRIDGE_METHODS.connectionSendMessage]: async (request) =>
+      deps.connectionService.sendMessage(request.payload),
+    [BRIDGE_METHODS.connectionGetSessionState]: async (request) =>
+      deps.connectionService.getSessionState(request.payload),
+    [BRIDGE_METHODS.connectionPullHostEvents]: async () => deps.connectionService.pullHostEvents()
   }
 }

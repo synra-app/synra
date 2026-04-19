@@ -182,6 +182,9 @@ importers:
       '@synra-plugin/chat':
         specifier: workspace:*
         version: link:../../packages/synra-plugin-chat
+      '@synra/capacitor-device-connection':
+        specifier: workspace:*
+        version: link:../../packages/capacitor-device-connection
       '@synra/capacitor-electron':
         specifier: workspace:*
         version: link:../../packages/capacitor-electron
@@ -264,6 +267,9 @@ importers:
       '@capacitor/ios':
         specifier: catalog:capacitor
         version: 8.3.1(@capacitor/core@8.3.1)
+      '@synra/capacitor-device-connection':
+        specifier: workspace:*
+        version: link:../../packages/capacitor-device-connection
       '@synra/capacitor-lan-discovery':
         specifier: workspace:*
         version: link:../../packages/capacitor-lan-discovery
@@ -274,6 +280,43 @@ importers:
       esno:
         specifier: ^4.8.0
         version: 4.8.0
+
+  packages/capacitor-device-connection:
+    dependencies:
+      '@synra/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+    devDependencies:
+      '@capacitor/android':
+        specifier: catalog:capacitor
+        version: 8.3.1(@capacitor/core@8.3.1)
+      '@capacitor/core':
+        specifier: catalog:capacitor
+        version: 8.3.1
+      '@capacitor/docgen':
+        specifier: catalog:capacitor
+        version: 0.3.1
+      '@capacitor/ios':
+        specifier: catalog:capacitor
+        version: 8.3.1(@capacitor/core@8.3.1)
+      '@types/node':
+        specifier: catalog:types
+        version: 25.6.0
+      '@typescript/native-preview':
+        specifier: catalog:types
+        version: 7.0.0-dev.20260328.1
+      bumpp:
+        specifier: catalog:release
+        version: 11.0.1
+      esbuild:
+        specifier: catalog:build
+        version: 0.28.0
+      typescript:
+        specifier: catalog:types
+        version: 6.0.3
+      vite-plus:
+        specifier: catalog:vite
+        version: 0.1.18(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(typescript@6.0.3)(vite@8.0.8(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(yaml@2.8.3))(yaml@2.8.3)
 
   packages/capacitor-electron:
     dependencies:

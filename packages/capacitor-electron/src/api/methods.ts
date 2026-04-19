@@ -16,5 +16,10 @@ export const API_METHODS = {
   closeDiscoverySession: BRIDGE_METHODS.discoveryCloseSession,
   sendDiscoverySessionMessage: BRIDGE_METHODS.discoverySendMessage,
   getDiscoverySessionState: BRIDGE_METHODS.discoveryGetSessionState,
-  pullDiscoveryHostEvents: BRIDGE_METHODS.discoveryPullHostEvents
+  pullDiscoveryHostEvents: BRIDGE_METHODS.discoveryPullHostEvents,
+  openConnectionSession: BRIDGE_METHODS.connectionOpenSession,
+  closeConnectionSession: BRIDGE_METHODS.connectionCloseSession,
+  sendConnectionSessionMessage: BRIDGE_METHODS.connectionSendMessage,
+  getConnectionSessionState: BRIDGE_METHODS.connectionGetSessionState,
+  pullConnectionHostEvents: BRIDGE_METHODS.connectionPullHostEvents
 } as const

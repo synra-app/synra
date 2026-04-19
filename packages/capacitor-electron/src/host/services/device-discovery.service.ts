@@ -311,7 +311,7 @@ export function createDeviceDiscoveryService(
   const tcpServer = createServer((socket) => {
     const decoder = new FrameDecoder()
     const remote = `${socket.remoteAddress ?? 'unknown'}:${socket.remotePort ?? 'unknown'}`
-    console.log('[lan-discovery] tcp client connected:', remote)
+    console.log('[transport] tcp client connected:', remote)
     pushHostEvent('transport.session.opened', { remote })
     socket.on('data', (chunk: Buffer) => {
       const frames = decoder.push(chunk)
@@ -341,16 +341,21 @@ export function createDeviceDiscoveryService(
               currentInbound.lastActiveAt = Date.now()
             }
           }
-          console.log('[lan-discovery] tcp message received:', {
+          console.log('[transport] tcp message received:', {
             remote,
             sessionId: frame.sessionId,
             messageId: frame.messageId
           })
+          const envelope =
+            frame.payload && typeof frame.payload === 'object'
+              ? (frame.payload as { messageType?: string; payload?: unknown })
+              : undefined
           pushHostEvent('transport.message.received', {
             remote,
             sessionId: frame.sessionId,
             messageId: frame.messageId,
-            payload: frame.payload
+            messageType: envelope?.messageType as DeviceDiscoveryHostEvent['messageType'],
+            payload: envelope?.payload ?? frame.payload
           })
           if (frame.messageId) {
             const ack: LanFrame = {
@@ -377,7 +382,7 @@ export function createDeviceDiscoveryService(
       }
     })
     socket.on('close', () => {
-      console.log('[lan-discovery] tcp client closed:', remote)
+      console.log('[transport] tcp client closed:', remote)
       releaseSocketInboundSessions(socket)
       pushHostEvent('transport.session.closed', { remote })
     })

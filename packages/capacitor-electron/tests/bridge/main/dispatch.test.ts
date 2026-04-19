@@ -80,6 +80,31 @@ function createHandlers() {
         state: 'open' as const
       })),
       pullHostEvents: vi.fn(async () => ({ events: [] }))
+    },
+    connectionService: {
+      openSession: vi.fn(async () => ({
+        success: true as const,
+        sessionId: 'session-1',
+        state: 'open' as const,
+        transport: 'tcp' as const
+      })),
+      closeSession: vi.fn(async () => ({
+        success: true as const,
+        sessionId: 'session-1',
+        transport: 'tcp' as const
+      })),
+      sendMessage: vi.fn(async () => ({
+        success: true as const,
+        messageId: 'msg-1',
+        sessionId: 'session-1',
+        transport: 'tcp' as const
+      })),
+      getSessionState: vi.fn(async () => ({
+        sessionId: 'session-1',
+        state: 'open' as const,
+        transport: 'tcp' as const
+      })),
+      pullHostEvents: vi.fn(async () => ({ events: [] }))
     }
   })
 }
@@ -194,6 +219,31 @@ describe('bridge/main/dispatch', () => {
         getSessionState: vi.fn(async () => ({
           sessionId: 'session-1',
           state: 'open' as const
+        })),
+        pullHostEvents: vi.fn(async () => ({ events: [] }))
+      },
+      connectionService: {
+        openSession: vi.fn(async () => ({
+          success: true as const,
+          sessionId: 'session-1',
+          state: 'open' as const,
+          transport: 'tcp' as const
+        })),
+        closeSession: vi.fn(async () => ({
+          success: true as const,
+          sessionId: 'session-1',
+          transport: 'tcp' as const
+        })),
+        sendMessage: vi.fn(async () => ({
+          success: true as const,
+          messageId: 'msg-1',
+          sessionId: 'session-1',
+          transport: 'tcp' as const
+        })),
+        getSessionState: vi.fn(async () => ({
+          sessionId: 'session-1',
+          state: 'open' as const,
+          transport: 'tcp' as const
         })),
         pullHostEvents: vi.fn(async () => ({ events: [] }))
       }

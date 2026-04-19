@@ -21,7 +21,7 @@ export function useConnectionState() {
     connectedSessions,
     activeSessions,
     sessionState: adapter.sessionState,
-    openSession: (options: { deviceId: string; host: string; port: number }) =>
+    openSession: (options: { deviceId: string; host: string; port: number; transport?: 'tcp' }) =>
       adapter.openSession(options),
     closeSession: (sessionId?: string) => adapter.closeSession(sessionId),
     syncSessionState: (sessionId?: string) => adapter.syncSessionState(sessionId)

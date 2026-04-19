@@ -23,7 +23,12 @@ export const BRIDGE_METHODS = {
   discoveryCloseSession: 'discovery.closeSession',
   discoverySendMessage: 'discovery.sendMessage',
   discoveryGetSessionState: 'discovery.getSessionState',
-  discoveryPullHostEvents: 'discovery.pullHostEvents'
+  discoveryPullHostEvents: 'discovery.pullHostEvents',
+  connectionOpenSession: 'connection.openSession',
+  connectionCloseSession: 'connection.closeSession',
+  connectionSendMessage: 'connection.sendMessage',
+  connectionGetSessionState: 'connection.getSessionState',
+  connectionPullHostEvents: 'connection.pullHostEvents'
 } as const
 
 export type BridgeMethod = (typeof BRIDGE_METHODS)[keyof typeof BRIDGE_METHODS]

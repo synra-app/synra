@@ -71,7 +71,12 @@ export type SynraHooksAdapter = {
   refreshDevices(): Promise<void>
   pairDevice(deviceId: string): Promise<void>
   probeConnectable(port?: number, timeoutMs?: number): Promise<void>
-  openSession(options: { deviceId: string; host: string; port: number }): Promise<void>
+  openSession(options: {
+    deviceId: string
+    host: string
+    port: number
+    transport?: 'tcp'
+  }): Promise<void>
   closeSession(sessionId?: string): Promise<void>
   syncSessionState(sessionId?: string): Promise<void>
   sendMessage(input: SynraHookSendMessageInput): Promise<void>

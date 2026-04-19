@@ -1,21 +1,11 @@
 import { WebPlugin } from '@capacitor/core'
 import type {
-  CloseSessionOptions,
-  CloseSessionResult,
-  GetSessionStateOptions,
-  GetSessionStateResult,
   LanDiscoveryPlugin,
   ListDiscoveredDevicesResult,
-  OpenSessionOptions,
-  OpenSessionResult,
   PairDeviceOptions,
   PairDeviceResult,
-  PullHostEventsResult,
   ProbeConnectableOptions,
   ProbeConnectableResult,
-  SendMessageOptions,
-  SendMessageResult,
-  SessionSnapshot,
   StartDiscoveryOptions,
   StartDiscoveryResult,
   StopDiscoveryResult
@@ -50,9 +40,6 @@ export class LanDiscoveryWeb extends WebPlugin implements LanDiscoveryPlugin {
     state: 'idle',
     scanWindowMs: DEFAULT_SCAN_WINDOW_MS,
     devices: []
-  }
-  private sessionState: SessionSnapshot = {
-    state: 'idle'
   }
 
   async startDiscovery(options: StartDiscoveryOptions = {}): Promise<StartDiscoveryResult> {
@@ -136,30 +123,5 @@ export class LanDiscoveryWeb extends WebPlugin implements LanDiscoveryPlugin {
       port,
       devices: this.scanState.devices
     }
-  }
-
-  async openSession(_options: OpenSessionOptions): Promise<OpenSessionResult> {
-    throw this.unavailable('openSession is not supported on web fallback.')
-  }
-
-  async closeSession(_options: CloseSessionOptions = {}): Promise<CloseSessionResult> {
-    this.sessionState = {
-      ...this.sessionState,
-      state: 'closed',
-      closedAt: now()
-    }
-    return { success: true, sessionId: this.sessionState.sessionId }
-  }
-
-  async sendMessage(_options: SendMessageOptions): Promise<SendMessageResult> {
-    throw this.unavailable('sendMessage is not supported on web fallback.')
-  }
-
-  async getSessionState(_options: GetSessionStateOptions = {}): Promise<GetSessionStateResult> {
-    return this.sessionState
-  }
-
-  async pullHostEvents(): Promise<PullHostEventsResult> {
-    return { events: [] }
   }
 }

@@ -36,7 +36,12 @@ export function createRuntimeInfoService(options: RuntimeInfoServiceOptions = {}
           'discovery.closeSession',
           'discovery.sendMessage',
           'discovery.getSessionState',
-          'discovery.pullHostEvents'
+          'discovery.pullHostEvents',
+          'connection.openSession',
+          'connection.closeSession',
+          'connection.sendMessage',
+          'connection.getSessionState',
+          'connection.pullHostEvents'
         ]
       }
     }

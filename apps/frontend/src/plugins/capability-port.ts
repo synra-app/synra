@@ -1,4 +1,4 @@
-import { LanDiscovery, type MessageReceivedEvent } from '@synra/capacitor-lan-discovery'
+import { DeviceConnection, type MessageReceivedEvent } from '@synra/capacitor-device-connection'
 import type { HostCapabilityPort } from '@synra/plugin-sdk'
 import type { SynraCrossDeviceMessage, SynraMessageType } from '@synra/protocol'
 
@@ -14,7 +14,7 @@ export class CapacitorCapabilityPortAdapter implements HostCapabilityPort {
   async sendCrossDeviceMessage<TType extends SynraMessageType>(
     message: SynraCrossDeviceMessage<TType>
   ): Promise<void> {
-    await LanDiscovery.sendMessage({
+    await DeviceConnection.sendMessage({
       sessionId: message.sessionId,
       messageId: message.messageId,
       messageType: message.type,
@@ -28,7 +28,7 @@ export class CapacitorCapabilityPortAdapter implements HostCapabilityPort {
   ): () => void {
     let removed = false
     let listener: { remove: () => Promise<void> } | undefined
-    void LanDiscovery.addListener('messageReceived', (event: MessageReceivedEvent) => {
+    void DeviceConnection.addListener('messageReceived', (event: MessageReceivedEvent) => {
       if (removed || event.messageType !== type) {
         return
       }

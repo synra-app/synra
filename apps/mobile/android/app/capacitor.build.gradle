@@ -9,6 +9,7 @@ android {
 
 apply from: "../capacitor-cordova-android-plugins/cordova.variables.gradle"
 dependencies {
+    implementation project(':synra-capacitor-device-connection')
     implementation project(':synra-capacitor-lan-discovery')
 
 }

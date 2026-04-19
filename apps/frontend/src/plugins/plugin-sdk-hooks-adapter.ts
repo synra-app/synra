@@ -39,7 +39,7 @@ function createFrontendHooksAdapter(): SynraHooksAdapter {
     pairDevice: (deviceId: string) => store.pairDevice(deviceId),
     probeConnectable: (port?: number, timeoutMs?: number) =>
       store.probeConnectable(port, timeoutMs),
-    openSession: (options: { deviceId: string; host: string; port: number }) =>
+    openSession: (options: { deviceId: string; host: string; port: number; transport?: 'tcp' }) =>
       store.openSession(options),
     closeSession: (sessionId?: string) => store.closeSession(sessionId),
     syncSessionState: (sessionId?: string) => store.syncSessionState(sessionId),

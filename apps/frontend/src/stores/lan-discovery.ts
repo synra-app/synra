@@ -2,16 +2,20 @@ import {
   LanDiscovery,
   type DiscoveredDevice,
   type DeviceConnectableUpdatedEvent,
+  type StartDiscoveryOptions
+} from '@synra/capacitor-lan-discovery'
+import {
+  DeviceConnection,
   type GetSessionStateResult,
+  type HostEvent,
   type MessageAckEvent,
   type MessageReceivedEvent,
   type OpenSessionOptions,
   type SessionClosedEvent,
   type SessionOpenedEvent,
   type SendMessageOptions,
-  type StartDiscoveryOptions,
   type TransportErrorEvent
-} from '@synra/capacitor-lan-discovery'
+} from '@synra/capacitor-device-connection'
 import type { SynraMessageType } from '@synra/protocol'
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
@@ -48,7 +52,8 @@ export const useLanDiscoveryStore = defineStore('lan-discovery', () => {
   const loading = ref(false)
   const error = ref<string | null>(null)
   const sessionState = ref<GetSessionStateResult>({
-    state: 'idle'
+    state: 'idle',
+    transport: 'tcp'
   })
   const eventLogs = ref<
     Array<{
@@ -194,13 +199,14 @@ export const useLanDiscoveryStore = defineStore('lan-discovery', () => {
   async function openSession(options: OpenSessionOptions): Promise<void> {
     loading.value = true
     try {
-      const result = await LanDiscovery.openSession(options)
+      const result = await DeviceConnection.openSession(options)
       sessionState.value = {
         sessionId: result.sessionId,
         deviceId: options.deviceId,
         host: options.host,
         port: options.port,
-        state: result.state
+        state: result.state,
+        transport: result.transport
       }
       upsertConnectedSession({
         sessionId: result.sessionId,
@@ -224,7 +230,7 @@ export const useLanDiscoveryStore = defineStore('lan-discovery', () => {
   async function closeSession(sessionId?: string): Promise<void> {
     loading.value = true
     try {
-      await LanDiscovery.closeSession({ sessionId })
+      await DeviceConnection.closeSession({ sessionId })
       sessionState.value = {
         ...sessionState.value,
         sessionId,
@@ -280,7 +286,7 @@ export const useLanDiscoveryStore = defineStore('lan-discovery', () => {
 
   async function syncSessionState(sessionId?: string): Promise<void> {
     try {
-      const snapshot = await LanDiscovery.getSessionState({ sessionId })
+      const snapshot = await DeviceConnection.getSessionState({ sessionId })
       sessionState.value = snapshot
     } catch (unknownError) {
       error.value =
@@ -325,7 +331,7 @@ export const useLanDiscoveryStore = defineStore('lan-discovery', () => {
         )
       }
     )
-    await LanDiscovery.addListener('sessionOpened', (event: SessionOpenedEvent) => {
+    await DeviceConnection.addListener('sessionOpened', (event: SessionOpenedEvent) => {
       appendEventLog('sessionOpened', event)
       sessionState.value = {
         ...sessionState.value,
@@ -348,7 +354,7 @@ export const useLanDiscoveryStore = defineStore('lan-discovery', () => {
         lastActiveAt: Date.now()
       })
     })
-    await LanDiscovery.addListener('sessionClosed', (event: SessionClosedEvent) => {
+    await DeviceConnection.addListener('sessionClosed', (event: SessionClosedEvent) => {
       appendEventLog('sessionClosed', event)
       sessionState.value = {
         ...sessionState.value,
@@ -357,7 +363,7 @@ export const useLanDiscoveryStore = defineStore('lan-discovery', () => {
       }
       markConnectionClosed(event.sessionId, Date.now())
     })
-    await LanDiscovery.addListener('messageReceived', (event: MessageReceivedEvent) => {
+    await DeviceConnection.addListener('messageReceived', (event: MessageReceivedEvent) => {
       appendEventLog('messageReceived', event)
       upsertConnectedSession({
         sessionId: event.sessionId,
@@ -368,13 +374,83 @@ export const useLanDiscoveryStore = defineStore('lan-discovery', () => {
         lastActiveAt: Date.now()
       })
     })
-    await LanDiscovery.addListener('messageAck', (event: MessageAckEvent) => {
+    await DeviceConnection.addListener('messageAck', (event: MessageAckEvent) => {
       appendEventLog('messageAck', event)
+      upsertConnectedSession({
+        sessionId: event.sessionId,
+        direction:
+          connectedSessions.value.find((item) => item.sessionId === event.sessionId)?.direction ??
+          'outbound',
+        status: 'open',
+        lastActiveAt: Date.now()
+      })
     })
-    await LanDiscovery.addListener('transportError', (event: TransportErrorEvent) => {
+    await DeviceConnection.addListener('transportError', (event: TransportErrorEvent) => {
       appendEventLog('transportError', event)
       error.value = event.message
     })
+
+    const replayHostEvent = (event: HostEvent): void => {
+      if (event.type === 'transport.message.received' && event.sessionId) {
+        appendEventLog('messageReceived', event)
+        upsertConnectedSession({
+          sessionId: event.sessionId,
+          direction:
+            connectedSessions.value.find((item) => item.sessionId === event.sessionId)?.direction ??
+            'inbound',
+          status: 'open',
+          lastActiveAt: Date.now()
+        })
+      } else if (event.type === 'transport.message.ack' && event.sessionId) {
+        appendEventLog('messageAck', event)
+        upsertConnectedSession({
+          sessionId: event.sessionId,
+          direction:
+            connectedSessions.value.find((item) => item.sessionId === event.sessionId)?.direction ??
+            'outbound',
+          status: 'open',
+          lastActiveAt: Date.now()
+        })
+      } else if (event.type === 'transport.session.opened' && event.sessionId) {
+        appendEventLog('sessionOpened', event)
+        upsertConnectedSession({
+          sessionId: event.sessionId,
+          direction:
+            connectedSessions.value.find((item) => item.sessionId === event.sessionId)?.direction ??
+            'inbound',
+          status: 'open',
+          remote: event.remote,
+          openedAt: event.timestamp,
+          lastActiveAt: Date.now()
+        })
+      } else if (event.type === 'transport.session.closed') {
+        appendEventLog('sessionClosed', event)
+        markConnectionClosed(event.sessionId, Date.now())
+      } else if (event.type === 'transport.error') {
+        appendEventLog('transportError', event)
+      }
+    }
+
+    const hostReplay = await DeviceConnection.pullHostEvents()
+    for (const hostEvent of hostReplay.events) {
+      replayHostEvent(hostEvent)
+    }
+
+    const snapshot = await DeviceConnection.getSessionState()
+    sessionState.value = snapshot
+    if (snapshot.state === 'open' && snapshot.sessionId) {
+      upsertConnectedSession({
+        sessionId: snapshot.sessionId,
+        direction: 'outbound',
+        status: 'open',
+        deviceId: snapshot.deviceId,
+        host: snapshot.host,
+        remote: snapshot.host,
+        port: snapshot.port,
+        openedAt: snapshot.openedAt,
+        lastActiveAt: Date.now()
+      })
+    }
     listenersRegistered = true
   }
 

@@ -51,6 +51,7 @@ export {
   createDeviceDiscoveryService,
   type DeviceDiscoveryService
 } from './host/services/device-discovery.service'
+export { createConnectionService, type ConnectionService } from './host/services/connection.service'
 export { createShellAdapter, type ShellAdapter } from './host/adapters/electron-shell.adapter'
 export {
   createFileSystemAdapter,
@@ -87,6 +88,7 @@ export type {
   DeviceDiscoveryPairResult,
   DeviceSessionOpenOptions,
   DeviceSessionOpenResult,
+  ConnectionTransport,
   DeviceSessionCloseOptions,
   DeviceSessionCloseResult,
   DeviceSessionSendMessageOptions,

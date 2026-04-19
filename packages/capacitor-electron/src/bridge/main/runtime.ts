@@ -5,6 +5,7 @@ import {
 import { createShellAdapter, type ShellAdapter } from '../../host/adapters/electron-shell.adapter'
 import { createExternalLinkService } from '../../host/services/external-link.service'
 import { createFileService } from '../../host/services/file.service'
+import { createConnectionService } from '../../host/services/connection.service'
 import { createDeviceDiscoveryService } from '../../host/services/device-discovery.service'
 import { createGitHubOpenPlugin } from '../../host/plugins/github-open.plugin'
 import { createPluginCatalogService } from '../../host/services/plugin-catalog.service'
@@ -44,6 +45,7 @@ export function setupBridgeMainRuntime(
   const deviceDiscoveryService = createDeviceDiscoveryService({
     onHostEvent: options.onDiscoveryHostEvent
   })
+  const connectionService = createConnectionService(deviceDiscoveryService)
   const pluginRuntimeService = createPluginRuntimeService()
   pluginRuntimeService.register(createGitHubOpenPlugin(externalLinkService))
   const pluginCatalogService = createPluginCatalogService(pluginRuntimeService)
@@ -54,7 +56,8 @@ export function setupBridgeMainRuntime(
     fileService,
     pluginRuntimeService,
     pluginCatalogService,
-    deviceDiscoveryService
+    deviceDiscoveryService,
+    connectionService
   })
 
   const dispatch = createMainDispatcher(handlers, { logger: options.logger })

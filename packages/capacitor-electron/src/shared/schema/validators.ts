@@ -70,7 +70,12 @@ export function isSupportedMethod(method: string): boolean {
     method === BRIDGE_METHODS.discoveryCloseSession ||
     method === BRIDGE_METHODS.discoverySendMessage ||
     method === BRIDGE_METHODS.discoveryGetSessionState ||
-    method === BRIDGE_METHODS.discoveryPullHostEvents
+    method === BRIDGE_METHODS.discoveryPullHostEvents ||
+    method === BRIDGE_METHODS.connectionOpenSession ||
+    method === BRIDGE_METHODS.connectionCloseSession ||
+    method === BRIDGE_METHODS.connectionSendMessage ||
+    method === BRIDGE_METHODS.connectionGetSessionState ||
+    method === BRIDGE_METHODS.connectionPullHostEvents
   )
 }
 

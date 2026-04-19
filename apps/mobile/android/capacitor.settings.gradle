@@ -2,5 +2,8 @@
 include ':capacitor-android'
 project(':capacitor-android').projectDir = new File('../../../node_modules/.pnpm/@capacitor+android@8.3.1_@capacitor+core@8.3.1/node_modules/@capacitor/android/capacitor')
 
+include ':synra-capacitor-device-connection'
+project(':synra-capacitor-device-connection').projectDir = new File('../../../packages/capacitor-device-connection/android')
+
 include ':synra-capacitor-lan-discovery'
 project(':synra-capacitor-lan-discovery').projectDir = new File('../../../packages/capacitor-lan-discovery/android')
