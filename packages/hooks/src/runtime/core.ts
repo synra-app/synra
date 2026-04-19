@@ -17,6 +17,8 @@ import { resolveRuntimeAdapter } from './resolve-adapter'
 
 const MAX_EVENT_LOGS = 200
 const MAX_SEEN_EVENT_IDS = 1000
+const MAX_CLOSED_CONNECTED_SESSIONS = 100
+const CONNECTED_SESSIONS_REBUILD_DEBOUNCE_MS = 200
 
 type RuntimeMessageHandler = {
   filter?: SynraConnectionFilter
@@ -95,12 +97,14 @@ function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionR
     transport: 'tcp'
   })
   const connectedSessions = ref<SynraHookConnectedSession[]>([])
+  const connectedSessionMap = new Map<string, SynraHookConnectedSession>()
   const eventLogs = ref<SynraHookEventLog[]>([])
   const reconnectTasks = ref<ReconnectTask[]>([])
   const reconnectLocks = new Set<string>()
   const listeners = new Set<RuntimeMessageHandler>()
   const seenEventIds = new Set<string>()
   let listenersRegistered = false
+  let connectedSessionsRebuildTimer: ReturnType<typeof setTimeout> | undefined
 
   function appendEventLog(type: SynraHookEventLog['type'], payload: unknown, id?: string): boolean {
     const eventId = id ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -126,42 +130,98 @@ function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionR
     return true
   }
 
-  function upsertConnectedSession(next: SynraHookConnectedSession): void {
-    const index = connectedSessions.value.findIndex((item) => item.sessionId === next.sessionId)
-    if (index === -1) {
-      connectedSessions.value.unshift(next)
-    } else {
-      connectedSessions.value[index] = {
-        ...connectedSessions.value[index],
-        ...next
+  function sessionSortValue(session: SynraHookConnectedSession): number {
+    return Number(session.lastActiveAt ?? session.closedAt ?? session.openedAt ?? 0)
+  }
+
+  function pruneClosedSessions(entries: SynraHookConnectedSession[]): SynraHookConnectedSession[] {
+    if (entries.length <= MAX_CLOSED_CONNECTED_SESSIONS) {
+      return entries
+    }
+    return entries.slice(0, MAX_CLOSED_CONNECTED_SESSIONS)
+  }
+
+  function rebuildConnectedSessionsView(): void {
+    const openSessions: SynraHookConnectedSession[] = []
+    const closedSessions: SynraHookConnectedSession[] = []
+
+    for (const item of connectedSessionMap.values()) {
+      if (item.status === 'open') {
+        openSessions.push(item)
+      } else {
+        closedSessions.push(item)
       }
     }
 
-    connectedSessions.value.sort((left, right) => {
-      if (left.status === 'open' && right.status !== 'open') {
-        return -1
+    openSessions.sort((left, right) => sessionSortValue(right) - sessionSortValue(left))
+    closedSessions.sort((left, right) => sessionSortValue(right) - sessionSortValue(left))
+    const retainedClosedSessions = pruneClosedSessions(closedSessions)
+    const nextView = [...openSessions, ...retainedClosedSessions]
+
+    connectedSessions.value = nextView
+
+    const retainedIds = new Set(nextView.map((item) => item.sessionId))
+    for (const sessionId of connectedSessionMap.keys()) {
+      if (!retainedIds.has(sessionId)) {
+        connectedSessionMap.delete(sessionId)
       }
-      if (left.status !== 'open' && right.status === 'open') {
-        return 1
+    }
+  }
+
+  function scheduleConnectedSessionsRebuild(immediate = false): void {
+    if (immediate) {
+      if (connectedSessionsRebuildTimer) {
+        clearTimeout(connectedSessionsRebuildTimer)
+        connectedSessionsRebuildTimer = undefined
       }
-      return (right.lastActiveAt ?? 0) - (left.lastActiveAt ?? 0)
-    })
+      rebuildConnectedSessionsView()
+      return
+    }
+
+    if (connectedSessionsRebuildTimer) {
+      return
+    }
+
+    connectedSessionsRebuildTimer = setTimeout(() => {
+      connectedSessionsRebuildTimer = undefined
+      rebuildConnectedSessionsView()
+    }, CONNECTED_SESSIONS_REBUILD_DEBOUNCE_MS)
+  }
+
+  function upsertConnectedSession(
+    next: SynraHookConnectedSession,
+    options: { immediate?: boolean } = {}
+  ): void {
+    const current = connectedSessionMap.get(next.sessionId)
+    connectedSessionMap.set(
+      next.sessionId,
+      current
+        ? {
+            ...current,
+            ...next
+          }
+        : next
+    )
+    scheduleConnectedSessionsRebuild(Boolean(options.immediate))
   }
 
   function markConnectionClosed(sessionId: string | undefined, reasonAt: number): void {
     if (!sessionId) {
       return
     }
-    const current = connectedSessions.value.find((item) => item.sessionId === sessionId)
+    const current = connectedSessionMap.get(sessionId)
     if (!current) {
       return
     }
-    upsertConnectedSession({
-      ...current,
-      status: 'closed',
-      closedAt: reasonAt,
-      lastActiveAt: reasonAt
-    })
+    upsertConnectedSession(
+      {
+        ...current,
+        status: 'closed',
+        closedAt: reasonAt,
+        lastActiveAt: reasonAt
+      },
+      { immediate: true }
+    )
   }
 
   function touchSessionActivity(
@@ -169,7 +229,7 @@ function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionR
     updatedAt: number,
     fallbackDirection: 'inbound' | 'outbound'
   ): void {
-    const existing = connectedSessions.value.find((item) => item.sessionId === sessionId)
+    const existing = connectedSessionMap.get(sessionId)
     if (!existing) {
       return
     }
@@ -294,17 +354,20 @@ function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionR
         state: result.state,
         transport: result.transport
       }
-      upsertConnectedSession({
-        sessionId: result.sessionId,
-        status: 'open',
-        deviceId: options.deviceId,
-        host: options.host,
-        remote: options.host,
-        port: options.port,
-        openedAt: Date.now(),
-        lastActiveAt: Date.now(),
-        direction: 'outbound'
-      })
+      upsertConnectedSession(
+        {
+          sessionId: result.sessionId,
+          status: 'open',
+          deviceId: options.deviceId,
+          host: options.host,
+          remote: options.host,
+          port: options.port,
+          openedAt: Date.now(),
+          lastActiveAt: Date.now(),
+          direction: 'outbound'
+        },
+        { immediate: true }
+      )
       error.value = null
     } catch (unknownError) {
       error.value = unknownToErrorMessage(unknownError, 'Failed to open session.')
@@ -468,17 +531,20 @@ function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionR
         state: 'open',
         openedAt: Date.now()
       }
-      upsertConnectedSession({
-        sessionId: event.sessionId,
-        status: 'open',
-        deviceId: event.deviceId,
-        host: event.host,
-        remote: event.host,
-        port: event.port,
-        openedAt: Date.now(),
-        lastActiveAt: Date.now(),
-        direction: inferredDirection
-      })
+      upsertConnectedSession(
+        {
+          sessionId: event.sessionId,
+          status: 'open',
+          deviceId: event.deviceId,
+          host: event.host,
+          remote: event.host,
+          port: event.port,
+          openedAt: Date.now(),
+          lastActiveAt: Date.now(),
+          direction: inferredDirection
+        },
+        { immediate: true }
+      )
     })
 
     await adapter.addSessionClosedListener((event) => {
@@ -540,17 +606,20 @@ function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionR
     const snapshot = await adapter.getSessionState()
     sessionState.value = snapshot
     if (snapshot.state === 'open' && snapshot.sessionId) {
-      upsertConnectedSession({
-        sessionId: snapshot.sessionId,
-        status: 'open',
-        deviceId: snapshot.deviceId,
-        host: snapshot.host,
-        remote: snapshot.host,
-        port: snapshot.port,
-        openedAt: snapshot.openedAt,
-        lastActiveAt: Date.now(),
-        direction: 'outbound'
-      })
+      upsertConnectedSession(
+        {
+          sessionId: snapshot.sessionId,
+          status: 'open',
+          deviceId: snapshot.deviceId,
+          host: snapshot.host,
+          remote: snapshot.host,
+          port: snapshot.port,
+          openedAt: snapshot.openedAt,
+          lastActiveAt: Date.now(),
+          direction: 'outbound'
+        },
+        { immediate: true }
+      )
     }
 
     listenersRegistered = true

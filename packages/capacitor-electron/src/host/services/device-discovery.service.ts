@@ -286,6 +286,7 @@ export function createDeviceDiscoveryService(
   const inboundSessions = new Map<string, InboundSessionState>()
   const socketSessionIds = new Map<Socket, Set<string>>()
   const emittedInboundSessionOpenIds = new Set<string>()
+  const pendingInboundOpenTimers = new Map<string, ReturnType<typeof setTimeout>>()
   const hostEvents: DeviceDiscoveryHostEvent[] = []
   let hostEventId = 0
   function pushHostEvent(
@@ -378,6 +379,7 @@ export function createDeviceDiscoveryService(
 
         if (frame.type === 'close') {
           if (frame.sessionId) {
+            clearPendingInboundOpenTimer(frame.sessionId)
             inboundSessions.delete(frame.sessionId)
             const ids = socketSessionIds.get(socket)
             ids?.delete(frame.sessionId)
@@ -577,19 +579,31 @@ export function createDeviceDiscoveryService(
       socketSessionIds.set(socket, ids)
     }
     ids.add(sessionId)
-    if (!emittedInboundSessionOpenIds.has(sessionId)) {
-      setTimeout(() => {
-        const inbound = inboundSessions.get(sessionId)
-        if (!inbound || inbound.socket.destroyed || emittedInboundSessionOpenIds.has(sessionId)) {
-          return
-        }
-        emittedInboundSessionOpenIds.add(sessionId)
-        pushHostEvent('transport.session.opened', {
-          remote: inbound.remote,
-          sessionId: inbound.sessionId
-        })
-      }, INBOUND_SESSION_STABLE_MS)
+    if (emittedInboundSessionOpenIds.has(sessionId) || pendingInboundOpenTimers.has(sessionId)) {
+      return
     }
+    const timer = setTimeout(() => {
+      pendingInboundOpenTimers.delete(sessionId)
+      const inbound = inboundSessions.get(sessionId)
+      if (!inbound || inbound.socket.destroyed || emittedInboundSessionOpenIds.has(sessionId)) {
+        return
+      }
+      emittedInboundSessionOpenIds.add(sessionId)
+      pushHostEvent('transport.session.opened', {
+        remote: inbound.remote,
+        sessionId: inbound.sessionId
+      })
+    }, INBOUND_SESSION_STABLE_MS)
+    pendingInboundOpenTimers.set(sessionId, timer)
+  }
+
+  function clearPendingInboundOpenTimer(sessionId: string): void {
+    const timer = pendingInboundOpenTimers.get(sessionId)
+    if (!timer) {
+      return
+    }
+    clearTimeout(timer)
+    pendingInboundOpenTimers.delete(sessionId)
   }
 
   function releaseSocketInboundSessions(socket: Socket): void {
@@ -598,6 +612,7 @@ export function createDeviceDiscoveryService(
       return
     }
     for (const id of ids) {
+      clearPendingInboundOpenTimer(id)
       inboundSessions.delete(id)
       emittedInboundSessionOpenIds.delete(id)
     }
@@ -898,6 +913,7 @@ export function createDeviceDiscoveryService(
     async closeSession(options: DeviceSessionCloseOptions = {}): Promise<DeviceSessionCloseResult> {
       const targetSessionId = options.sessionId ?? session.sessionId
       if (targetSessionId) {
+        clearPendingInboundOpenTimer(targetSessionId)
         const inbound = inboundSessions.get(targetSessionId)
         if (inbound && !inbound.socket.destroyed) {
           try {
