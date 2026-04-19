@@ -1,20 +1,20 @@
 <script setup lang="ts">
 type SidebarItem = {
-  label: string;
-  icon: string;
-  to: string;
-};
+  label: string
+  icon: string
+  to: string
+}
 
 defineProps<{
-  items: SidebarItem[];
-  currentPath: string;
-  collapsed: boolean;
-}>();
+  items: SidebarItem[]
+  currentPath: string
+  collapsed: boolean
+}>()
 
 const emit = defineEmits<{
-  toggleCollapse: [];
-  closeMobile: [];
-}>();
+  toggleCollapse: []
+  closeMobile: []
+}>()
 </script>
 
 <template>

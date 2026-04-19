@@ -1,9 +1,9 @@
-import type { CapacitorConfig } from "@capacitor/cli";
+import type { CapacitorConfig } from '@capacitor/cli'
 
 const config: CapacitorConfig = {
-  appId: "com.synra.electron",
-  appName: "Synra",
-  webDir: "www",
-};
+  appId: 'com.synra.electron',
+  appName: 'Synra',
+  webDir: 'www'
+}
 
-export default config;
+export default config

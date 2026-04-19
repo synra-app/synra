@@ -1,3 +1,3 @@
-import { synraVitePluginConfig } from "@synra/plugin-sdk/vite";
+import { synraVitePluginConfig } from '@synra/plugin-sdk/vite'
 
-export default synraVitePluginConfig();
+export default synraVitePluginConfig()

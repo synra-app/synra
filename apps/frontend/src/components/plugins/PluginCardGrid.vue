@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import type { PluginCardItem } from "../../composables/use-plugin-catalog";
+import type { PluginCardItem } from '../../composables/use-plugin-catalog'
 
 defineProps<{
-  plugins: PluginCardItem[];
-}>();
+  plugins: PluginCardItem[]
+}>()
 
 const emit = defineEmits<{
-  open: [plugin: PluginCardItem];
-}>();
+  open: [plugin: PluginCardItem]
+}>()
 </script>
 
 <template>

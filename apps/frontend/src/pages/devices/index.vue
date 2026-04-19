@@ -19,8 +19,8 @@ const {
   sessionState,
   socketPort,
   startedAt,
-  statusLabel,
-} = useConnectPage();
+  statusLabel
+} = useConnectPage()
 </script>
 
 <template>
@@ -33,14 +33,14 @@ const {
         <div class="grid grid-cols-1 gap-2 text-sm md:grid-cols-2">
           <p><strong>Scan status:</strong> {{ statusLabel }}</p>
           <p><strong>Scan window:</strong> {{ scanWindowMs }} ms</p>
-          <p><strong>Started at:</strong> {{ startedAt ?? "-" }}</p>
+          <p><strong>Started at:</strong> {{ startedAt ?? '-' }}</p>
           <p><strong>Socket port:</strong> {{ socketPort }}</p>
           <p><strong>Session state:</strong> {{ sessionState.state }}</p>
-          <p><strong>Session ID:</strong> {{ sessionState.sessionId ?? "-" }}</p>
+          <p><strong>Session ID:</strong> {{ sessionState.sessionId ?? '-' }}</p>
         </div>
         <p>
           <strong>Connected device:</strong>
-          {{ connectedDevice ? `${connectedDevice.name} (${connectedDevice.ipAddress})` : "None" }}
+          {{ connectedDevice ? `${connectedDevice.name} (${connectedDevice.ipAddress})` : 'None' }}
         </p>
       </PanelCard>
 

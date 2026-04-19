@@ -1,20 +1,20 @@
 <script setup lang="ts">
-import type { DiscoveredDevice } from "@synra/capacitor-lan-discovery";
+import type { DiscoveredDevice } from '@synra/capacitor-lan-discovery'
 
-const selectedDeviceId = defineModel<string>("selectedDeviceId", { required: true });
+const selectedDeviceId = defineModel<string>('selectedDeviceId', { required: true })
 
 defineProps<{
-  devices: DiscoveredDevice[];
-  loading: boolean;
-  canConnect: boolean;
-  hasConnectedDevice: boolean;
-}>();
+  devices: DiscoveredDevice[]
+  loading: boolean
+  canConnect: boolean
+  hasConnectedDevice: boolean
+}>()
 
 const emit = defineEmits<{
-  pair: [deviceId: string];
-  connect: [];
-  disconnect: [];
-}>();
+  pair: [deviceId: string]
+  connect: []
+  disconnect: []
+}>()
 </script>
 
 <template>
@@ -36,8 +36,8 @@ const emit = defineEmits<{
               Connectable:
               {{
                 device.connectable
-                  ? "yes"
-                  : `no${device.connectCheckError ? ` (${device.connectCheckError})` : ""}`
+                  ? 'yes'
+                  : `no${device.connectCheckError ? ` (${device.connectCheckError})` : ''}`
               }}
             </p>
             <label class="inline-flex items-center gap-2 text-gray-700">
@@ -55,7 +55,7 @@ const emit = defineEmits<{
             :disabled="loading || device.paired"
             @click="emit('pair', device.deviceId)"
           >
-            {{ device.paired ? "Paired" : "Pair" }}
+            {{ device.paired ? 'Paired' : 'Pair' }}
           </button>
         </div>
       </li>

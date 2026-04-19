@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import type { PluginCardItem } from "../../composables/use-plugin-catalog";
+import type { PluginCardItem } from '../../composables/use-plugin-catalog'
 
 defineProps<{
-  plugin: PluginCardItem;
-}>();
+  plugin: PluginCardItem
+}>()
 
 const emit = defineEmits<{
-  open: [plugin: PluginCardItem];
-}>();
+  open: [plugin: PluginCardItem]
+}>()
 </script>
 
 <template>
@@ -39,7 +39,7 @@ const emit = defineEmits<{
         :disabled="plugin.installState === 'installing'"
         @click="emit('open', plugin)"
       >
-        {{ plugin.installState === "installing" ? "Installing..." : "Open" }}
+        {{ plugin.installState === 'installing' ? 'Installing...' : 'Open' }}
       </button>
       <p v-if="plugin.installState === 'failed'" class="mt-2 text-xs text-error-7">
         Install failed. Try opening again.

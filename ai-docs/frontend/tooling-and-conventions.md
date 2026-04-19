@@ -44,14 +44,14 @@
 
 ```ts
 // vite.config.ts (示例片段)
-import AutoImport from "unplugin-auto-import/vite";
+import AutoImport from 'unplugin-auto-import/vite'
 
 AutoImport({
-  imports: ["vue", "vue-router", "pinia"],
-  dirs: ["src/composables"],
-  dts: ".auto-generated/auto-imports.d.ts",
-  vueTemplate: true,
-});
+  imports: ['vue', 'vue-router', 'pinia'],
+  dirs: ['src/composables'],
+  dts: '.auto-generated/auto-imports.d.ts',
+  vueTemplate: true
+})
 ```
 
 说明：具体路径与选项以前端项目最终配置为准，本文件仅定义方向与边界。

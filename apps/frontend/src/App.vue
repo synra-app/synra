@@ -1,41 +1,41 @@
 <script setup lang="ts">
-import { storeToRefs } from "pinia";
-import { useAppShellStore } from "./stores/app-shell";
-import { deactivatePlugin } from "./plugins/host";
+import { storeToRefs } from 'pinia'
+import { useAppShellStore } from './stores/app-shell'
+import { deactivatePlugin } from './plugins/host'
 
-const route = useRoute();
-const router = useRouter();
-const appShellStore = useAppShellStore();
-const { isSidebarCollapsed, isMobileMenuOpen } = storeToRefs(appShellStore);
+const route = useRoute()
+const router = useRouter()
+const appShellStore = useAppShellStore()
+const { isSidebarCollapsed, isMobileMenuOpen } = storeToRefs(appShellStore)
 
 const menuItems = [
-  { label: "Home", icon: "i-lucide-home", to: "/home" },
-  { label: "Plugins", icon: "i-lucide-puzzle", to: "/plugins" },
-  { label: "Devices", icon: "i-lucide-monitor-smartphone", to: "/devices" },
-  { label: "Settings", icon: "i-lucide-settings", to: "/settings" },
-];
+  { label: 'Home', icon: 'i-lucide-home', to: '/home' },
+  { label: 'Plugins', icon: 'i-lucide-puzzle', to: '/plugins' },
+  { label: 'Devices', icon: 'i-lucide-monitor-smartphone', to: '/devices' },
+  { label: 'Settings', icon: 'i-lucide-settings', to: '/settings' }
+]
 
 watch(
   () => route.fullPath,
   () => {
-    appShellStore.closeMobileMenu();
-  },
-);
+    appShellStore.closeMobileMenu()
+  }
+)
 
 watch(
   () => route.path,
   (nextPath, previousPath) => {
-    const pluginPathPattern = /^\/plugin-([a-z0-9-]+)\//;
-    const nextMatch = nextPath.match(pluginPathPattern);
-    const previousMatch = previousPath?.match(pluginPathPattern);
-    const previousPluginId = previousMatch?.[1];
-    const nextPluginId = nextMatch?.[1];
+    const pluginPathPattern = /^\/plugin-([a-z0-9-]+)\//
+    const nextMatch = nextPath.match(pluginPathPattern)
+    const previousMatch = previousPath?.match(pluginPathPattern)
+    const previousPluginId = previousMatch?.[1]
+    const nextPluginId = nextMatch?.[1]
 
     if (previousPluginId && previousPluginId !== nextPluginId) {
-      void deactivatePlugin(router, previousPluginId);
+      void deactivatePlugin(router, previousPluginId)
     }
-  },
-);
+  }
+)
 </script>
 
 <template>

@@ -1,16 +1,16 @@
 <script setup lang="ts">
-import type { ConnectedSession } from "../../stores/lan-discovery";
+import type { ConnectedSession } from '../../stores/lan-discovery'
 
 defineProps<{
-  sessions: ConnectedSession[];
-  selectedSessionId?: string;
-  mode: "connect" | "messages";
-}>();
+  sessions: ConnectedSession[]
+  selectedSessionId?: string
+  mode: 'connect' | 'messages'
+}>()
 
 const emit = defineEmits<{
-  select: [sessionId: string];
-  openMessages: [sessionId: string];
-}>();
+  select: [sessionId: string]
+  openMessages: [sessionId: string]
+}>()
 </script>
 
 <template>
@@ -48,16 +48,16 @@ const emit = defineEmits<{
             "
             @click="emit('select', session.sessionId)"
           >
-            {{ selectedSessionId === session.sessionId ? "Selected" : "Open" }}
+            {{ selectedSessionId === session.sessionId ? 'Selected' : 'Open' }}
           </button>
         </div>
       </li>
     </ul>
     <p v-else class="text-muted-5">
       {{
-        mode === "connect"
-          ? "No active sessions yet."
-          : "No active session. Open a device session first."
+        mode === 'connect'
+          ? 'No active sessions yet.'
+          : 'No active session. Open a device session first.'
       }}
     </p>
   </PanelCard>

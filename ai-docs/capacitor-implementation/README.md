@@ -72,7 +72,7 @@ vp exec --filter mobile cap init
 Capacitor 配置文件中必须保持：
 
 ```ts
-webDir: "www";
+webDir: 'www'
 ```
 
 这保证 `mobile` 工程不依赖跨目录相对路径，避免原生 IDE/CI 对路径解析不一致。

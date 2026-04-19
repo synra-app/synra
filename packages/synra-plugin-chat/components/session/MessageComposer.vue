@@ -1,15 +1,15 @@
 <script setup lang="ts">
-const messageInput = defineModel<string>("messageInput", { required: true });
-const messageType = defineModel<string>("messageType", { required: true });
+const messageInput = defineModel<string>('messageInput', { required: true })
+const messageType = defineModel<string>('messageType', { required: true })
 
 defineProps<{
-  disabled: boolean;
-  canSend: boolean;
-}>();
+  disabled: boolean
+  canSend: boolean
+}>()
 
 const emit = defineEmits<{
-  send: [];
-}>();
+  send: []
+}>()
 </script>
 
 <template>

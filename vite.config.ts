@@ -1,24 +1,28 @@
-import { defineConfig } from "vite-plus";
-
-const generatedIgnoreGlobs = [
-  "**/node_modules/**",
-  "**/dist/**",
-  "apps/mobile/www/**",
-  "apps/mobile/android/**",
-];
+import { defineConfig } from 'vite-plus'
 
 export default defineConfig({
-  staged: {
-    "*": "vp check --fix",
-  },
-  fmt: {
-    ignorePatterns: generatedIgnoreGlobs,
+  pack: {
+    dts: {
+      tsgo: true
+    },
+    exports: true
   },
   lint: {
-    ignorePatterns: generatedIgnoreGlobs,
-    options: { typeAware: true, typeCheck: true },
+    options: {
+      typeAware: true,
+      typeCheck: true
+    }
+  },
+  fmt: {
+    singleQuote: true,
+    semi: false,
+    trailingComma: 'none'
+  },
+  staged: {
+    'apps/**/src/**/*.{ts,vue,scss}': ['vp fmt', 'vp lint --fix', 'vp check --fix'],
+    'packages/**/*.{ts,vue}': ['vp fmt', 'vp lint --fix', 'vp check --fix']
   },
   run: {
-    cache: true,
-  },
-});
+    cache: true
+  }
+})

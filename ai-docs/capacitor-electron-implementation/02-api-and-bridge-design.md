@@ -27,9 +27,9 @@
 
 ```ts
 export interface ElectronBridgePlugin {
-  getRuntimeInfo(): Promise<RuntimeInfo>;
-  openExternal(options: OpenExternalOptions): Promise<OperationResult>;
-  readFile(options: ReadFileOptions): Promise<ReadFileResult>;
+  getRuntimeInfo(): Promise<RuntimeInfo>
+  openExternal(options: OpenExternalOptions): Promise<OperationResult>
+  readFile(options: ReadFileOptions): Promise<ReadFileResult>
 }
 ```
 
@@ -49,16 +49,16 @@ export interface ElectronBridgePlugin {
 
 ```ts
 type BridgeRequest<TPayload = unknown> = {
-  protocolVersion: "1.0";
-  requestId: string;
-  method: string;
-  payload: TPayload;
+  protocolVersion: '1.0'
+  requestId: string
+  method: string
+  payload: TPayload
   meta?: {
-    timeoutMs?: number;
-    source?: "capacitor-webview";
-    traceId?: string;
-  };
-};
+    timeoutMs?: number
+    source?: 'capacitor-webview'
+    traceId?: string
+  }
+}
 ```
 
 字段约束：
@@ -74,14 +74,14 @@ type BridgeRequest<TPayload = unknown> = {
 type BridgeResponse<TData = unknown> =
   | { ok: true; requestId: string; data: TData }
   | {
-      ok: false;
-      requestId: string;
+      ok: false
+      requestId: string
       error: {
-        code: BridgeErrorCode;
-        message: string;
-        details?: unknown;
-      };
-    };
+        code: BridgeErrorCode
+        message: string
+        details?: unknown
+      }
+    }
 ```
 
 响应约束：
@@ -162,14 +162,14 @@ window.__synraCapElectron.invoke(method, payload, options?)
 
 ```ts
 type RuntimeInfo = {
-  protocolVersion: string;
-  supportedProtocolVersions: string[];
-  capacitorVersion: string;
-  electronVersion: string;
-  nodeVersion: string;
-  platform: "win32" | "darwin" | "linux";
-  capabilities: string[];
-};
+  protocolVersion: string
+  supportedProtocolVersions: string[]
+  capacitorVersion: string
+  electronVersion: string
+  nodeVersion: string
+  platform: 'win32' | 'darwin' | 'linux'
+  capabilities: string[]
+}
 ```
 
 ## 安全要点

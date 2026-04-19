@@ -1,19 +1,19 @@
-import { storeToRefs } from "pinia";
-import { computed, onMounted, ref } from "vue";
-import { useRouter } from "vue-router";
-import { openPluginPage } from "../plugins/host";
-import { useLanDiscoveryStore } from "../stores/lan-discovery";
+import { storeToRefs } from 'pinia'
+import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { openPluginPage } from '../plugins/host'
+import { useLanDiscoveryStore } from '../stores/lan-discovery'
 
 function parseManualTargets(value: string): string[] {
   return value
-    .split(",")
+    .split(',')
     .map((item) => item.trim())
-    .filter((item) => item.length > 0);
+    .filter((item) => item.length > 0)
 }
 
 export function useConnectPage() {
-  const router = useRouter();
-  const store = useLanDiscoveryStore();
+  const router = useRouter()
+  const store = useLanDiscoveryStore()
   const {
     scanState,
     startedAt,
@@ -22,80 +22,80 @@ export function useConnectPage() {
     loading,
     error,
     sessionState,
-    connectedSessions,
-  } = storeToRefs(store);
+    connectedSessions
+  } = storeToRefs(store)
 
-  const manualTarget = ref("");
-  const selectedDeviceId = ref<string>("");
-  const socketPort = ref(32100);
+  const manualTarget = ref('')
+  const selectedDeviceId = ref<string>('')
+  const socketPort = ref(32100)
 
-  const statusLabel = computed(() => (scanState.value === "scanning" ? "Scanning" : "Idle"));
+  const statusLabel = computed(() => (scanState.value === 'scanning' ? 'Scanning' : 'Idle'))
   const selectedDevice = computed(() =>
-    devices.value.find((device) => device.deviceId === selectedDeviceId.value),
-  );
-  const connectableDevices = computed(() => devices.value.filter((device) => device.connectable));
+    devices.value.find((device) => device.deviceId === selectedDeviceId.value)
+  )
+  const connectableDevices = computed(() => devices.value.filter((device) => device.connectable))
   const connectedDevice = computed(() => {
     if (!sessionState.value.deviceId) {
-      return null;
+      return null
     }
 
-    return devices.value.find((device) => device.deviceId === sessionState.value.deviceId) ?? null;
-  });
+    return devices.value.find((device) => device.deviceId === sessionState.value.deviceId) ?? null
+  })
 
   const canConnect = computed(
     () =>
       Boolean(selectedDevice.value) &&
       Boolean(selectedDevice.value?.connectable) &&
       selectedDevice.value?.paired &&
-      sessionState.value.state !== "open" &&
-      !loading.value,
-  );
+      sessionState.value.state !== 'open' &&
+      !loading.value
+  )
 
   const activeConnections = computed(() =>
-    connectedSessions.value.filter((session) => session.status === "open"),
-  );
+    connectedSessions.value.filter((session) => session.status === 'open')
+  )
 
   async function onStartDiscovery(): Promise<void> {
-    await store.startDiscovery(parseManualTargets(manualTarget.value));
+    await store.startDiscovery(parseManualTargets(manualTarget.value))
   }
 
   async function onStopDiscovery(): Promise<void> {
-    await store.stopDiscovery();
+    await store.stopDiscovery()
   }
 
   async function onRefreshDiscovery(): Promise<void> {
-    await store.refreshDevices();
+    await store.refreshDevices()
   }
 
   async function onPairDevice(deviceId: string): Promise<void> {
-    await store.pairDevice(deviceId);
+    await store.pairDevice(deviceId)
   }
 
   async function onConnect(): Promise<void> {
     if (!selectedDevice.value || !canConnect.value) {
-      return;
+      return
     }
 
     await store.openSession({
       deviceId: selectedDevice.value.deviceId,
       host: selectedDevice.value.ipAddress,
-      port: socketPort.value,
-    });
-    await store.syncSessionState();
+      port: socketPort.value
+    })
+    await store.syncSessionState()
   }
 
   async function onDisconnect(): Promise<void> {
-    await store.closeSession(sessionState.value.sessionId);
+    await store.closeSession(sessionState.value.sessionId)
   }
 
   function openMessagePage(sessionId: string): void {
-    void openPluginPage(router, "chat", "/home", { sessionId });
+    void openPluginPage(router, 'chat', '/home', { sessionId })
   }
 
   onMounted(async () => {
-    await store.ensureListeners();
-    await store.refreshDevices();
-  });
+    await store.ensureListeners()
+    await store.refreshDevices()
+  })
 
   return {
     activeConnections,
@@ -117,6 +117,6 @@ export function useConnectPage() {
     sessionState,
     socketPort,
     startedAt,
-    statusLabel,
-  };
+    statusLabel
+  }
 }

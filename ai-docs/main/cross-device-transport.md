@@ -152,9 +152,9 @@ flowchart LR
 
 ```ts
 type ProtocolError = {
-  code: string;
-  message: string;
-};
+  code: string
+  message: string
+}
 ```
 
 ### 错误域与关键细码
@@ -185,139 +185,139 @@ type ProtocolError = {
 ## `@synra/protocol` TypeScript（当前实现）
 
 ```ts
-export type ProtocolVersion = `${number}.${number}.${number}`;
+export type ProtocolVersion = `${number}.${number}.${number}`
 
 export type SynraMessageType =
-  | "share.detected"
-  | "action.proposed"
-  | "action.selected"
-  | "action.executing"
-  | "action.completed"
-  | "action.failed"
-  | "transport.session.opened"
-  | "transport.session.closed"
-  | "transport.message.received"
-  | "transport.message.ack"
-  | "transport.error"
-  | `custom.${string}`;
+  | 'share.detected'
+  | 'action.proposed'
+  | 'action.selected'
+  | 'action.executing'
+  | 'action.completed'
+  | 'action.failed'
+  | 'transport.session.opened'
+  | 'transport.session.closed'
+  | 'transport.message.received'
+  | 'transport.message.ack'
+  | 'transport.error'
+  | `custom.${string}`
 
-export type RuntimeFinishedStatus = "success" | "failed" | "cancelled";
+export type RuntimeFinishedStatus = 'success' | 'failed' | 'cancelled'
 
 export type ProtocolErrorCode =
-  | "TRANSPORT_UNAVAILABLE"
-  | "ACK_TIMEOUT"
-  | "CONNECTION_LOST"
-  | "NOT_PAIRED"
-  | "SESSION_EXPIRED"
-  | "PAIRING_REQUIRED"
-  | "RUNTIME_BUSY"
-  | "RUNTIME_INVALID_STATE"
-  | "PLUGIN_REJECTED"
-  | "EXECUTION_TIMEOUT"
-  | "ADAPTER_ERROR"
-  | "PLUGIN_NOT_FOUND"
-  | "PLUGIN_INCOMPATIBLE"
-  | "PLUGIN_BUNDLE_FETCH_FAILED"
-  | "USER_NOT_CONFIRMED";
+  | 'TRANSPORT_UNAVAILABLE'
+  | 'ACK_TIMEOUT'
+  | 'CONNECTION_LOST'
+  | 'NOT_PAIRED'
+  | 'SESSION_EXPIRED'
+  | 'PAIRING_REQUIRED'
+  | 'RUNTIME_BUSY'
+  | 'RUNTIME_INVALID_STATE'
+  | 'PLUGIN_REJECTED'
+  | 'EXECUTION_TIMEOUT'
+  | 'ADAPTER_ERROR'
+  | 'PLUGIN_NOT_FOUND'
+  | 'PLUGIN_INCOMPATIBLE'
+  | 'PLUGIN_BUNDLE_FETCH_FAILED'
+  | 'USER_NOT_CONFIRMED'
 
 export interface ProtocolError {
-  code: ProtocolErrorCode;
-  message: string;
+  code: ProtocolErrorCode
+  message: string
 }
 
 export type SynraCrossDeviceMessage<TType extends SynraMessageType = SynraMessageType> = {
-  protocolVersion: "1.0";
-  messageId: string;
-  sessionId: string;
-  traceId: string;
-  type: TType;
-  sentAt: number;
-  ttlMs: number;
-  fromDeviceId: string;
-  toDeviceId: string;
-  payload: unknown;
-};
+  protocolVersion: '1.0'
+  messageId: string
+  sessionId: string
+  traceId: string
+  type: TType
+  sentAt: number
+  ttlMs: number
+  fromDeviceId: string
+  toDeviceId: string
+  payload: unknown
+}
 
 export interface RuntimeRequestPayload {
-  pluginId: string;
-  actionId: string;
-  input: unknown;
+  pluginId: string
+  actionId: string
+  input: unknown
 }
 
 export interface RuntimeReceivedPayload {
-  acknowledgedAt: number;
+  acknowledgedAt: number
 }
 
 export interface RuntimeStartedPayload {
-  startedAt: number;
+  startedAt: number
 }
 
 export interface RuntimeFinishedPayload {
-  status: RuntimeFinishedStatus;
-  finishedAt: number;
-  result?: unknown;
-  error?: ProtocolError; // Required when status = "failed"
+  status: RuntimeFinishedStatus
+  finishedAt: number
+  result?: unknown
+  error?: ProtocolError // Required when status = "failed"
 }
 
 export interface RuntimeErrorPayload {
-  error: ProtocolError;
+  error: ProtocolError
 }
 
 export interface PluginCatalogRequestPayload {
-  knownPlugins?: Array<{ pluginId: string; version: string }>;
+  knownPlugins?: Array<{ pluginId: string; version: string }>
 }
 
 export interface PluginCatalogResponsePayload {
   plugins: Array<{
-    pluginId: string;
-    version: string;
-    displayName: string;
-    sdkRange: string;
-    checksum?: string;
-  }>;
+    pluginId: string
+    version: string
+    displayName: string
+    sdkRange: string
+    checksum?: string
+  }>
 }
 
 export interface PluginBundleRequestPayload {
-  pluginId: string;
-  version: string;
+  pluginId: string
+  version: string
 }
 
 export interface PluginBundleResponsePayload {
-  pluginId: string;
-  version: string;
-  downloadUrl?: string;
-  inlineBundleBase64?: string;
-  checksum?: string;
+  pluginId: string
+  version: string
+  downloadUrl?: string
+  inlineBundleBase64?: string
+  checksum?: string
 }
 
 export interface PluginRulesRequestPayload {
-  pluginId: string;
-  localRuleVersion?: number;
+  pluginId: string
+  localRuleVersion?: number
 }
 
 export interface PluginRulesResponsePayload {
-  pluginId: string;
-  ruleVersion: number;
-  enabled: boolean;
-  rules: Record<string, unknown>;
+  pluginId: string
+  ruleVersion: number
+  enabled: boolean
+  rules: Record<string, unknown>
 }
 
 export type SynraRuntimeMessage =
-  | ProtocolEnvelope<"runtime.request", RuntimeRequestPayload>
-  | ProtocolEnvelope<"runtime.received", RuntimeReceivedPayload>
-  | ProtocolEnvelope<"runtime.started", RuntimeStartedPayload>
-  | ProtocolEnvelope<"runtime.finished", RuntimeFinishedPayload>
-  | ProtocolEnvelope<"runtime.error", RuntimeErrorPayload>;
+  | ProtocolEnvelope<'runtime.request', RuntimeRequestPayload>
+  | ProtocolEnvelope<'runtime.received', RuntimeReceivedPayload>
+  | ProtocolEnvelope<'runtime.started', RuntimeStartedPayload>
+  | ProtocolEnvelope<'runtime.finished', RuntimeFinishedPayload>
+  | ProtocolEnvelope<'runtime.error', RuntimeErrorPayload>
 
 export type SynraPluginSyncMessage =
-  | ProtocolEnvelope<"plugin.catalog.request", PluginCatalogRequestPayload>
-  | ProtocolEnvelope<"plugin.catalog.response", PluginCatalogResponsePayload>
-  | ProtocolEnvelope<"plugin.bundle.request", PluginBundleRequestPayload>
-  | ProtocolEnvelope<"plugin.bundle.response", PluginBundleResponsePayload>
-  | ProtocolEnvelope<"plugin.rules.request", PluginRulesRequestPayload>
-  | ProtocolEnvelope<"plugin.rules.response", PluginRulesResponsePayload>;
+  | ProtocolEnvelope<'plugin.catalog.request', PluginCatalogRequestPayload>
+  | ProtocolEnvelope<'plugin.catalog.response', PluginCatalogResponsePayload>
+  | ProtocolEnvelope<'plugin.bundle.request', PluginBundleRequestPayload>
+  | ProtocolEnvelope<'plugin.bundle.response', PluginBundleResponsePayload>
+  | ProtocolEnvelope<'plugin.rules.request', PluginRulesRequestPayload>
+  | ProtocolEnvelope<'plugin.rules.response', PluginRulesResponsePayload>
 
-export type SynraProtocolMessage = SynraRuntimeMessage | SynraPluginSyncMessage;
+export type SynraProtocolMessage = SynraRuntimeMessage | SynraPluginSyncMessage
 ```
 
 ### 草案约束说明

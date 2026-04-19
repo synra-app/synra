@@ -1,4 +1,4 @@
-import { BRIDGE_METHODS } from "../shared/protocol/constants";
+import { BRIDGE_METHODS } from '../shared/protocol/constants'
 
 export const API_METHODS = {
   getRuntimeInfo: BRIDGE_METHODS.runtimeGetInfo,
@@ -16,5 +16,5 @@ export const API_METHODS = {
   closeDiscoverySession: BRIDGE_METHODS.discoveryCloseSession,
   sendDiscoverySessionMessage: BRIDGE_METHODS.discoverySendMessage,
   getDiscoverySessionState: BRIDGE_METHODS.discoveryGetSessionState,
-  pullDiscoveryHostEvents: BRIDGE_METHODS.discoveryPullHostEvents,
-} as const;
+  pullDiscoveryHostEvents: BRIDGE_METHODS.discoveryPullHostEvents
+} as const

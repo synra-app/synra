@@ -1,14 +1,14 @@
 <script setup lang="ts">
-const keyword = defineModel<string>("keyword", { required: true });
+const keyword = defineModel<string>('keyword', { required: true })
 
 defineProps<{
-  loading: boolean;
-  placeholder?: string;
-}>();
+  loading: boolean
+  placeholder?: string
+}>()
 
 const emit = defineEmits<{
-  search: [];
-}>();
+  search: []
+}>()
 </script>
 
 <template>

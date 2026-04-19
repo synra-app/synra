@@ -1,230 +1,230 @@
-import { describe, expect, test, vi } from "vite-plus/test";
-import { createLoopbackTransportPair } from "../../../../transport-core/src/index.ts";
-import { createBridgeHandlers } from "../../../src/bridge/main/handlers";
-import { createMainDispatcher } from "../../../src/bridge/main/dispatch";
-import { createGitHubOpenPlugin } from "../../../src/host/plugins/github-open.plugin";
-import { createPluginCatalogService } from "../../../src/host/services/plugin-catalog.service";
-import { createPluginRuntimeService } from "../../../src/host/services/plugin-runtime.service";
-import { createRuntimeInfoService } from "../../../src/host/services/runtime-info.service";
-import { BRIDGE_METHODS, BRIDGE_PROTOCOL_VERSION } from "../../../src/shared/protocol/constants";
-import type { MethodResultMap } from "../../../src/shared/protocol/types";
+import { describe, expect, test, vi } from 'vite-plus/test'
+import { createLoopbackTransportPair } from '../../../../transport-core/src/index.ts'
+import { createBridgeHandlers } from '../../../src/bridge/main/handlers'
+import { createMainDispatcher } from '../../../src/bridge/main/dispatch'
+import { createGitHubOpenPlugin } from '../../../src/host/plugins/github-open.plugin'
+import { createPluginCatalogService } from '../../../src/host/services/plugin-catalog.service'
+import { createPluginRuntimeService } from '../../../src/host/services/plugin-runtime.service'
+import { createRuntimeInfoService } from '../../../src/host/services/runtime-info.service'
+import { BRIDGE_METHODS, BRIDGE_PROTOCOL_VERSION } from '../../../src/shared/protocol/constants'
+import type { MethodResultMap } from '../../../src/shared/protocol/types'
 
 function createLegacyMessage(messageId: string) {
   return {
-    protocolVersion: "1.0" as const,
+    protocolVersion: '1.0' as const,
     messageId,
-    sessionId: "session-dup",
-    traceId: "trace-dup",
-    type: "action.selected" as const,
+    sessionId: 'session-dup',
+    traceId: 'trace-dup',
+    type: 'action.selected' as const,
     sentAt: Date.now(),
     ttlMs: 15_000,
-    fromDeviceId: "mobile-1",
-    toDeviceId: "pc-1",
+    fromDeviceId: 'mobile-1',
+    toDeviceId: 'pc-1',
     payload: {
-      sessionId: "session-dup",
-      input: { type: "url", raw: "https://github.com/synra/synra" },
+      sessionId: 'session-dup',
+      input: { type: 'url', raw: 'https://github.com/synra/synra' },
       action: {
-        actionId: "github-open:open",
-        pluginId: "github-open",
-        actionType: "external.open-url",
-        label: "Open in browser",
+        actionId: 'github-open:open',
+        pluginId: 'github-open',
+        actionType: 'external.open-url',
+        label: 'Open in browser',
         requiresConfirm: true,
-        payload: { url: "https://github.com/synra/synra" },
-      },
-    },
-  };
+        payload: { url: 'https://github.com/synra/synra' }
+      }
+    }
+  }
 }
 
-describe("bridge/main runtime e2e flow", () => {
-  test("runs catalog -> resolveActions -> execute with runtime lifecycle", async () => {
-    const openExternal = vi.fn(async () => ({ success: true as const }));
-    const runtime = createPluginRuntimeService();
-    runtime.register(createGitHubOpenPlugin({ openExternal }));
-    const catalog = createPluginCatalogService(runtime);
+describe('bridge/main runtime e2e flow', () => {
+  test('runs catalog -> resolveActions -> execute with runtime lifecycle', async () => {
+    const openExternal = vi.fn(async () => ({ success: true as const }))
+    const runtime = createPluginRuntimeService()
+    runtime.register(createGitHubOpenPlugin({ openExternal }))
+    const catalog = createPluginCatalogService(runtime)
     const handlers = createBridgeHandlers({
       runtimeInfoService: createRuntimeInfoService(),
       externalLinkService: { openExternal },
       fileService: {
-        readFile: vi.fn(async () => ({ content: "", encoding: "utf-8" as BufferEncoding })),
+        readFile: vi.fn(async () => ({ content: '', encoding: 'utf-8' as BufferEncoding }))
       },
       pluginRuntimeService: runtime,
       pluginCatalogService: catalog,
       deviceDiscoveryService: {
         startDiscovery: vi.fn(async () => ({
-          requestId: "discovery-e2e-1",
-          state: "scanning" as const,
+          requestId: 'discovery-e2e-1',
+          state: 'scanning' as const,
           scanWindowMs: 10_000,
-          devices: [],
+          devices: []
         })),
         stopDiscovery: vi.fn(async () => ({ success: true as const })),
         listDevices: vi.fn(async () => ({
-          state: "idle" as const,
+          state: 'idle' as const,
           scanWindowMs: 10_000,
-          devices: [],
+          devices: []
         })),
         pairDevice: vi.fn(async () => {
-          throw new Error("pairDevice mock not configured");
+          throw new Error('pairDevice mock not configured')
         }),
         probeConnectable: vi.fn(async () => ({
           checkedAt: Date.now(),
           port: 32100,
           timeoutMs: 1500,
-          devices: [],
+          devices: []
         })),
         openSession: vi.fn(async () => ({
           success: true as const,
-          sessionId: "session-e2e-1",
-          state: "open" as const,
+          sessionId: 'session-e2e-1',
+          state: 'open' as const
         })),
         closeSession: vi.fn(async () => ({
           success: true as const,
-          sessionId: "session-e2e-1",
+          sessionId: 'session-e2e-1'
         })),
         sendMessage: vi.fn(async () => ({
           success: true as const,
-          messageId: "msg-e2e-1",
-          sessionId: "session-e2e-1",
+          messageId: 'msg-e2e-1',
+          sessionId: 'session-e2e-1'
         })),
         getSessionState: vi.fn(async () => ({
-          sessionId: "session-e2e-1",
-          state: "open" as const,
+          sessionId: 'session-e2e-1',
+          state: 'open' as const
         })),
-        pullHostEvents: vi.fn(async () => ({ events: [] })),
-      },
-    });
-    const dispatch = createMainDispatcher(handlers);
+        pullHostEvents: vi.fn(async () => ({ events: [] }))
+      }
+    })
+    const dispatch = createMainDispatcher(handlers)
 
     const catalogResponse = await dispatch({
       protocolVersion: BRIDGE_PROTOCOL_VERSION,
-      requestId: "catalog-1",
+      requestId: 'catalog-1',
       method: BRIDGE_METHODS.pluginCatalogGet,
-      payload: {},
-    });
-    expect(catalogResponse.ok).toBe(true);
+      payload: {}
+    })
+    expect(catalogResponse.ok).toBe(true)
     if (!catalogResponse.ok) {
-      return;
+      return
     }
-    const catalogData = catalogResponse.data as MethodResultMap["plugin.catalog.get"];
-    expect(catalogData.plugins.length).toBeGreaterThanOrEqual(1);
+    const catalogData = catalogResponse.data as MethodResultMap['plugin.catalog.get']
+    expect(catalogData.plugins.length).toBeGreaterThanOrEqual(1)
 
     const actionsResponse = await dispatch({
       protocolVersion: BRIDGE_PROTOCOL_VERSION,
-      requestId: "resolve-1",
+      requestId: 'resolve-1',
       method: BRIDGE_METHODS.runtimeResolveActions,
       payload: {
-        input: { type: "url", raw: "https://github.com/synra/synra" },
-      },
-    });
-    expect(actionsResponse.ok).toBe(true);
+        input: { type: 'url', raw: 'https://github.com/synra/synra' }
+      }
+    })
+    expect(actionsResponse.ok).toBe(true)
     if (!actionsResponse.ok) {
-      return;
+      return
     }
-    const actionsData = actionsResponse.data as MethodResultMap["runtime.resolveActions"];
-    expect(actionsData.candidates).toHaveLength(1);
-    const selected = actionsData.candidates[0]?.action;
-    expect(selected).toBeTruthy();
+    const actionsData = actionsResponse.data as MethodResultMap['runtime.resolveActions']
+    expect(actionsData.candidates).toHaveLength(1)
+    const selected = actionsData.candidates[0]?.action
+    expect(selected).toBeTruthy()
 
     const executeResponse = await dispatch({
       protocolVersion: BRIDGE_PROTOCOL_VERSION,
-      requestId: "execute-1",
+      requestId: 'execute-1',
       method: BRIDGE_METHODS.runtimeExecute,
       payload: {
-        sessionId: "session-1",
-        input: { type: "url", raw: "https://github.com/synra/synra" },
-        action: selected,
-      },
-    });
-    expect(executeResponse.ok).toBe(true);
+        sessionId: 'session-1',
+        input: { type: 'url', raw: 'https://github.com/synra/synra' },
+        action: selected
+      }
+    })
+    expect(executeResponse.ok).toBe(true)
     if (!executeResponse.ok) {
-      return;
+      return
     }
-    const executeData = executeResponse.data as MethodResultMap["runtime.execute"];
+    const executeData = executeResponse.data as MethodResultMap['runtime.execute']
 
     expect(executeData.messages.map((message) => message.type)).toEqual([
-      "runtime.received",
-      "runtime.started",
-      "runtime.finished",
-    ]);
-    expect(executeData.receipt.ok).toBe(true);
-    expect(openExternal).toHaveBeenCalledTimes(1);
-  });
+      'runtime.received',
+      'runtime.started',
+      'runtime.finished'
+    ])
+    expect(executeData.receipt.ok).toBe(true)
+    expect(openExternal).toHaveBeenCalledTimes(1)
+  })
 
-  test("does not execute duplicated message id over loopback transport", async () => {
-    const openExternal = vi.fn(async () => ({ success: true as const }));
-    const runtime = createPluginRuntimeService();
-    runtime.register(createGitHubOpenPlugin({ openExternal }));
+  test('does not execute duplicated message id over loopback transport', async () => {
+    const openExternal = vi.fn(async () => ({ success: true as const }))
+    const runtime = createPluginRuntimeService()
+    runtime.register(createGitHubOpenPlugin({ openExternal }))
     const handlers = createBridgeHandlers({
       runtimeInfoService: createRuntimeInfoService(),
       externalLinkService: { openExternal },
       fileService: {
-        readFile: vi.fn(async () => ({ content: "", encoding: "utf-8" as BufferEncoding })),
+        readFile: vi.fn(async () => ({ content: '', encoding: 'utf-8' as BufferEncoding }))
       },
       pluginRuntimeService: runtime,
       pluginCatalogService: createPluginCatalogService(runtime),
       deviceDiscoveryService: {
         startDiscovery: vi.fn(async () => ({
-          requestId: "discovery-e2e-2",
-          state: "scanning" as const,
+          requestId: 'discovery-e2e-2',
+          state: 'scanning' as const,
           scanWindowMs: 10_000,
-          devices: [],
+          devices: []
         })),
         stopDiscovery: vi.fn(async () => ({ success: true as const })),
         listDevices: vi.fn(async () => ({
-          state: "idle" as const,
+          state: 'idle' as const,
           scanWindowMs: 10_000,
-          devices: [],
+          devices: []
         })),
         pairDevice: vi.fn(async () => {
-          throw new Error("pairDevice mock not configured");
+          throw new Error('pairDevice mock not configured')
         }),
         probeConnectable: vi.fn(async () => ({
           checkedAt: Date.now(),
           port: 32100,
           timeoutMs: 1500,
-          devices: [],
+          devices: []
         })),
         openSession: vi.fn(async () => ({
           success: true as const,
-          sessionId: "session-e2e-2",
-          state: "open" as const,
+          sessionId: 'session-e2e-2',
+          state: 'open' as const
         })),
         closeSession: vi.fn(async () => ({
           success: true as const,
-          sessionId: "session-e2e-2",
+          sessionId: 'session-e2e-2'
         })),
         sendMessage: vi.fn(async () => ({
           success: true as const,
-          messageId: "msg-e2e-2",
-          sessionId: "session-e2e-2",
+          messageId: 'msg-e2e-2',
+          sessionId: 'session-e2e-2'
         })),
         getSessionState: vi.fn(async () => ({
-          sessionId: "session-e2e-2",
-          state: "open" as const,
+          sessionId: 'session-e2e-2',
+          state: 'open' as const
         })),
-        pullHostEvents: vi.fn(async () => ({ events: [] })),
-      },
-    });
-    const dispatch = createMainDispatcher(handlers);
-    const [mobileTransport, pcTransport] = createLoopbackTransportPair();
+        pullHostEvents: vi.fn(async () => ({ events: [] }))
+      }
+    })
+    const dispatch = createMainDispatcher(handlers)
+    const [mobileTransport, pcTransport] = createLoopbackTransportPair()
 
     pcTransport.onMessage(async (message) => {
-      if (message.type !== "action.selected") {
-        return;
+      if (message.type !== 'action.selected') {
+        return
       }
 
       await dispatch({
         protocolVersion: BRIDGE_PROTOCOL_VERSION,
         requestId: `dispatch:${message.messageId}`,
         method: BRIDGE_METHODS.runtimeExecute,
-        payload: message.payload,
-      });
-    });
+        payload: message.payload
+      })
+    })
 
-    const duplicatedMessage = createLegacyMessage("dup-001");
+    const duplicatedMessage = createLegacyMessage('dup-001')
 
-    await mobileTransport.send(duplicatedMessage);
-    await mobileTransport.send(duplicatedMessage);
+    await mobileTransport.send(duplicatedMessage)
+    await mobileTransport.send(duplicatedMessage)
 
-    expect(openExternal).toHaveBeenCalledTimes(1);
-  });
-});
+    expect(openExternal).toHaveBeenCalledTimes(1)
+  })
+})

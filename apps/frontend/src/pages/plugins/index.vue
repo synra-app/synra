@@ -1,5 +1,5 @@
 <script setup lang="ts">
-const { error, filteredPlugins, keyword, loading, openPlugin, refreshCatalog } = usePluginCatalog();
+const { error, filteredPlugins, keyword, loading, openPlugin, refreshCatalog } = usePluginCatalog()
 </script>
 
 <template>

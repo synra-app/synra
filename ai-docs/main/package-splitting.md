@@ -113,10 +113,10 @@
 导入示例（供业务与宿主代码参考）：
 
 ```ts
-import { type SynraCrossDeviceMessage } from "@synra/protocol";
-import { createTransportRouter } from "@synra/transport-core";
-import { createPluginRuntime } from "@synra/plugin-runtime";
-import { createElectronHost } from "@synra/capacitor-electron";
+import { type SynraCrossDeviceMessage } from '@synra/protocol'
+import { createTransportRouter } from '@synra/transport-core'
+import { createPluginRuntime } from '@synra/plugin-runtime'
+import { createElectronHost } from '@synra/capacitor-electron'
 ```
 
 ## 依赖方向（依赖者 -> 被依赖者）

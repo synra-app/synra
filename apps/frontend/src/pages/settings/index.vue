@@ -1,5 +1,5 @@
 <script setup lang="ts">
-const { aboutInfo, copyDiagnostics, copyMessage, copyStatus, refreshNow } = useAboutInfo();
+const { aboutInfo, copyDiagnostics, copyMessage, copyStatus, refreshNow } = useAboutInfo()
 </script>
 
 <template>

@@ -1,11 +1,11 @@
 <script setup lang="ts">
 defineProps<{
-  mobileOpen: boolean;
-}>();
+  mobileOpen: boolean
+}>()
 
 const emit = defineEmits<{
-  closeMobile: [];
-}>();
+  closeMobile: []
+}>()
 </script>
 
 <template>

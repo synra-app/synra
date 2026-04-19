@@ -1,5 +1,5 @@
-import { BridgeError } from "../shared/errors/bridge-error";
-import { BRIDGE_ERROR_CODES } from "../shared/errors/codes";
+import { BridgeError } from '../shared/errors/bridge-error'
+import { BRIDGE_ERROR_CODES } from '../shared/errors/codes'
 import type {
   DeviceDiscoveryListResult,
   DeviceDiscoveryProbeConnectableOptions,
@@ -27,219 +27,219 @@ import type {
   ResolveRuntimeActionsResult,
   RuntimeExecuteOptions,
   RuntimeExecuteResult,
-  RuntimeInfo,
-} from "../shared/protocol/types";
-import { API_METHODS } from "./methods";
+  RuntimeInfo
+} from '../shared/protocol/types'
+import { API_METHODS } from './methods'
 
 export type BridgeInvoke = <TMethod extends keyof MethodPayloadMap>(
   method: TMethod,
   payload: MethodPayloadMap[TMethod],
-  options?: { timeoutMs?: number; signal?: AbortSignal },
-) => Promise<MethodResultMap[TMethod]>;
+  options?: { timeoutMs?: number; signal?: AbortSignal }
+) => Promise<MethodResultMap[TMethod]>
 
 export interface ElectronBridgePlugin {
-  getRuntimeInfo(options?: { timeoutMs?: number; signal?: AbortSignal }): Promise<RuntimeInfo>;
+  getRuntimeInfo(options?: { timeoutMs?: number; signal?: AbortSignal }): Promise<RuntimeInfo>
   resolveRuntimeActions(
     options: ResolveRuntimeActionsOptions,
-    invokeOptions?: { timeoutMs?: number; signal?: AbortSignal },
-  ): Promise<ResolveRuntimeActionsResult>;
+    invokeOptions?: { timeoutMs?: number; signal?: AbortSignal }
+  ): Promise<ResolveRuntimeActionsResult>
   executeRuntimeAction(
     options: RuntimeExecuteOptions,
-    invokeOptions?: { timeoutMs?: number; signal?: AbortSignal },
-  ): Promise<RuntimeExecuteResult>;
+    invokeOptions?: { timeoutMs?: number; signal?: AbortSignal }
+  ): Promise<RuntimeExecuteResult>
   getPluginCatalog(options?: {
-    knownPluginIds?: string[];
-    timeoutMs?: number;
-    signal?: AbortSignal;
-  }): Promise<PluginCatalogResult>;
+    knownPluginIds?: string[]
+    timeoutMs?: number
+    signal?: AbortSignal
+  }): Promise<PluginCatalogResult>
   openExternal(
     options: OpenExternalOptions,
-    invokeOptions?: { timeoutMs?: number; signal?: AbortSignal },
+    invokeOptions?: { timeoutMs?: number; signal?: AbortSignal }
   ): Promise<{
-    success: true;
-  }>;
+    success: true
+  }>
   readFile(
     options: ReadFileOptions,
-    invokeOptions?: { timeoutMs?: number; signal?: AbortSignal },
-  ): Promise<ReadFileResult>;
+    invokeOptions?: { timeoutMs?: number; signal?: AbortSignal }
+  ): Promise<ReadFileResult>
   startDeviceDiscovery(
     options?: DeviceDiscoveryStartOptions,
-    invokeOptions?: { timeoutMs?: number; signal?: AbortSignal },
-  ): Promise<DeviceDiscoveryStartResult>;
+    invokeOptions?: { timeoutMs?: number; signal?: AbortSignal }
+  ): Promise<DeviceDiscoveryStartResult>
   stopDeviceDiscovery(invokeOptions?: {
-    timeoutMs?: number;
-    signal?: AbortSignal;
-  }): Promise<{ success: true }>;
+    timeoutMs?: number
+    signal?: AbortSignal
+  }): Promise<{ success: true }>
   listDiscoveredDevices(invokeOptions?: {
-    timeoutMs?: number;
-    signal?: AbortSignal;
-  }): Promise<DeviceDiscoveryListResult>;
+    timeoutMs?: number
+    signal?: AbortSignal
+  }): Promise<DeviceDiscoveryListResult>
   pairDiscoveredDevice(
     options: DeviceDiscoveryPairOptions,
-    invokeOptions?: { timeoutMs?: number; signal?: AbortSignal },
-  ): Promise<DeviceDiscoveryPairResult>;
+    invokeOptions?: { timeoutMs?: number; signal?: AbortSignal }
+  ): Promise<DeviceDiscoveryPairResult>
   probeDiscoveredDevicesConnectable(
     options?: DeviceDiscoveryProbeConnectableOptions,
-    invokeOptions?: { timeoutMs?: number; signal?: AbortSignal },
-  ): Promise<DeviceDiscoveryProbeConnectableResult>;
+    invokeOptions?: { timeoutMs?: number; signal?: AbortSignal }
+  ): Promise<DeviceDiscoveryProbeConnectableResult>
   openDiscoverySession(
     options: DeviceSessionOpenOptions,
-    invokeOptions?: { timeoutMs?: number; signal?: AbortSignal },
-  ): Promise<DeviceSessionOpenResult>;
+    invokeOptions?: { timeoutMs?: number; signal?: AbortSignal }
+  ): Promise<DeviceSessionOpenResult>
   closeDiscoverySession(
     options?: DeviceSessionCloseOptions,
-    invokeOptions?: { timeoutMs?: number; signal?: AbortSignal },
-  ): Promise<DeviceSessionCloseResult>;
+    invokeOptions?: { timeoutMs?: number; signal?: AbortSignal }
+  ): Promise<DeviceSessionCloseResult>
   sendDiscoverySessionMessage(
     options: DeviceSessionSendMessageOptions,
-    invokeOptions?: { timeoutMs?: number; signal?: AbortSignal },
-  ): Promise<DeviceSessionSendMessageResult>;
+    invokeOptions?: { timeoutMs?: number; signal?: AbortSignal }
+  ): Promise<DeviceSessionSendMessageResult>
   getDiscoverySessionState(
     options?: DeviceSessionGetStateOptions,
-    invokeOptions?: { timeoutMs?: number; signal?: AbortSignal },
-  ): Promise<DeviceSessionSnapshot>;
+    invokeOptions?: { timeoutMs?: number; signal?: AbortSignal }
+  ): Promise<DeviceSessionSnapshot>
   pullDiscoveryHostEvents(invokeOptions?: {
-    timeoutMs?: number;
-    signal?: AbortSignal;
-  }): Promise<DeviceDiscoveryPullHostEventsResult>;
+    timeoutMs?: number
+    signal?: AbortSignal
+  }): Promise<DeviceDiscoveryPullHostEventsResult>
 }
 
 function ensureObject(value: unknown, errorMessage: string): void {
-  if (typeof value !== "object" || value === null) {
-    throw new BridgeError(BRIDGE_ERROR_CODES.invalidParams, errorMessage);
+  if (typeof value !== 'object' || value === null) {
+    throw new BridgeError(BRIDGE_ERROR_CODES.invalidParams, errorMessage)
   }
 }
 
 export function createElectronBridgePlugin(invoke: BridgeInvoke): ElectronBridgePlugin {
   return {
     async getRuntimeInfo(options = {}): Promise<RuntimeInfo> {
-      return invoke(API_METHODS.getRuntimeInfo, {}, options);
+      return invoke(API_METHODS.getRuntimeInfo, {}, options)
     },
     async openExternal(
       options: OpenExternalOptions,
-      invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {},
+      invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {}
     ): Promise<{ success: true }> {
-      ensureObject(options, "openExternal options must be an object.");
-      return invoke(API_METHODS.openExternal, options, invokeOptions);
+      ensureObject(options, 'openExternal options must be an object.')
+      return invoke(API_METHODS.openExternal, options, invokeOptions)
     },
     async resolveRuntimeActions(
       options: ResolveRuntimeActionsOptions,
-      invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {},
+      invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {}
     ): Promise<ResolveRuntimeActionsResult> {
-      ensureObject(options, "resolveRuntimeActions options must be an object.");
-      return invoke(API_METHODS.resolveRuntimeActions, options, invokeOptions);
+      ensureObject(options, 'resolveRuntimeActions options must be an object.')
+      return invoke(API_METHODS.resolveRuntimeActions, options, invokeOptions)
     },
     async executeRuntimeAction(
       options: RuntimeExecuteOptions,
-      invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {},
+      invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {}
     ): Promise<RuntimeExecuteResult> {
-      ensureObject(options, "executeRuntimeAction options must be an object.");
-      return invoke(API_METHODS.executeRuntimeAction, options, invokeOptions);
+      ensureObject(options, 'executeRuntimeAction options must be an object.')
+      return invoke(API_METHODS.executeRuntimeAction, options, invokeOptions)
     },
     async getPluginCatalog(
       options: {
-        knownPluginIds?: string[];
-        timeoutMs?: number;
-        signal?: AbortSignal;
-      } = {},
+        knownPluginIds?: string[]
+        timeoutMs?: number
+        signal?: AbortSignal
+      } = {}
     ): Promise<PluginCatalogResult> {
       return invoke(
         API_METHODS.getPluginCatalog,
         {
-          knownPluginIds: options.knownPluginIds,
+          knownPluginIds: options.knownPluginIds
         },
-        options,
-      );
+        options
+      )
     },
     async readFile(
       options: ReadFileOptions,
-      invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {},
+      invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {}
     ): Promise<ReadFileResult> {
-      ensureObject(options, "readFile options must be an object.");
-      return invoke(API_METHODS.readFile, options, invokeOptions);
+      ensureObject(options, 'readFile options must be an object.')
+      return invoke(API_METHODS.readFile, options, invokeOptions)
     },
     async startDeviceDiscovery(
       options: DeviceDiscoveryStartOptions = {},
-      invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {},
+      invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {}
     ): Promise<DeviceDiscoveryStartResult> {
-      ensureObject(options, "startDeviceDiscovery options must be an object.");
-      return invoke(API_METHODS.startDeviceDiscovery, options, invokeOptions);
+      ensureObject(options, 'startDeviceDiscovery options must be an object.')
+      return invoke(API_METHODS.startDeviceDiscovery, options, invokeOptions)
     },
     async stopDeviceDiscovery(
-      invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {},
+      invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {}
     ): Promise<{ success: true }> {
-      return invoke(API_METHODS.stopDeviceDiscovery, {}, invokeOptions);
+      return invoke(API_METHODS.stopDeviceDiscovery, {}, invokeOptions)
     },
     async listDiscoveredDevices(
-      invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {},
+      invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {}
     ): Promise<DeviceDiscoveryListResult> {
-      return invoke(API_METHODS.listDiscoveredDevices, {}, invokeOptions);
+      return invoke(API_METHODS.listDiscoveredDevices, {}, invokeOptions)
     },
     async pairDiscoveredDevice(
       options: DeviceDiscoveryPairOptions,
-      invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {},
+      invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {}
     ): Promise<DeviceDiscoveryPairResult> {
-      ensureObject(options, "pairDiscoveredDevice options must be an object.");
-      return invoke(API_METHODS.pairDiscoveredDevice, options, invokeOptions);
+      ensureObject(options, 'pairDiscoveredDevice options must be an object.')
+      return invoke(API_METHODS.pairDiscoveredDevice, options, invokeOptions)
     },
     async probeDiscoveredDevicesConnectable(
       options: DeviceDiscoveryProbeConnectableOptions = {},
-      invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {},
+      invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {}
     ): Promise<DeviceDiscoveryProbeConnectableResult> {
-      ensureObject(options, "probeDiscoveredDevicesConnectable options must be an object.");
-      return invoke(API_METHODS.probeDiscoveredDevicesConnectable, options, invokeOptions);
+      ensureObject(options, 'probeDiscoveredDevicesConnectable options must be an object.')
+      return invoke(API_METHODS.probeDiscoveredDevicesConnectable, options, invokeOptions)
     },
     async openDiscoverySession(
       options: DeviceSessionOpenOptions,
-      invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {},
+      invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {}
     ): Promise<DeviceSessionOpenResult> {
-      ensureObject(options, "openDiscoverySession options must be an object.");
-      return invoke(API_METHODS.openDiscoverySession, options, invokeOptions);
+      ensureObject(options, 'openDiscoverySession options must be an object.')
+      return invoke(API_METHODS.openDiscoverySession, options, invokeOptions)
     },
     async closeDiscoverySession(
       options: DeviceSessionCloseOptions = {},
-      invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {},
+      invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {}
     ): Promise<DeviceSessionCloseResult> {
-      ensureObject(options, "closeDiscoverySession options must be an object.");
-      return invoke(API_METHODS.closeDiscoverySession, options, invokeOptions);
+      ensureObject(options, 'closeDiscoverySession options must be an object.')
+      return invoke(API_METHODS.closeDiscoverySession, options, invokeOptions)
     },
     async sendDiscoverySessionMessage(
       options: DeviceSessionSendMessageOptions,
-      invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {},
+      invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {}
     ): Promise<DeviceSessionSendMessageResult> {
-      ensureObject(options, "sendDiscoverySessionMessage options must be an object.");
-      return invoke(API_METHODS.sendDiscoverySessionMessage, options, invokeOptions);
+      ensureObject(options, 'sendDiscoverySessionMessage options must be an object.')
+      return invoke(API_METHODS.sendDiscoverySessionMessage, options, invokeOptions)
     },
     async getDiscoverySessionState(
       options: DeviceSessionGetStateOptions = {},
-      invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {},
+      invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {}
     ): Promise<DeviceSessionSnapshot> {
-      ensureObject(options, "getDiscoverySessionState options must be an object.");
-      return invoke(API_METHODS.getDiscoverySessionState, options, invokeOptions);
+      ensureObject(options, 'getDiscoverySessionState options must be an object.')
+      return invoke(API_METHODS.getDiscoverySessionState, options, invokeOptions)
     },
     async pullDiscoveryHostEvents(
-      invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {},
+      invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {}
     ): Promise<DeviceDiscoveryPullHostEventsResult> {
-      return invoke(API_METHODS.pullDiscoveryHostEvents, {}, invokeOptions);
-    },
-  };
+      return invoke(API_METHODS.pullDiscoveryHostEvents, {}, invokeOptions)
+    }
+  }
 }
 
 type GlobalBridgeTarget = {
-  __synraCapElectron?: { invoke?: BridgeInvoke };
-};
+  __synraCapElectron?: { invoke?: BridgeInvoke }
+}
 
 export function createElectronBridgePluginFromGlobal(
-  target: GlobalBridgeTarget = globalThis as unknown as GlobalBridgeTarget,
+  target: GlobalBridgeTarget = globalThis as unknown as GlobalBridgeTarget
 ): ElectronBridgePlugin {
-  const invoke = target.__synraCapElectron?.invoke;
+  const invoke = target.__synraCapElectron?.invoke
 
   if (!invoke) {
     throw new BridgeError(
       BRIDGE_ERROR_CODES.internalError,
-      "Preload bridge is not available on global target.",
-    );
+      'Preload bridge is not available on global target.'
+    )
   }
 
-  return createElectronBridgePlugin(invoke);
+  return createElectronBridgePlugin(invoke)
 }

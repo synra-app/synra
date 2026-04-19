@@ -1,280 +1,280 @@
-import type { PluginAction, ShareInput } from "@synra/plugin-sdk";
+import type { PluginAction, ShareInput } from '@synra/plugin-sdk'
 import type {
   PluginCatalogItem,
   PluginCatalogRequestPayload,
   SynraMessageType,
   SynraActionReceipt,
-  SynraRuntimeMessage,
-} from "@synra/protocol";
-import type { BridgeErrorCode } from "../errors/codes";
-import type { BridgeMethod } from "./constants";
+  SynraRuntimeMessage
+} from '@synra/protocol'
+import type { BridgeErrorCode } from '../errors/codes'
+import type { BridgeMethod } from './constants'
 
 export type BridgeRequestMeta = {
-  timeoutMs?: number;
-  source?: "capacitor-webview";
-  traceId?: string;
-};
+  timeoutMs?: number
+  source?: 'capacitor-webview'
+  traceId?: string
+}
 
 export type BridgeRequest<TPayload = unknown> = {
-  protocolVersion: string;
-  requestId: string;
-  method: BridgeMethod | (string & {});
-  payload: TPayload;
-  meta?: BridgeRequestMeta;
-};
+  protocolVersion: string
+  requestId: string
+  method: BridgeMethod | (string & {})
+  payload: TPayload
+  meta?: BridgeRequestMeta
+}
 
 export type BridgeSuccessResponse<TData = unknown> = {
-  ok: true;
-  requestId: string;
-  data: TData;
-};
+  ok: true
+  requestId: string
+  data: TData
+}
 
 export type BridgeErrorResponse = {
-  ok: false;
-  requestId: string;
+  ok: false
+  requestId: string
   error: {
-    code: BridgeErrorCode;
-    message: string;
-    details?: unknown;
-  };
-};
+    code: BridgeErrorCode
+    message: string
+    details?: unknown
+  }
+}
 
-export type BridgeResponse<TData = unknown> = BridgeSuccessResponse<TData> | BridgeErrorResponse;
+export type BridgeResponse<TData = unknown> = BridgeSuccessResponse<TData> | BridgeErrorResponse
 
 export type RuntimeInfo = {
-  protocolVersion: string;
-  supportedProtocolVersions: string[];
-  capacitorVersion: string;
-  electronVersion: string;
-  nodeVersion: string;
-  platform: NodeJS.Platform;
-  capabilities: string[];
-};
+  protocolVersion: string
+  supportedProtocolVersions: string[]
+  capacitorVersion: string
+  electronVersion: string
+  nodeVersion: string
+  platform: NodeJS.Platform
+  capabilities: string[]
+}
 
 export type OperationResult = {
-  success: true;
-};
+  success: true
+}
 
 export type OpenExternalOptions = {
-  url: string;
-};
+  url: string
+}
 
 export type ReadFileOptions = {
-  path: string;
-  encoding?: BufferEncoding;
-};
+  path: string
+  encoding?: BufferEncoding
+}
 
 export type ReadFileResult = {
-  content: string;
-  encoding: BufferEncoding;
-};
+  content: string
+  encoding: BufferEncoding
+}
 
 export type RuntimeActionCandidate = {
-  pluginId: string;
-  pluginVersion: string;
-  pluginLabel: string;
-  score: number;
-  reason?: string;
-  action: PluginAction;
-};
+  pluginId: string
+  pluginVersion: string
+  pluginLabel: string
+  score: number
+  reason?: string
+  action: PluginAction
+}
 
 export type ResolveRuntimeActionsOptions = {
-  input: ShareInput;
-};
+  input: ShareInput
+}
 
 export type ResolveRuntimeActionsResult = {
-  candidates: RuntimeActionCandidate[];
-};
+  candidates: RuntimeActionCandidate[]
+}
 
 export type RuntimeExecuteOptions = {
-  sessionId: string;
-  input: ShareInput;
-  action: PluginAction;
-  messageId?: string;
-  traceId?: string;
-  timeoutMs?: number;
-};
+  sessionId: string
+  input: ShareInput
+  action: PluginAction
+  messageId?: string
+  traceId?: string
+  timeoutMs?: number
+}
 
 export type RuntimeExecuteResult = {
-  messages: SynraRuntimeMessage[];
-  receipt: SynraActionReceipt;
-};
+  messages: SynraRuntimeMessage[]
+  receipt: SynraActionReceipt
+}
 
 export type PluginCatalogResult = {
-  plugins: PluginCatalogItem[];
-  generatedAt: number;
-};
+  plugins: PluginCatalogItem[]
+  generatedAt: number
+}
 
-export type DiscoverySource = "mdns" | "probe" | "manual";
+export type DiscoverySource = 'mdns' | 'probe' | 'manual'
 
-export type DiscoveryState = "idle" | "scanning";
+export type DiscoveryState = 'idle' | 'scanning'
 
 export type DiscoveredDevice = {
-  deviceId: string;
-  name: string;
-  ipAddress: string;
-  source: DiscoverySource;
-  paired: boolean;
-  connectable: boolean;
-  connectCheckAt?: number;
-  connectCheckError?: string;
-  discoveredAt: number;
-  lastSeenAt: number;
-};
+  deviceId: string
+  name: string
+  ipAddress: string
+  source: DiscoverySource
+  paired: boolean
+  connectable: boolean
+  connectCheckAt?: number
+  connectCheckError?: string
+  discoveredAt: number
+  lastSeenAt: number
+}
 
 export type DeviceDiscoveryStartOptions = {
-  includeLoopback?: boolean;
-  manualTargets?: string[];
-  enableProbeFallback?: boolean;
-  reset?: boolean;
-  scanWindowMs?: number;
-  port?: number;
-  timeoutMs?: number;
-};
+  includeLoopback?: boolean
+  manualTargets?: string[]
+  enableProbeFallback?: boolean
+  reset?: boolean
+  scanWindowMs?: number
+  port?: number
+  timeoutMs?: number
+}
 
 export type DeviceDiscoveryStartResult = {
-  requestId: string;
-  state: DiscoveryState;
-  startedAt?: number;
-  scanWindowMs: number;
-  devices: DiscoveredDevice[];
-};
+  requestId: string
+  state: DiscoveryState
+  startedAt?: number
+  scanWindowMs: number
+  devices: DiscoveredDevice[]
+}
 
 export type DeviceDiscoveryListResult = {
-  state: DiscoveryState;
-  startedAt?: number;
-  scanWindowMs: number;
-  devices: DiscoveredDevice[];
-};
+  state: DiscoveryState
+  startedAt?: number
+  scanWindowMs: number
+  devices: DiscoveredDevice[]
+}
 
 export type DeviceDiscoveryPairOptions = {
-  deviceId: string;
-};
+  deviceId: string
+}
 
 export type DeviceDiscoveryPairResult = {
-  success: true;
-  device: DiscoveredDevice;
-};
+  success: true
+  device: DiscoveredDevice
+}
 
 export type DeviceDiscoveryProbeConnectableOptions = {
-  port?: number;
-  timeoutMs?: number;
-};
+  port?: number
+  timeoutMs?: number
+}
 
 export type DeviceDiscoveryProbeConnectableResult = {
-  checkedAt: number;
-  port: number;
-  timeoutMs: number;
-  devices: DiscoveredDevice[];
-};
+  checkedAt: number
+  port: number
+  timeoutMs: number
+  devices: DiscoveredDevice[]
+}
 
 export type DeviceSessionOpenOptions = {
-  deviceId: string;
-  host: string;
-  port: number;
-  token?: string;
-};
+  deviceId: string
+  host: string
+  port: number
+  token?: string
+}
 
-export type DeviceSessionState = "idle" | "connecting" | "open" | "closed" | "error";
+export type DeviceSessionState = 'idle' | 'connecting' | 'open' | 'closed' | 'error'
 
 export type DeviceSessionSnapshot = {
-  sessionId?: string;
-  deviceId?: string;
-  host?: string;
-  port?: number;
-  state: DeviceSessionState;
-  lastError?: string;
-  openedAt?: number;
-  closedAt?: number;
-};
+  sessionId?: string
+  deviceId?: string
+  host?: string
+  port?: number
+  state: DeviceSessionState
+  lastError?: string
+  openedAt?: number
+  closedAt?: number
+}
 
 export type DeviceSessionOpenResult = {
-  success: true;
-  sessionId: string;
-  state: DeviceSessionState;
-};
+  success: true
+  sessionId: string
+  state: DeviceSessionState
+}
 
 export type DeviceSessionCloseOptions = {
-  sessionId?: string;
-};
+  sessionId?: string
+}
 
 export type DeviceSessionCloseResult = {
-  success: true;
-  sessionId?: string;
-};
+  success: true
+  sessionId?: string
+}
 
 export type DeviceSessionSendMessageOptions = {
-  sessionId: string;
-  messageType: SynraMessageType;
-  payload: unknown;
-  messageId?: string;
-};
+  sessionId: string
+  messageType: SynraMessageType
+  payload: unknown
+  messageId?: string
+}
 
 export type DeviceSessionSendMessageResult = {
-  success: true;
-  messageId: string;
-  sessionId: string;
-};
+  success: true
+  messageId: string
+  sessionId: string
+}
 
 export type DeviceSessionGetStateOptions = {
-  sessionId?: string;
-};
+  sessionId?: string
+}
 
 export type DeviceDiscoveryHostEvent = {
-  id: number;
-  timestamp: number;
+  id: number
+  timestamp: number
   type:
-    | "transport.session.opened"
-    | "transport.session.closed"
-    | "transport.message.received"
-    | "transport.message.ack"
-    | "transport.error";
-  remote: string;
-  sessionId?: string;
-  messageId?: string;
-  messageType?: SynraMessageType;
-  code?: string;
-  payload?: unknown;
-};
+    | 'transport.session.opened'
+    | 'transport.session.closed'
+    | 'transport.message.received'
+    | 'transport.message.ack'
+    | 'transport.error'
+  remote: string
+  sessionId?: string
+  messageId?: string
+  messageType?: SynraMessageType
+  code?: string
+  payload?: unknown
+}
 
 export type DeviceDiscoveryPullHostEventsResult = {
-  events: DeviceDiscoveryHostEvent[];
-};
+  events: DeviceDiscoveryHostEvent[]
+}
 
 export type MethodPayloadMap = {
-  "runtime.getInfo": Record<string, never>;
-  "runtime.resolveActions": ResolveRuntimeActionsOptions;
-  "runtime.execute": RuntimeExecuteOptions;
-  "plugin.catalog.get": PluginCatalogRequestPayload;
-  "external.open": OpenExternalOptions;
-  "file.read": ReadFileOptions;
-  "discovery.start": DeviceDiscoveryStartOptions;
-  "discovery.stop": Record<string, never>;
-  "discovery.list": Record<string, never>;
-  "discovery.pair": DeviceDiscoveryPairOptions;
-  "discovery.probeConnectable": DeviceDiscoveryProbeConnectableOptions;
-  "discovery.openSession": DeviceSessionOpenOptions;
-  "discovery.closeSession": DeviceSessionCloseOptions;
-  "discovery.sendMessage": DeviceSessionSendMessageOptions;
-  "discovery.getSessionState": DeviceSessionGetStateOptions;
-  "discovery.pullHostEvents": Record<string, never>;
-};
+  'runtime.getInfo': Record<string, never>
+  'runtime.resolveActions': ResolveRuntimeActionsOptions
+  'runtime.execute': RuntimeExecuteOptions
+  'plugin.catalog.get': PluginCatalogRequestPayload
+  'external.open': OpenExternalOptions
+  'file.read': ReadFileOptions
+  'discovery.start': DeviceDiscoveryStartOptions
+  'discovery.stop': Record<string, never>
+  'discovery.list': Record<string, never>
+  'discovery.pair': DeviceDiscoveryPairOptions
+  'discovery.probeConnectable': DeviceDiscoveryProbeConnectableOptions
+  'discovery.openSession': DeviceSessionOpenOptions
+  'discovery.closeSession': DeviceSessionCloseOptions
+  'discovery.sendMessage': DeviceSessionSendMessageOptions
+  'discovery.getSessionState': DeviceSessionGetStateOptions
+  'discovery.pullHostEvents': Record<string, never>
+}
 
 export type MethodResultMap = {
-  "runtime.getInfo": RuntimeInfo;
-  "runtime.resolveActions": ResolveRuntimeActionsResult;
-  "runtime.execute": RuntimeExecuteResult;
-  "plugin.catalog.get": PluginCatalogResult;
-  "external.open": OperationResult;
-  "file.read": ReadFileResult;
-  "discovery.start": DeviceDiscoveryStartResult;
-  "discovery.stop": OperationResult;
-  "discovery.list": DeviceDiscoveryListResult;
-  "discovery.pair": DeviceDiscoveryPairResult;
-  "discovery.probeConnectable": DeviceDiscoveryProbeConnectableResult;
-  "discovery.openSession": DeviceSessionOpenResult;
-  "discovery.closeSession": DeviceSessionCloseResult;
-  "discovery.sendMessage": DeviceSessionSendMessageResult;
-  "discovery.getSessionState": DeviceSessionSnapshot;
-  "discovery.pullHostEvents": DeviceDiscoveryPullHostEventsResult;
-};
+  'runtime.getInfo': RuntimeInfo
+  'runtime.resolveActions': ResolveRuntimeActionsResult
+  'runtime.execute': RuntimeExecuteResult
+  'plugin.catalog.get': PluginCatalogResult
+  'external.open': OperationResult
+  'file.read': ReadFileResult
+  'discovery.start': DeviceDiscoveryStartResult
+  'discovery.stop': OperationResult
+  'discovery.list': DeviceDiscoveryListResult
+  'discovery.pair': DeviceDiscoveryPairResult
+  'discovery.probeConnectable': DeviceDiscoveryProbeConnectableResult
+  'discovery.openSession': DeviceSessionOpenResult
+  'discovery.closeSession': DeviceSessionCloseResult
+  'discovery.sendMessage': DeviceSessionSendMessageResult
+  'discovery.getSessionState': DeviceSessionSnapshot
+  'discovery.pullHostEvents': DeviceDiscoveryPullHostEventsResult
+}

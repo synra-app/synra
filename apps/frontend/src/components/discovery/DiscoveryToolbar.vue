@@ -1,17 +1,17 @@
 <script setup lang="ts">
-const manualTarget = defineModel<string>("manualTarget", { required: true });
-const socketPort = defineModel<number>("socketPort", { required: true });
+const manualTarget = defineModel<string>('manualTarget', { required: true })
+const socketPort = defineModel<number>('socketPort', { required: true })
 
 defineProps<{
-  loading: boolean;
-  error?: string | null;
-}>();
+  loading: boolean
+  error?: string | null
+}>()
 
 const emit = defineEmits<{
-  start: [];
-  stop: [];
-  refresh: [];
-}>();
+  start: []
+  stop: []
+  refresh: []
+}>()
 </script>
 
 <template>

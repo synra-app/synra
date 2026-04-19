@@ -1,12 +1,12 @@
 export type SessionLogEntry = {
-  id: string;
+  id: string
   type:
-    | "sessionOpened"
-    | "sessionClosed"
-    | "messageSent"
-    | "messageReceived"
-    | "messageAck"
-    | "transportError";
-  payload: unknown;
-  timestamp: number;
-};
+    | 'sessionOpened'
+    | 'sessionClosed'
+    | 'messageSent'
+    | 'messageReceived'
+    | 'messageAck'
+    | 'transportError'
+  payload: unknown
+  timestamp: number
+}

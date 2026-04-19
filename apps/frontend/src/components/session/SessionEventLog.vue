@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import type { SessionLogEntry } from "../../types/session-log";
+import type { SessionLogEntry } from '../../types/session-log'
 
 defineProps<{
-  entries: SessionLogEntry[];
-}>();
+  entries: SessionLogEntry[]
+}>()
 </script>
 
 <template>

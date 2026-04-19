@@ -1,20 +1,20 @@
-import { defineStore } from "pinia";
-import { ref } from "vue";
+import { defineStore } from 'pinia'
+import { ref } from 'vue'
 
-export const useAppShellStore = defineStore("app-shell", () => {
-  const isSidebarCollapsed = ref(false);
-  const isMobileMenuOpen = ref(false);
+export const useAppShellStore = defineStore('app-shell', () => {
+  const isSidebarCollapsed = ref(false)
+  const isMobileMenuOpen = ref(false)
 
   function toggleSidebar(): void {
-    isSidebarCollapsed.value = !isSidebarCollapsed.value;
+    isSidebarCollapsed.value = !isSidebarCollapsed.value
   }
 
   function toggleMobileMenu(): void {
-    isMobileMenuOpen.value = !isMobileMenuOpen.value;
+    isMobileMenuOpen.value = !isMobileMenuOpen.value
   }
 
   function closeMobileMenu(): void {
-    isMobileMenuOpen.value = false;
+    isMobileMenuOpen.value = false
   }
 
   return {
@@ -22,6 +22,6 @@ export const useAppShellStore = defineStore("app-shell", () => {
     isMobileMenuOpen,
     toggleSidebar,
     toggleMobileMenu,
-    closeMobileMenu,
-  };
-});
+    closeMobileMenu
+  }
+})

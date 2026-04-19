@@ -24,13 +24,13 @@
     <p>Runtime info from <code>@synra/capacitor-electron</code>:</p>
     <pre id="runtime">Loading...</pre>
     <script type="module">
-      const el = document.getElementById("runtime");
+      const el = document.getElementById('runtime')
 
       try {
-        const data = await window.__synraCapElectron?.invoke("runtime.getInfo", {});
-        el.textContent = JSON.stringify(data, null, 2);
+        const data = await window.__synraCapElectron?.invoke('runtime.getInfo', {})
+        el.textContent = JSON.stringify(data, null, 2)
       } catch (error) {
-        el.textContent = String(error);
+        el.textContent = String(error)
       }
     </script>
   </body>

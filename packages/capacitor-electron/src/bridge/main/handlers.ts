@@ -1,29 +1,29 @@
-import { BRIDGE_METHODS } from "../../shared/protocol/constants";
-import type { BridgeRequest, MethodPayloadMap, MethodResultMap } from "../../shared/protocol/types";
-import type { ExternalLinkService } from "../../host/services/external-link.service";
-import type { FileService } from "../../host/services/file.service";
-import type { DeviceDiscoveryService } from "../../host/services/device-discovery.service";
-import type { PluginCatalogService } from "../../host/services/plugin-catalog.service";
-import type { PluginRuntimeService } from "../../host/services/plugin-runtime.service";
+import { BRIDGE_METHODS } from '../../shared/protocol/constants'
+import type { BridgeRequest, MethodPayloadMap, MethodResultMap } from '../../shared/protocol/types'
+import type { ExternalLinkService } from '../../host/services/external-link.service'
+import type { FileService } from '../../host/services/file.service'
+import type { DeviceDiscoveryService } from '../../host/services/device-discovery.service'
+import type { PluginCatalogService } from '../../host/services/plugin-catalog.service'
+import type { PluginRuntimeService } from '../../host/services/plugin-runtime.service'
 
 type RuntimeInfoService = ReturnType<
-  typeof import("../../host/services/runtime-info.service").createRuntimeInfoService
->;
+  typeof import('../../host/services/runtime-info.service').createRuntimeInfoService
+>
 
 export type BridgeHandlerDependencies = {
-  runtimeInfoService: RuntimeInfoService;
-  externalLinkService: ExternalLinkService;
-  fileService: FileService;
-  pluginRuntimeService: PluginRuntimeService;
-  pluginCatalogService: PluginCatalogService;
-  deviceDiscoveryService: DeviceDiscoveryService;
-};
+  runtimeInfoService: RuntimeInfoService
+  externalLinkService: ExternalLinkService
+  fileService: FileService
+  pluginRuntimeService: PluginRuntimeService
+  pluginCatalogService: PluginCatalogService
+  deviceDiscoveryService: DeviceDiscoveryService
+}
 
 export type BridgeHandlerMap = {
   [K in keyof MethodPayloadMap]: (
-    request: BridgeRequest<MethodPayloadMap[K]>,
-  ) => Promise<MethodResultMap[K]>;
-};
+    request: BridgeRequest<MethodPayloadMap[K]>
+  ) => Promise<MethodResultMap[K]>
+}
 
 export function createBridgeHandlers(deps: BridgeHandlerDependencies): BridgeHandlerMap {
   return {
@@ -37,7 +37,7 @@ export function createBridgeHandlers(deps: BridgeHandlerDependencies): BridgeHan
         action: request.payload.action,
         messageId: request.payload.messageId,
         traceId: request.payload.traceId,
-        timeoutMs: request.payload.timeoutMs,
+        timeoutMs: request.payload.timeoutMs
       }),
     [BRIDGE_METHODS.pluginCatalogGet]: async (request) =>
       deps.pluginCatalogService.getCatalog(request.payload),
@@ -62,6 +62,6 @@ export function createBridgeHandlers(deps: BridgeHandlerDependencies): BridgeHan
     [BRIDGE_METHODS.discoveryGetSessionState]: async (request) =>
       deps.deviceDiscoveryService.getSessionState(request.payload),
     [BRIDGE_METHODS.discoveryPullHostEvents]: async () =>
-      deps.deviceDiscoveryService.pullHostEvents(),
-  };
+      deps.deviceDiscoveryService.pullHostEvents()
+  }
 }

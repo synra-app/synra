@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import type { SessionLogEntry } from "../../src/types/chat";
+import type { SessionLogEntry } from '../../src/types/chat'
 
 defineProps<{
-  entries: SessionLogEntry[];
-}>();
+  entries: SessionLogEntry[]
+}>()
 </script>
 
 <template>

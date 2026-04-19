@@ -28,41 +28,41 @@ This package follows a layered design:
 ### Main process registration
 
 ```ts
-import { setupBridgeMainRuntime } from "@synra/capacitor-electron";
+import { setupBridgeMainRuntime } from '@synra/capacitor-electron'
 
 setupBridgeMainRuntime(ipcMain, {
-  allowedFileRoots: [process.cwd()],
-});
+  allowedFileRoots: [process.cwd()]
+})
 ```
 
 ### Preload bridge exposure
 
 ```ts
-import { contextBridge, ipcRenderer } from "electron";
-import { createPreloadInvoker, exposePreloadBridge } from "@synra/capacitor-electron";
+import { contextBridge, ipcRenderer } from 'electron'
+import { createPreloadInvoker, exposePreloadBridge } from '@synra/capacitor-electron'
 
-const invoke = createPreloadInvoker((channel, request) => ipcRenderer.invoke(channel, request));
-exposePreloadBridge(invoke);
+const invoke = createPreloadInvoker((channel, request) => ipcRenderer.invoke(channel, request))
+exposePreloadBridge(invoke)
 ```
 
 ### Renderer API usage
 
 ```ts
-import { createElectronBridgePluginFromGlobal } from "@synra/capacitor-electron";
+import { createElectronBridgePluginFromGlobal } from '@synra/capacitor-electron'
 
-const plugin = createElectronBridgePluginFromGlobal();
-const runtimeInfo = await plugin.getRuntimeInfo();
+const plugin = createElectronBridgePluginFromGlobal()
+const runtimeInfo = await plugin.getRuntimeInfo()
 ```
 
 ### Capacitor core platform patch (renderer)
 
 ```ts
-import { Capacitor } from "@capacitor/core";
-import { installElectronCapacitor } from "@synra/capacitor-electron/capacitor";
+import { Capacitor } from '@capacitor/core'
+import { installElectronCapacitor } from '@synra/capacitor-electron/capacitor'
 
-installElectronCapacitor({ capacitor: Capacitor });
+installElectronCapacitor({ capacitor: Capacitor })
 
-console.log(Capacitor.getPlatform()); // "electron" (when preload bridge exists)
+console.log(Capacitor.getPlatform()) // "electron" (when preload bridge exists)
 ```
 
 ## Development

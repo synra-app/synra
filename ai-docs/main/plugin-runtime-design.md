@@ -42,36 +42,36 @@ flowchart LR
 
 ```ts
 export interface SynraPlugin {
-  id: string;
-  version: string;
-  supports(input: ShareInput): Promise<PluginMatchResult>;
-  buildActions(input: ShareInput): Promise<PluginAction[]>;
-  execute(action: PluginAction, context: ExecuteContext): Promise<SynraActionReceipt>;
+  id: string
+  version: string
+  supports(input: ShareInput): Promise<PluginMatchResult>
+  buildActions(input: ShareInput): Promise<PluginAction[]>
+  execute(action: PluginAction, context: ExecuteContext): Promise<SynraActionReceipt>
 }
 
-export type PluginAction = SynraActionRequest & { label: string; requiresConfirm: boolean };
+export type PluginAction = SynraActionRequest & { label: string; requiresConfirm: boolean }
 ```
 
 ## Worker 运行时（新增）
 
 ```ts
 export type PluginWorkerTaskRequest = {
-  requestId: string;
-  pluginId: string;
-  taskType: string;
-  payload: unknown;
-  timeoutMs?: number;
-};
+  requestId: string
+  pluginId: string
+  taskType: string
+  payload: unknown
+  timeoutMs?: number
+}
 
 export type PluginWorkerTaskResult = {
-  requestId: string;
-  ok: boolean;
-  result?: unknown;
-  error?: { code: string; message: string; details?: unknown };
-};
+  requestId: string
+  ok: boolean
+  result?: unknown
+  error?: { code: string; message: string; details?: unknown }
+}
 
 export interface PluginWorkerRuntime {
-  executeTask(request: PluginWorkerTaskRequest): Promise<PluginWorkerTaskResult>;
+  executeTask(request: PluginWorkerTaskRequest): Promise<PluginWorkerTaskResult>
 }
 ```
 
@@ -117,11 +117,11 @@ flowchart LR
 
 ```ts
 export interface HostCapabilityPort {
-  sendCrossDeviceMessage(message: SynraCrossDeviceMessage): Promise<void>;
+  sendCrossDeviceMessage(message: SynraCrossDeviceMessage): Promise<void>
   subscribeCrossDeviceMessage(
     type: SynraMessageType,
-    handler: (message: SynraCrossDeviceMessage) => void | Promise<void>,
-  ): () => void | Promise<void>;
+    handler: (message: SynraCrossDeviceMessage) => void | Promise<void>
+  ): () => void | Promise<void>
 }
 ```
 
