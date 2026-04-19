@@ -1,13 +1,29 @@
 <script setup lang="ts">
 import type { PluginCardItem } from '../../composables/use-plugin-catalog'
 
-defineProps<{
+const props = defineProps<{
   plugin: PluginCardItem
 }>()
 
 const emit = defineEmits<{
   open: [plugin: PluginCardItem]
 }>()
+
+const ICONIFY_DEFAULT_COLOR = '#383838'
+const ICONIFY_DEFAULT_ICON = 'material-symbols:extension-outline'
+const iconLoadFailed = ref(false)
+
+const iconUrl = computed(() => {
+  const icon = props.plugin.icon?.trim() || ICONIFY_DEFAULT_ICON
+  return `https://api.iconify.design/${icon}.svg?color=${encodeURIComponent(ICONIFY_DEFAULT_COLOR)}`
+})
+
+watch(
+  () => props.plugin.icon,
+  () => {
+    iconLoadFailed.value = false
+  }
+)
 </script>
 
 <template>
@@ -21,9 +37,17 @@ const emit = defineEmits<{
       />
       <span
         v-else
-        class="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-surface-2 text-lg text-muted-6"
-        :class="plugin.icon ?? 'i-lucide-puzzle'"
-      />
+        class="fcc h-10 w-10 overflow-hidden rounded-lg bg-surface-2 text-lg text-muted-6"
+      >
+        <img
+          v-if="!iconLoadFailed"
+          :src="iconUrl"
+          :alt="`${plugin.name} icon`"
+          class="h-6 w-6"
+          @error="iconLoadFailed = true"
+        />
+        <span v-else class="i-lucide-puzzle" />
+      </span>
       <div class="min-w-0">
         <p class="truncate font-semibold">{{ plugin.name }}</p>
         <p class="text-xs text-muted-5">ID: {{ plugin.pluginId }}</p>

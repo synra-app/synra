@@ -6,7 +6,7 @@ import { deactivatePlugin } from './plugins/host'
 const route = useRoute()
 const router = useRouter()
 const appShellStore = useAppShellStore()
-const { isSidebarCollapsed, isMobileMenuOpen } = storeToRefs(appShellStore)
+const { isMobileMenuOpen } = storeToRefs(appShellStore)
 
 const menuItems = [
   { label: 'Home', icon: 'i-lucide-home', to: '/home' },
@@ -44,8 +44,6 @@ watch(
       <SidebarNav
         :items="menuItems"
         :current-path="route.path"
-        :collapsed="isSidebarCollapsed"
-        @toggle-collapse="appShellStore.toggleSidebar()"
         @close-mobile="appShellStore.closeMobileMenu()"
       />
     </template>

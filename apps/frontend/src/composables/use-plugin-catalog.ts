@@ -3,6 +3,8 @@ import { unknownToErrorMessage } from '@synra/protocol'
 import { getInstalledPluginRecord, installPluginOnClient } from '../plugins/install-manager'
 import { listBuiltinPlugins, openPluginPage } from '../plugins/host'
 
+const DEFAULT_PLUGIN_ICON = 'material-symbols:extension-outline'
+
 export type PluginCardItem = {
   pluginId: string
   name: string
@@ -76,7 +78,7 @@ export function usePluginCatalog() {
           version: plugin.version,
           status: extension.status ?? ('installed' as const),
           defaultPage: extension.defaultPage ?? 'home',
-          icon: extension.icon ?? 'i-lucide-puzzle',
+          icon: extension.icon ?? DEFAULT_PLUGIN_ICON,
           logoUrl: extension.logoPath,
           builtin: extension.builtin ?? false
         }

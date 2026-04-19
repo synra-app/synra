@@ -46,6 +46,6 @@
   "synra": {
     "title": "Chat",
     "builtin": true,
-    "icon": "i-lucide-message-circle"
+    "icon": "material-symbols:chat-bubble-outline"
   }
 }

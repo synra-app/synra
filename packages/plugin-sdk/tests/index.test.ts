@@ -57,7 +57,7 @@ test('getSynraUiManifestMetadata derives ui metadata from package manifest', () 
         title: 'Chat',
         builtin: true,
         defaultPage: 'home',
-        icon: 'i-lucide-message-circle'
+        icon: 'material-symbols:chat-bubble-outline'
       }
     })
   ).toEqual({
@@ -67,7 +67,7 @@ test('getSynraUiManifestMetadata derives ui metadata from package manifest', () 
     title: 'Chat',
     builtin: true,
     defaultPage: 'home',
-    icon: 'i-lucide-message-circle'
+    icon: 'material-symbols:chat-bubble-outline'
   })
 })
 

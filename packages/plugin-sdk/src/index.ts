@@ -56,6 +56,7 @@ export type SynraPluginManifest = {
     description?: string
     defaultPage?: string
     builtin?: boolean
+    // Iconify icon name in collection:name format, e.g. material-symbols:10k.
     icon?: string
   }
 }
@@ -68,6 +69,25 @@ export type SynraUiManifestMetadata = {
   builtin: boolean
   defaultPage: string
   icon?: string
+}
+
+const ICONIFY_ICON_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*:[a-z0-9]+(?:-[a-z0-9]+)*$/i
+
+function normalizeManifestIcon(icon: string | undefined): string | undefined {
+  if (!icon) {
+    return undefined
+  }
+
+  const normalized = icon.trim()
+  if (!normalized) {
+    return undefined
+  }
+
+  if (!ICONIFY_ICON_NAME_PATTERN.test(normalized)) {
+    return undefined
+  }
+
+  return normalized
 }
 
 export abstract class SynraPlugin {
@@ -132,7 +152,7 @@ export function getSynraUiManifestMetadata(manifest: SynraPluginManifest): Synra
     title: manifest.synra?.title ?? pluginId,
     builtin: manifest.synra?.builtin ?? false,
     defaultPage: manifest.synra?.defaultPage ?? 'home',
-    icon: manifest.synra?.icon
+    icon: normalizeManifestIcon(manifest.synra?.icon)
   }
 }
 
