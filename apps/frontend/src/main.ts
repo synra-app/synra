@@ -7,7 +7,6 @@ import { createApp } from 'vue'
 import { createRouter, createWebHistory } from 'vue-router'
 import { routes } from 'vue-router/auto-routes'
 import App from './App.vue'
-import { installPluginSdkHooksAdapter } from './plugins/plugin-sdk-hooks-adapter'
 
 installElectronCapacitor({ capacitor: Capacitor })
 
@@ -20,6 +19,5 @@ const app = createApp(App)
 const pinia = createPinia()
 
 app.use(pinia)
-installPluginSdkHooksAdapter()
 app.use(router)
 app.mount('#app')

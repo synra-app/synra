@@ -1,5 +1,5 @@
-import { DeviceConnection, type MessageReceivedEvent } from '@synra/capacitor-device-connection'
 import type { HostCapabilityPort } from '@synra/plugin-sdk'
+import { useConnection } from '@synra/hooks'
 import type { SynraCrossDeviceMessage, SynraMessageType } from '@synra/protocol'
 
 type Unsubscribe = () => void | Promise<void>
@@ -14,7 +14,9 @@ export class CapacitorCapabilityPortAdapter implements HostCapabilityPort {
   async sendCrossDeviceMessage<TType extends SynraMessageType>(
     message: SynraCrossDeviceMessage<TType>
   ): Promise<void> {
-    await DeviceConnection.sendMessage({
+    const { sendMessage, ensureListeners } = useConnection()
+    await ensureListeners()
+    await sendMessage({
       sessionId: message.sessionId,
       messageId: message.messageId,
       messageType: message.type,
@@ -26,40 +28,30 @@ export class CapacitorCapabilityPortAdapter implements HostCapabilityPort {
     type: TType,
     handler: (message: SynraCrossDeviceMessage<TType>) => void | Promise<void>
   ): () => void {
-    let removed = false
-    let listener: { remove: () => Promise<void> } | undefined
-    void DeviceConnection.addListener('messageReceived', (event: MessageReceivedEvent) => {
-      if (removed || event.messageType !== type) {
-        return
-      }
-      const message: SynraCrossDeviceMessage<TType> = {
-        protocolVersion: '1.0',
-        messageId: event.messageId ?? `generated-${Date.now()}`,
-        sessionId: event.sessionId,
-        traceId: createTraceId(),
-        type,
-        sentAt: event.timestamp,
-        ttlMs: 60_000,
-        fromDeviceId: 'remote-device',
-        toDeviceId: 'current-device',
-        payload: event.payload as SynraCrossDeviceMessage<TType>['payload']
-      }
-      void Promise.resolve(handler(message))
-    }).then((handle) => {
-      listener = handle
-    })
+    const { onMessage } = useConnection()
+    const cleanup = onMessage(
+      (event) => {
+        const message: SynraCrossDeviceMessage<TType> = {
+          protocolVersion: '1.0',
+          messageId: event.messageId ?? `generated-${Date.now()}`,
+          sessionId: event.sessionId,
+          traceId: createTraceId(),
+          type,
+          sentAt: event.timestamp,
+          ttlMs: 60_000,
+          fromDeviceId: 'remote-device',
+          toDeviceId: 'current-device',
+          payload: event.payload as SynraCrossDeviceMessage<TType>['payload']
+        }
+        void Promise.resolve(handler(message))
+      },
+      { messageType: type }
+    )
 
-    const cleanup = () => {
-      removed = true
-      if (listener) {
-        return listener.remove()
-      }
-      return undefined
-    }
     this.listenerCleanup.add(cleanup)
     return () => {
       this.listenerCleanup.delete(cleanup)
-      void cleanup()
+      cleanup()
     }
   }
 

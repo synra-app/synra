@@ -3,6 +3,10 @@ import type { SynraMessageType } from '@synra/protocol'
 
 export type SynraHookDevice = {
   deviceId: string
+  ipAddress?: string
+  name?: string
+  source?: string
+  lastSeenAt?: number
   paired?: boolean
   connectable?: boolean
   [key: string]: unknown
@@ -55,7 +59,27 @@ export type SynraDiscoveryStartOptions = {
   timeoutMs?: number
 }
 
-export type SynraHooksAdapter = {
+export type SynraConnectionMessage = {
+  eventId: string
+  sessionId: string
+  messageType: SynraMessageType
+  payload: unknown
+  messageId?: string
+  timestamp: number
+  deviceId?: string
+}
+
+export type SynraConnectionFilter = {
+  sessionId?: string
+  deviceId?: string
+  messageType?: SynraMessageType
+}
+
+export type SynraConnectionSendInput = SynraHookSendMessageInput & {
+  deviceId?: string
+}
+
+export type SynraConnectionRuntimeState = {
   scanState: Ref<string>
   startedAt: Ref<number | undefined>
   scanWindowMs: Ref<number>
@@ -65,21 +89,4 @@ export type SynraHooksAdapter = {
   sessionState: Ref<SynraHookSessionState>
   connectedSessions: Ref<SynraHookConnectedSession[]>
   eventLogs: Ref<SynraHookEventLog[]>
-  ensureListeners(): Promise<void>
-  startDiscovery(options?: string[] | SynraDiscoveryStartOptions): Promise<void>
-  stopDiscovery(): Promise<void>
-  refreshDevices(): Promise<void>
-  pairDevice(deviceId: string): Promise<void>
-  probeConnectable(port?: number, timeoutMs?: number): Promise<void>
-  openSession(options: {
-    deviceId: string
-    host: string
-    port: number
-    transport?: 'tcp'
-  }): Promise<void>
-  closeSession(sessionId?: string): Promise<void>
-  syncSessionState(sessionId?: string): Promise<void>
-  sendMessage(input: SynraHookSendMessageInput): Promise<void>
 }
-
-export type SynraHooksAdapterFactory = () => SynraHooksAdapter

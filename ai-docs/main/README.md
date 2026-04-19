@@ -1,6 +1,6 @@
 # Synra 主流程实现文档
 
-整理日期：2026-04-15
+整理日期：2026-04-19
 
 该目录承载 Synra 的跨端主流程设计，覆盖手机端触发、跨端传输、PC 端插件执行，以及 `@synra/*` 包体系拆分与实现边界。
 
@@ -18,6 +18,7 @@
 - 契约单页索引（快速对齐）
 - Capacitor 设备发现插件（扫描）
 - Capacitor 设备连接插件（会话与收发）
+- `@synra/hooks` 统一运行时 hooks（连接/会话/消息）
 
 ## 阅读顺序
 
@@ -31,6 +32,7 @@
 8. `checklist.md`
 9. `capacitor-lan-discovery-plugin.md`
 10. `capacitor-device-connection-plugin.md`
+11. `hooks-runtime-migration.md`
 
 ## 与 `capacitor-electron-implementation` 的关系
 

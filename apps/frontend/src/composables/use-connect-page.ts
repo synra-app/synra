@@ -75,6 +75,12 @@ export function useConnectPage() {
     if (!selectedDevice.value || !canConnect.value) {
       return
     }
+    if (
+      typeof selectedDevice.value.ipAddress !== 'string' ||
+      selectedDevice.value.ipAddress.length === 0
+    ) {
+      return
+    }
 
     await store.openSession({
       deviceId: selectedDevice.value.deviceId,

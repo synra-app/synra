@@ -191,6 +191,9 @@ importers:
       '@synra/capacitor-lan-discovery':
         specifier: workspace:*
         version: link:../../packages/capacitor-lan-discovery
+      '@synra/hooks':
+        specifier: workspace:*
+        version: link:../../packages/hooks
       '@synra/plugin-sdk':
         specifier: workspace:*
         version: link:../../packages/plugin-sdk
@@ -389,8 +392,39 @@ importers:
         specifier: catalog:vite
         version: 0.1.18(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(typescript@6.0.3)(vite@8.0.8(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(yaml@2.8.3))(yaml@2.8.3)
 
+  packages/hooks:
+    dependencies:
+      '@synra/capacitor-device-connection':
+        specifier: workspace:*
+        version: link:../capacitor-device-connection
+      '@synra/capacitor-lan-discovery':
+        specifier: workspace:*
+        version: link:../capacitor-lan-discovery
+      '@synra/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      vue:
+        specifier: catalog:vue
+        version: 3.5.32(typescript@6.0.3)
+    devDependencies:
+      '@types/node':
+        specifier: catalog:types
+        version: 25.6.0
+      bumpp:
+        specifier: catalog:release
+        version: 11.0.1
+      typescript:
+        specifier: catalog:types
+        version: 6.0.3
+      vite-plus:
+        specifier: catalog:vite
+        version: 0.1.18(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(typescript@6.0.3)(vite@8.0.8(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(yaml@2.8.3))(yaml@2.8.3)
+
   packages/plugin-sdk:
     dependencies:
+      '@synra/hooks':
+        specifier: workspace:*
+        version: link:../hooks
       '@synra/protocol':
         specifier: workspace:*
         version: link:../protocol

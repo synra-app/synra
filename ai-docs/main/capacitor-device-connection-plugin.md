@@ -6,6 +6,7 @@
 
 - `@synra/capacitor-device-connection` 负责设备会话连接与消息收发。
 - 当前仅实现 `tcp`，但接口已预留 `transport` 字段用于后续扩展。
+- 前端与插件侧统一通过 `@synra/hooks` 的 `useConnection()` 调用本插件能力，不再各自拼装事件链路。
 
 ## 插件 API（当前）
 
@@ -29,6 +30,14 @@
 - `messageAck`
 - `transportError`
 - `hostEvent`
+
+## 与 `@synra/hooks` 的关系
+
+- `@synra/hooks` 负责：
+  - 统一 `sendMessage / onMessage` API
+  - 连接事件回放与去重
+  - renderer 侧主进程桥接后的一致消费
+- `@synra/capacitor-device-connection` 继续聚焦底层连接插件契约，不承担前端状态聚合。
 
 ## Electron 桥接（连接）
 

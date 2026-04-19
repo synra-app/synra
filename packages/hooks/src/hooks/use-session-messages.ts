@@ -1,38 +1,30 @@
 import { computed, toValue, type MaybeRefOrGetter } from 'vue'
-import { useSynraHooksAdapter } from './context'
-import type { SynraHookEventLog, SynraHookSendMessageInput } from './types'
-
-function resolveSessionIdFromLog(log: SynraHookEventLog): string | undefined {
-  if (!log.payload || typeof log.payload !== 'object') {
-    return undefined
-  }
-  const maybeSessionId = (log.payload as { sessionId?: unknown }).sessionId
-  return typeof maybeSessionId === 'string' ? maybeSessionId : undefined
-}
+import type { SynraHookSendMessageInput } from '../types'
+import { getConnectionRuntime, resolveSessionIdFromLogPayload } from '../runtime/core'
 
 export function useSessionMessages(sessionId?: MaybeRefOrGetter<string | null | undefined>) {
-  const adapter = useSynraHooksAdapter()
+  const runtime = getConnectionRuntime()
   const targetSessionId = computed(() => {
     const inputSessionId = sessionId ? toValue(sessionId) : undefined
-    return inputSessionId ?? adapter.sessionState.value.sessionId ?? ''
+    return inputSessionId ?? runtime.sessionState.value.sessionId ?? ''
   })
 
   const sessionLogs = computed(() => {
     if (!targetSessionId.value) {
-      return adapter.eventLogs.value
+      return runtime.eventLogs.value
     }
-    return adapter.eventLogs.value.filter(
-      (log) => resolveSessionIdFromLog(log) === targetSessionId.value
+    return runtime.eventLogs.value.filter(
+      (log) => resolveSessionIdFromLogPayload(log.payload) === targetSessionId.value
     )
   })
 
   const canSend = computed(
     () =>
       Boolean(targetSessionId.value) &&
-      adapter.connectedSessions.value.some(
+      runtime.connectedSessions.value.some(
         (session) => session.sessionId === targetSessionId.value && session.status === 'open'
       ) &&
-      !adapter.loading.value
+      !runtime.loading.value
   )
 
   async function sendMessage(
@@ -42,7 +34,7 @@ export function useSessionMessages(sessionId?: MaybeRefOrGetter<string | null | 
     if (!resolvedSessionId) {
       throw new Error('Cannot send message without an active sessionId.')
     }
-    await adapter.sendMessage({
+    await runtime.sendMessage({
       ...input,
       sessionId: resolvedSessionId
     })

@@ -27,10 +27,15 @@ export type BridgeRuntimeOptions = {
   onDiscoveryHostEvent?: (event: DeviceDiscoveryHostEvent) => void
 }
 
+export type BridgeMainRuntime = {
+  deviceDiscoveryService: ReturnType<typeof createDeviceDiscoveryService>
+  connectionService: ReturnType<typeof createConnectionService>
+}
+
 export function setupBridgeMainRuntime(
   ipcMainLike: IpcMainLike,
   options: BridgeRuntimeOptions = {}
-) {
+): BridgeMainRuntime {
   const shellAdapter = options.shellAdapter ?? createShellAdapter()
   const fileSystemAdapter = options.fileSystemAdapter ?? createFileSystemAdapter()
 
@@ -62,4 +67,9 @@ export function setupBridgeMainRuntime(
 
   const dispatch = createMainDispatcher(handlers, { logger: options.logger })
   registerBridgeHandlers(ipcMainLike, dispatch, { allowReRegister: true })
+
+  return {
+    deviceDiscoveryService,
+    connectionService
+  }
 }

@@ -14,15 +14,45 @@ function getPayloadSessionId(payload: unknown): string | undefined {
   return toStringValue(candidate.sessionId)
 }
 
-export function useSessionLogs(eventLogs: Ref<SessionLogEntry[]>, selectedSessionId: Ref<string>) {
+type EventLogLike = {
+  id?: string
+  type: string
+  payload: unknown
+  timestamp: number
+}
+
+const ALLOWED_TYPES: ReadonlyArray<SessionLogEntry['type']> = [
+  'sessionOpened',
+  'sessionClosed',
+  'messageSent',
+  'messageReceived',
+  'messageAck',
+  'transportError'
+]
+
+function normalizeLogType(type: string): SessionLogEntry['type'] {
+  return ALLOWED_TYPES.includes(type as SessionLogEntry['type'])
+    ? (type as SessionLogEntry['type'])
+    : 'messageReceived'
+}
+
+export function useSessionLogs(
+  eventLogs: Readonly<Ref<EventLogLike[]>>,
+  selectedSessionId: Ref<string>
+) {
   const sessionLogs = computed<SessionLogEntry[]>(() => {
     if (!selectedSessionId.value) {
       return []
     }
 
-    return eventLogs.value.filter(
-      (entry) => getPayloadSessionId(entry.payload) === selectedSessionId.value
-    )
+    return eventLogs.value
+      .filter((entry) => getPayloadSessionId(entry.payload) === selectedSessionId.value)
+      .map((entry, index) => ({
+        id: entry.id ?? `${entry.timestamp}-${index}`,
+        type: normalizeLogType(entry.type),
+        payload: entry.payload,
+        timestamp: entry.timestamp
+      }))
   })
 
   return {

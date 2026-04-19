@@ -1,7 +1,7 @@
 {
-  "name": "@synra/plugin-sdk",
+  "name": "@synra/hooks",
   "version": "0.0.0",
-  "description": "Plugin contracts for Synra cross-device runtime.",
+  "description": "Unified runtime-driven hooks for Synra.",
   "license": "MIT",
   "files": [
     "dist"
@@ -10,16 +10,14 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./hooks": "./src/hooks/index.ts",
-    "./vite": "./src/vite.ts",
+    "./connection": "./src/connection/index.ts",
     "./package.json": "./package.json"
   },
   "publishConfig": {
     "access": "public",
     "exports": {
       ".": "./dist/index.mjs",
-      "./hooks": "./dist/hooks/index.mjs",
-      "./vite": "./dist/vite.mjs",
+      "./connection": "./dist/connection/index.mjs",
       "./package.json": "./package.json"
     }
   },
@@ -31,20 +29,15 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
-    "@synra/hooks": "workspace:*",
+    "@synra/capacitor-device-connection": "workspace:*",
+    "@synra/capacitor-lan-discovery": "workspace:*",
     "@synra/protocol": "workspace:*",
-    "@unocss/vite": "catalog:unocss",
-    "@vitejs/plugin-vue": "catalog:vite",
-    "tinyglobby": "catalog:build",
-    "unplugin-auto-import": "catalog:vite",
-    "unplugin-vue": "catalog:vite",
-    "unplugin-vue-components": "catalog:vite",
-    "vite-plus": "catalog:vite",
     "vue": "catalog:vue"
   },
   "devDependencies": {
     "@types/node": "catalog:types",
     "bumpp": "catalog:release",
-    "typescript": "catalog:types"
+    "typescript": "catalog:types",
+    "vite-plus": "catalog:vite"
   }
 }

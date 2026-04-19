@@ -6,6 +6,7 @@
 
 - `@synra/capacitor-lan-discovery` 仅负责设备扫描、发现、配对与可达性探测。
 - 连接、会话、消息收发已拆分到 `@synra/capacitor-device-connection`。
+- hooks 侧对应为 `@synra/hooks` 的发现能力，连接能力不再从 discovery 层透出。
 
 ## 插件 API（当前）
 
@@ -43,3 +44,4 @@
 
 - 发现插件不再承载任何会话生命周期。
 - 需要会话收发能力时，请使用连接插件，并通过 `connection.*` bridge 方法调用。
+- 应用层统一通过 `@synra/hooks` 使用发现与连接，避免在 frontend store 中混杂 discovery/connection 实现细节。

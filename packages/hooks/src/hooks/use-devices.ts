@@ -1,38 +1,38 @@
 import { computed, toValue, type MaybeRefOrGetter } from 'vue'
-import { useSynraHooksAdapter } from './context'
+import { getConnectionRuntime } from '../runtime/core'
 
 export function useDevices() {
-  const adapter = useSynraHooksAdapter()
+  const runtime = getConnectionRuntime()
   const pairedDevices = computed(() =>
-    adapter.devices.value.filter((device) => Boolean(device.paired))
+    runtime.devices.value.filter((device) => Boolean(device.paired))
   )
   const connectableDevices = computed(() =>
-    adapter.devices.value.filter((device) => Boolean(device.connectable))
+    runtime.devices.value.filter((device) => Boolean(device.connectable))
   )
 
   return {
-    devices: adapter.devices,
+    devices: runtime.devices,
     pairedDevices,
     connectableDevices,
-    loading: adapter.loading,
-    error: adapter.error,
-    refreshDevices: () => adapter.refreshDevices(),
-    pairDevice: (deviceId: string) => adapter.pairDevice(deviceId)
+    loading: runtime.loading,
+    error: runtime.error,
+    refreshDevices: () => runtime.refreshDevices(),
+    pairDevice: (deviceId: string) => runtime.pairDevice(deviceId)
   }
 }
 
 export function useDevice(deviceId: MaybeRefOrGetter<string | null | undefined>) {
-  const adapter = useSynraHooksAdapter()
+  const runtime = getConnectionRuntime()
   const resolvedDeviceId = computed(() => toValue(deviceId) ?? '')
 
   const device = computed(
-    () => adapter.devices.value.find((item) => item.deviceId === resolvedDeviceId.value) ?? null
+    () => runtime.devices.value.find((item) => item.deviceId === resolvedDeviceId.value) ?? null
   )
 
   const isPaired = computed(() => Boolean(device.value?.paired))
   const isConnectable = computed(() => Boolean(device.value?.connectable))
   const isConnected = computed(() =>
-    adapter.connectedSessions.value.some(
+    runtime.connectedSessions.value.some(
       (session) => session.deviceId === resolvedDeviceId.value && session.status === 'open'
     )
   )

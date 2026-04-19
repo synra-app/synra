@@ -2,6 +2,31 @@ import { join, resolve } from 'node:path'
 import { styleText } from 'node:util'
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { BRIDGE_HOST_EVENT_CHANNEL, setupBridgeMainRuntime } from './bridge/main'
+import type {
+  DeviceDiscoveryHostEvent,
+  DeviceDiscoveryProbeConnectableOptions,
+  DeviceDiscoveryStartOptions,
+  DeviceSessionOpenOptions,
+  DeviceSessionSendMessageOptions
+} from '@synra/capacitor-electron'
+
+type MainHooksBridge = {
+  startDiscovery: (options?: DeviceDiscoveryStartOptions) => Promise<unknown>
+  stopDiscovery: () => Promise<unknown>
+  getDiscoveredDevices: () => Promise<unknown>
+  pairDevice: (deviceId: string) => Promise<unknown>
+  probeConnectable: (options?: DeviceDiscoveryProbeConnectableOptions) => Promise<unknown>
+  openSession: (options: DeviceSessionOpenOptions) => Promise<unknown>
+  closeSession: (sessionId?: string) => Promise<unknown>
+  sendMessage: (options: DeviceSessionSendMessageOptions) => Promise<unknown>
+  getSessionState: (sessionId?: string) => Promise<unknown>
+  pullHostEvents: () => Promise<{ events: DeviceDiscoveryHostEvent[] }>
+  onHostEvent: (listener: (event: DeviceDiscoveryHostEvent) => void) => () => void
+}
+
+type MainHooksGlobal = typeof globalThis & {
+  __synraHooksMainBridge?: MainHooksBridge
+}
 
 const TAG_STYLES: Readonly<Record<string, Parameters<typeof styleText>[0]>> = {
   'electron-main': 'blue',
@@ -94,7 +119,8 @@ function createMainWindow(): BrowserWindow {
 }
 
 function registerCapacitorElectronBridge(): void {
-  setupBridgeMainRuntime(ipcMain, {
+  const hostEventListeners = new Set<(event: DeviceDiscoveryHostEvent) => void>()
+  const runtime = setupBridgeMainRuntime(ipcMain, {
     shellAdapter: {
       async openExternal(url: string): Promise<void> {
         await shell.openExternal(url)
@@ -104,6 +130,9 @@ function registerCapacitorElectronBridge(): void {
     capacitorVersion: '8.x',
     electronVersion: process.versions.electron,
     onDiscoveryHostEvent(event) {
+      for (const listener of hostEventListeners) {
+        listener(event)
+      }
       for (const window of BrowserWindow.getAllWindows()) {
         if (!window.isDestroyed()) {
           window.webContents.send(BRIDGE_HOST_EVENT_CHANNEL, event)
@@ -111,6 +140,26 @@ function registerCapacitorElectronBridge(): void {
       }
     }
   })
+
+  const bridgeTarget = globalThis as MainHooksGlobal
+  bridgeTarget.__synraHooksMainBridge = {
+    startDiscovery: (options) => runtime.deviceDiscoveryService.startDiscovery(options),
+    stopDiscovery: () => runtime.deviceDiscoveryService.stopDiscovery(),
+    getDiscoveredDevices: () => runtime.deviceDiscoveryService.listDevices(),
+    pairDevice: (deviceId) => runtime.deviceDiscoveryService.pairDevice({ deviceId }),
+    probeConnectable: (options) => runtime.deviceDiscoveryService.probeConnectable(options),
+    openSession: (options) => runtime.connectionService.openSession(options),
+    closeSession: (sessionId) => runtime.connectionService.closeSession({ sessionId }),
+    sendMessage: (options) => runtime.connectionService.sendMessage(options),
+    getSessionState: (sessionId) => runtime.connectionService.getSessionState({ sessionId }),
+    pullHostEvents: () => runtime.connectionService.pullHostEvents(),
+    onHostEvent(listener) {
+      hostEventListeners.add(listener)
+      return () => {
+        hostEventListeners.delete(listener)
+      }
+    }
+  }
 }
 
 void app.whenReady().then(() => {
