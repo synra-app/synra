@@ -76,8 +76,9 @@ class PluginRouteBinder {
     '/node_modules/@synra-plugin/*/dist/pages/**/index.mjs'
   )
   private readonly pageModuleLoaders = {
-    ...this.pageSourceModules,
-    ...this.pageDistModules
+    // Prefer source modules in workspace development for better HMR and stable resolving.
+    ...this.pageDistModules,
+    ...this.pageSourceModules
   }
   private readonly pagesManifestModules = import.meta.glob(
     '/node_modules/@synra-plugin/*/dist/pages.json',
@@ -174,7 +175,7 @@ class PluginRouteBinder {
     const normalizedFilePath = pageFilePath.replace(/^\/+/, '')
     const sourcePath = `/node_modules/${packageName}/${normalizedFilePath}`
     const distPath = `/node_modules/${packageName}/dist/${normalizedFilePath.replace(/\.vue$/i, '.mjs')}`
-    const loader = this.pageModuleLoaders[distPath] ?? this.pageModuleLoaders[sourcePath]
+    const loader = this.pageModuleLoaders[sourcePath] ?? this.pageModuleLoaders[distPath]
     if (!loader) {
       throw new Error(
         `Cannot resolve page module for '${packageName}' file '${normalizedFilePath}'.`

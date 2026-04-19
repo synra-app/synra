@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PanelCard from '../layout/PanelCard.vue'
 import type { ChatSession } from '../../src/types/chat'
 
 defineProps<{

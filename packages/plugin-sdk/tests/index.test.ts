@@ -105,6 +105,19 @@ test('synraVitePluginConfig generates default plugin package config', () => {
     expect((config.pack as { exports?: { devExports: boolean } } | undefined)?.exports).toEqual({
       devExports: true
     })
+    const vitePluginNames = ((config.plugins as Array<{ name?: string } | null>) ?? [])
+      .map((plugin) => plugin?.name)
+      .filter((name): name is string => typeof name === 'string')
+    expect(vitePluginNames.some((name) => name.includes('auto-import'))).toBe(false)
+    expect(vitePluginNames.some((name) => name.includes('components'))).toBe(false)
+
+    const packPluginNames = (
+      (config.pack as { plugins?: Array<{ name?: string } | null> } | undefined)?.plugins ?? []
+    )
+      .map((plugin) => plugin?.name)
+      .filter((name): name is string => typeof name === 'string')
+    expect(packPluginNames.some((name) => name.includes('auto-import'))).toBe(false)
+    expect(packPluginNames.some((name) => name.includes('components'))).toBe(false)
   } finally {
     process.chdir(previousCwd)
     rmSync(tempRoot, { recursive: true, force: true })

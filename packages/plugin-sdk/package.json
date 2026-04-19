@@ -33,9 +33,11 @@
   "dependencies": {
     "@synra/hooks": "workspace:*",
     "@synra/protocol": "workspace:*",
+    "@unocss/config": "catalog:",
     "@unocss/vite": "catalog:unocss",
     "@vitejs/plugin-vue": "catalog:vite",
     "tinyglobby": "catalog:build",
+    "unocss": "catalog:",
     "unplugin-auto-import": "catalog:vite",
     "unplugin-vue": "catalog:vite",
     "unplugin-vue-components": "catalog:vite",

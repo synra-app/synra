@@ -1,10 +1,14 @@
 <script setup lang="ts">
+import PanelCard from '../layout/PanelCard.vue'
+
 const messageInput = defineModel<string>('messageInput', { required: true })
 const messageType = defineModel<string>('messageType', { required: true })
 
 defineProps<{
   disabled: boolean
   canSend: boolean
+  sending: boolean
+  error?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -13,28 +17,34 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <PanelCard title="Send Message">
-    <div class="grid grid-cols-1 gap-2 md:grid-cols-[1fr_auto_auto]">
-      <input
+  <PanelCard title="Message Composer">
+    <div class="space-y-2">
+      <textarea
         v-model="messageInput"
-        class="w-full rounded-md border border-gray-300 px-3 py-2"
+        class="max-h-40 min-h-24 w-full resize-y rounded-md border border-gray-300 px-3 py-2"
         :disabled="disabled"
         placeholder="Type a message..."
-        @keyup.enter="emit('send')"
+        @keydown.enter.exact.prevent="emit('send')"
       />
-      <input
-        v-model="messageType"
-        class="rounded-md border border-gray-300 px-3 py-2 md:w-40"
-        :disabled="disabled"
-        placeholder="message type"
-      />
-      <button
-        class="rounded-md bg-gray-900 px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-50"
-        :disabled="!canSend"
-        @click="emit('send')"
-      >
-        Send
-      </button>
+
+      <div class="flex flex-wrap gap-2">
+        <input
+          v-model="messageType"
+          class="min-w-40 flex-1 rounded-md border border-gray-300 px-3 py-2"
+          :disabled="disabled"
+          placeholder="message type"
+        />
+        <button
+          class="rounded-md bg-gray-900 px-4 py-2 text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+          :disabled="!canSend"
+          @click="emit('send')"
+        >
+          {{ sending ? 'Sending...' : 'Send' }}
+        </button>
+      </div>
+
+      <p v-if="error" class="text-xs text-red-600">{{ error }}</p>
+      <p v-else class="text-xs text-gray-500">Press Enter to send, Shift+Enter for new line.</p>
     </div>
   </PanelCard>
 </template>

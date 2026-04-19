@@ -11,14 +11,16 @@
   "exports": {
     ".": "./src/index.ts",
     "./pages/home": "./pages/home/index.vue",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./style.css": "./dist/style.css"
   },
   "publishConfig": {
     "access": "public",
     "exports": {
       ".": "./dist/index.mjs",
       "./pages/home": "./dist/pages/home/index.mjs",
-      "./package.json": "./package.json"
+      "./package.json": "./package.json",
+      "./style.css": "./dist/style.css"
     }
   },
   "scripts": {
@@ -32,6 +34,7 @@
     "vue": "catalog:vue"
   },
   "devDependencies": {
+    "@tsdown/css": "catalog:",
     "@types/node": "catalog:types",
     "@unocss/preset-icons": "catalog:unocss",
     "@unocss/preset-wind3": "catalog:unocss",
