@@ -10,6 +10,7 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./hooks": "./src/hooks/index.ts",
     "./vite": "./src/vite.ts",
     "./package.json": "./package.json"
   },
@@ -17,6 +18,7 @@
     "access": "public",
     "exports": {
       ".": "./dist/index.mjs",
+      "./hooks": "./dist/hooks/index.mjs",
       "./vite": "./dist/vite.mjs",
       "./package.json": "./package.json"
     }
@@ -36,7 +38,8 @@
     "unplugin-auto-import": "catalog:vite",
     "unplugin-vue": "catalog:vite",
     "unplugin-vue-components": "catalog:vite",
-    "vite-plus": "catalog:vite"
+    "vite-plus": "catalog:vite",
+    "vue": "catalog:vue"
   },
   "devDependencies": {
     "@types/node": "catalog:types",

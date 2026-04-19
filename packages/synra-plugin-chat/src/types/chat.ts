@@ -2,14 +2,14 @@ export type ChatSession = {
   sessionId: string
   deviceId?: string
   remote?: string
-  direction: 'incoming' | 'outgoing'
-  status: 'open' | 'closed'
-  lastActiveAt: string
+  direction?: string
+  status?: string
+  lastActiveAt?: string
 }
 
 export type SessionLogEntry = {
   id: string
   timestamp: number
-  type: 'sessionOpened' | 'messageSent' | 'messageAck' | 'transportError'
+  type: string
   payload: unknown
 }

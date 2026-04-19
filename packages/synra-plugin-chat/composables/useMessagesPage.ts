@@ -1,65 +1,97 @@
 import type { ChatSession, SessionLogEntry } from '../src/types/chat'
+import { useConnectionState, useDiscovery, useSessionMessages } from '@synra/plugin-sdk/hooks'
+import type { SynraHookSendMessageInput } from '@synra/plugin-sdk/hooks'
 
 export function useMessagesPage() {
-  const loading = ref(false)
-  const error = ref<string | null>(null)
+  const { activeSessions: rawActiveSessions } = useConnectionState()
+  const { ensureListeners, loading, error: discoveryError } = useDiscovery()
   const messageInput = ref('')
-  const messageType = ref('custom.chat.text')
-  const activeSessions = ref<ChatSession[]>([
-    {
-      sessionId: 'demo-session',
-      deviceId: 'demo-device',
-      remote: '127.0.0.1',
-      direction: 'outgoing',
-      status: 'open',
-      lastActiveAt: new Date().toLocaleTimeString()
-    }
-  ])
-  const selectedSessionId = ref<string>(activeSessions.value[0]?.sessionId ?? '')
-  const sessionLogs = ref<SessionLogEntry[]>([
-    {
-      id: 'log-session-opened',
-      timestamp: Date.now(),
-      type: 'sessionOpened',
-      payload: {
-        sessionId: selectedSessionId.value
-      }
-    }
-  ])
+  const messageType = ref<SynraHookSendMessageInput['messageType']>('custom.chat.text')
+  const selectedSessionId = ref<string>('')
+  const localError = ref<string | null>(null)
+
+  const activeSessions = computed<ChatSession[]>(() =>
+    rawActiveSessions.value.map((session) => ({
+      sessionId: session.sessionId,
+      deviceId: session.deviceId,
+      remote: typeof session.remote === 'string' ? session.remote : undefined,
+      direction: typeof session.direction === 'string' ? session.direction : undefined,
+      status: typeof session.status === 'string' ? session.status : undefined,
+      lastActiveAt:
+        typeof session.lastActiveAt === 'number'
+          ? new Date(session.lastActiveAt).toLocaleTimeString()
+          : undefined
+    }))
+  )
 
   const selectedSession = computed(() =>
     activeSessions.value.find((item) => item.sessionId === selectedSessionId.value)
   )
 
-  const canSend = computed(
-    () =>
-      Boolean(selectedSession.value?.sessionId) &&
-      messageInput.value.trim().length > 0 &&
-      !loading.value
+  const {
+    sessionLogs: rawSessionLogs,
+    canSend: canSendBySession,
+    sendMessage
+  } = useSessionMessages(selectedSessionId)
+
+  const sessionLogs = computed<SessionLogEntry[]>(() =>
+    rawSessionLogs.value.map((log, index) => ({
+      id: log.id ?? `${log.timestamp}-${index}`,
+      timestamp: log.timestamp,
+      type: log.type,
+      payload: log.payload
+    }))
+  )
+
+  const canSend = computed(() => canSendBySession.value && messageInput.value.trim().length > 0)
+
+  const error = computed(() => localError.value ?? discoveryError.value)
+
+  watch(
+    activeSessions,
+    (sessions) => {
+      if (sessions.length === 0) {
+        selectedSessionId.value = ''
+        return
+      }
+      if (
+        selectedSessionId.value &&
+        sessions.some((item) => item.sessionId === selectedSessionId.value)
+      ) {
+        return
+      }
+      selectedSessionId.value = sessions[0].sessionId
+    },
+    { immediate: true }
   )
 
   function openSession(sessionId: string): void {
     selectedSessionId.value = sessionId
   }
 
-  function onSendMessage(): void {
+  async function onSendMessage(): Promise<void> {
     if (!canSend.value || !selectedSession.value) {
       return
     }
 
     const content = messageInput.value.trim()
     messageInput.value = ''
-    sessionLogs.value.unshift({
-      id: `${Date.now()}`,
-      timestamp: Date.now(),
-      type: 'messageSent',
-      payload: {
+    localError.value = null
+    try {
+      await sendMessage({
         sessionId: selectedSession.value.sessionId,
         messageType: messageType.value,
-        content
-      }
-    })
+        payload: content
+      })
+    } catch (unknownError) {
+      localError.value =
+        unknownError instanceof Error ? unknownError.message : 'Failed to send message.'
+    }
   }
+
+  onMounted(async () => {
+    await ensureListeners()
+  })
 
   return {
     activeSessions,
