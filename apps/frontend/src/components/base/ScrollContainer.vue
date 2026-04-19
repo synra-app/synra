@@ -10,7 +10,7 @@ const props = withDefaults(
   {
     as: 'div',
     viewportClass: '',
-    thumbMinSize: 28
+    thumbMinSize: 20
   }
 )
 
@@ -269,10 +269,10 @@ onBeforeUnmount(() => {
 
 .scroll-container__track {
   position: absolute;
-  top: 4px;
-  right: 4px;
-  bottom: 4px;
-  width: 8px;
+  top: 3px;
+  right: 3px;
+  bottom: 3px;
+  width: 5px;
   border-radius: 999px;
   pointer-events: auto;
   transition: opacity 220ms ease;

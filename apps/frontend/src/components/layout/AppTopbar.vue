@@ -65,7 +65,7 @@ onUnmounted(() => {
 
 <template>
   <header
-    class="app-titlebar-drag z-[60] h-11 border-b border-white/10 bg-[#0d142acc] px-2.5 backdrop-blur-xl lg:px-3"
+    class="app-titlebar-drag z-[60] h-14 border-b border-white/10 bg-[#0d142acc] px-2.5 backdrop-blur-xl lg:h-11 lg:px-3"
     @dblclick="onHeaderDoubleClick"
   >
     <div class="flex h-full items-center justify-between gap-2.5">

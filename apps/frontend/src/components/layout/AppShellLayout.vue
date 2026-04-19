@@ -13,34 +13,51 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="relative flex h-dvh flex-col overflow-hidden text-slate-100">
-    <AppTopbar class="shrink-0" :title="appTitle" @toggle-mobile="emit('toggleMobile')" />
+  <div class="app-shell relative flex h-dvh flex-col overflow-hidden text-slate-100">
+    <AppTopbar
+      class="app-shell-topbar shrink-0"
+      :title="appTitle"
+      @toggle-mobile="emit('toggleMobile')"
+    />
     <div
-      class="grid min-h-0 flex-1 grid-cols-1 gap-2 overflow-hidden px-2 pb-2 pt-2 lg:grid-cols-[260px_1fr] lg:gap-3 lg:px-3 lg:pb-3 lg:pt-3"
+      class="app-shell-body flex min-h-0 flex-1 flex-col overflow-hidden lg:grid lg:grid-cols-[260px_1fr] lg:gap-3 lg:px-3 lg:pb-3 lg:pt-3"
     >
-      <ScrollContainer
-        as="aside"
-        class="fixed bottom-2 left-2 top-12 z-50 w-[min(260px,84vw)] -translate-x-[105%] rounded-2xl bg-[#0f172acc] backdrop-blur-xl transition-transform duration-300 ease-in-out lg:static lg:top-auto lg:h-full lg:w-auto lg:translate-x-0 lg:bg-white/4"
-        viewport-class="h-full p-2.5"
-        :class="mobileOpen ? 'translate-x-0' : ''"
-      >
-        <slot name="sidebar" />
-      </ScrollContainer>
-      <button
-        v-if="mobileOpen"
-        class="fixed inset-0 z-40 bg-black/55 lg:hidden"
-        aria-label="Close menu overlay"
-        @click="emit('closeMobile')"
-      />
+      <aside class="app-shell-sidebar app-shell-sidebar-desktop hidden min-h-0 lg:block">
+        <ScrollContainer
+          as="div"
+          class="app-shell-sidebar-scroll h-full rounded-2xl bg-white/4"
+          viewport-class="h-full p-2.5"
+        >
+          <slot name="sidebar" />
+        </ScrollContainer>
+      </aside>
       <ScrollContainer
         as="main"
-        class="glass-panel min-h-0 min-w-0"
+        class="app-shell-content min-h-0 min-w-0 flex-1 lg:h-full lg:glass-panel"
         viewport-class="h-full p-4 md:p-5"
       >
-        <div class="mx-auto w-full max-w-[1400px]">
+        <div class="app-shell-content-inner mx-auto w-full max-w-[1400px]">
           <slot />
         </div>
       </ScrollContainer>
     </div>
+    <aside
+      class="app-shell-sidebar app-shell-sidebar-mobile fixed inset-y-0 left-0 z-[70] w-[min(280px,86vw)] border-r border-white/10 bg-[#0f172af2] shadow-2xl backdrop-blur-xl transition-transform duration-300 ease-in-out lg:hidden"
+      :class="mobileOpen ? 'translate-x-0' : '-translate-x-full'"
+    >
+      <ScrollContainer
+        as="div"
+        class="app-shell-sidebar-scroll h-full"
+        viewport-class="h-full p-3 pt-4"
+      >
+        <slot name="sidebar" />
+      </ScrollContainer>
+    </aside>
+    <button
+      v-if="mobileOpen"
+      class="app-shell-overlay fixed inset-0 z-[65] bg-black/55 lg:hidden"
+      aria-label="Close menu overlay"
+      @click="emit('closeMobile')"
+    />
   </div>
 </template>
