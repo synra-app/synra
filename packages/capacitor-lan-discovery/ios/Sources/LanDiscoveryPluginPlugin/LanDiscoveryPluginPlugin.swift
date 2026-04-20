@@ -14,28 +14,8 @@ public class LanDiscoveryPluginPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "stopDiscovery", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getDiscoveredDevices", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "probeConnectable", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "openSession", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "closeSession", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "sendMessage", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "getSessionState", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "pullHostEvents", returnType: CAPPluginReturnPromise),
     ]
     private let implementation = LanDiscoveryPlugin()
-
-    public override func load() {
-        implementation.onMessageReceived = { [weak self] payload in
-            self?.notifyListeners("messageReceived", data: payload)
-        }
-        implementation.onMessageAck = { [weak self] payload in
-            self?.notifyListeners("messageAck", data: payload)
-        }
-        implementation.onSessionClosed = { [weak self] payload in
-            self?.notifyListeners("sessionClosed", data: payload)
-        }
-        implementation.onTransportError = { [weak self] payload in
-            self?.notifyListeners("transportError", data: payload)
-        }
-    }
 
     @objc func startDiscovery(_ call: CAPPluginCall) {
         let includeLoopback = call.getBool("includeLoopback") ?? false
@@ -97,87 +77,5 @@ public class LanDiscoveryPluginPlugin: CAPPlugin, CAPBridgedPlugin {
             }
         }
         call.resolve(result)
-    }
-
-    @objc func openSession(_ call: CAPPluginCall) {
-        guard
-            let deviceId = call.getString("deviceId"),
-            let host = call.getString("host"),
-            let port = call.getInt("port")
-        else {
-            call.reject("deviceId/host/port are required.")
-            return
-        }
-
-        let token = call.getString("token")
-        guard
-            let result = implementation.openSession(
-                deviceId: deviceId,
-                host: host,
-                port: NSNumber(value: port),
-                token: token
-            )
-        else {
-            call.reject("openSession failed.")
-            return
-        }
-
-        notifyListeners("sessionOpened", data: [
-            "sessionId": result["sessionId"] as Any,
-            "deviceId": deviceId,
-            "host": host,
-            "port": port,
-        ])
-        call.resolve(result)
-    }
-
-    @objc func closeSession(_ call: CAPPluginCall) {
-        let sessionId = call.getString("sessionId")
-        let result = implementation.closeSession(sessionId: sessionId)
-        notifyListeners("sessionClosed", data: [
-            "sessionId": result["sessionId"] as Any,
-            "reason": "closed-by-client",
-        ])
-        call.resolve(result)
-    }
-
-    @objc func sendMessage(_ call: CAPPluginCall) {
-        guard
-            let sessionId = call.getString("sessionId"),
-            let messageType = call.getString("messageType")
-        else {
-            call.reject("sessionId/messageType are required.")
-            return
-        }
-
-        let payload = call.options["payload"] ?? NSNull()
-        let messageId = call.getString("messageId")
-        guard
-            let result = implementation.sendMessage(
-                sessionId: sessionId,
-                messageType: messageType,
-                payload: payload,
-                messageId: messageId
-            )
-        else {
-            call.reject("sendMessage failed.")
-            return
-        }
-
-        notifyListeners("messageAck", data: [
-            "sessionId": sessionId,
-            "messageId": result["messageId"] as Any,
-            "timestamp": Int(Date().timeIntervalSince1970 * 1000),
-        ])
-        call.resolve(result)
-    }
-
-    @objc func getSessionState(_ call: CAPPluginCall) {
-        let sessionId = call.getString("sessionId")
-        call.resolve(implementation.getSessionState(sessionId: sessionId))
-    }
-
-    @objc func pullHostEvents(_ call: CAPPluginCall) {
-        call.resolve(["events": []])
     }
 }

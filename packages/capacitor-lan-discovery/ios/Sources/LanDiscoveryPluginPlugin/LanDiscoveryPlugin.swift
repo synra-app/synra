@@ -16,16 +16,10 @@ import Darwin
     private var startedAt: Int?
     private var scanWindowMs: Int = 15_000
     private var devices: [String: DeviceRecord] = [:]
-    private var sessionState = SessionState()
-    private var connection: NWConnection?
     private var advertisedService: NetService?
     private var udpResponderSocket: Int32 = -1
     private var udpResponderSource: DispatchSourceRead?
     private let udpResponderQueue = DispatchQueue(label: "com.synra.lan-discovery.udp-responder")
-    public var onMessageReceived: (([String: Any]) -> Void)?
-    public var onMessageAck: (([String: Any]) -> Void)?
-    public var onSessionClosed: (([String: Any]) -> Void)?
-    public var onTransportError: (([String: Any]) -> Void)?
 
     public override init() {
         super.init()
@@ -136,157 +130,6 @@ import Darwin
         ]
     }
 
-    @objc public func openSession(
-        deviceId: String,
-        host: String,
-        port: NSNumber,
-        token: String?
-    ) -> [String: Any]? {
-        let tcpPort = NWEndpoint.Port(rawValue: port.uint16Value)
-        guard let endpointPort = tcpPort else {
-            sessionState.state = "error"
-            sessionState.lastError = "INVALID_PORT"
-            return nil
-        }
-
-        closeSession(sessionId: nil)
-
-        sessionState.state = "connecting"
-        sessionState.deviceId = deviceId
-        sessionState.host = host
-        sessionState.port = Int(port.uint16Value)
-        sessionState.lastError = nil
-
-        let connection = NWConnection(host: NWEndpoint.Host(host), port: endpointPort, using: .tcp)
-        self.connection = connection
-        let semaphore = DispatchSemaphore(value: 0)
-        var opened = false
-        var openError: String?
-        let generatedSessionId = UUID().uuidString
-
-        connection.stateUpdateHandler = { [weak self] state in
-            guard let self else {
-                return
-            }
-            switch state {
-            case .ready:
-                let frame = self.frame(
-                    type: "hello",
-                    sessionId: generatedSessionId,
-                    messageId: nil,
-                    payload: ["token": token as Any]
-                )
-                self.sendFrame(frame)
-                self.receiveSingleFrame { response in
-                    guard let response else {
-                        openError = "MISSING_HELLO_ACK"
-                        semaphore.signal()
-                        return
-                    }
-                    if response["type"] as? String != "helloAck" {
-                        openError = "MISSING_HELLO_ACK"
-                        semaphore.signal()
-                        return
-                    }
-                    if response["appId"] as? String != "synra" {
-                        openError = "APP_ID_MISMATCH"
-                        semaphore.signal()
-                        return
-                    }
-                    self.sessionState.state = "open"
-                    self.sessionState.sessionId = (response["sessionId"] as? String) ?? generatedSessionId
-                    self.sessionState.openedAt = self.now()
-                    opened = true
-                    self.startReceiveLoop()
-                    semaphore.signal()
-                }
-            case .failed(let error):
-                openError = error.localizedDescription
-                semaphore.signal()
-            default:
-                break
-            }
-        }
-
-        connection.start(queue: .global(qos: .userInitiated))
-        let timeout = DispatchTime.now() + .milliseconds(3000)
-        if semaphore.wait(timeout: timeout) == .timedOut {
-            openError = "SESSION_OPEN_TIMEOUT"
-        }
-
-        if opened {
-            return [
-                "success": true,
-                "sessionId": sessionState.sessionId ?? generatedSessionId,
-                "state": sessionState.state,
-            ]
-        }
-
-        sessionState.state = "error"
-        sessionState.lastError = openError ?? "SESSION_OPEN_FAILED"
-        connection.cancel()
-        self.connection = nil
-        return nil
-    }
-
-    @objc public func closeSession(sessionId: String?) -> [String: Any] {
-        if let sessionId = sessionId ?? sessionState.sessionId {
-            let closeFrame = frame(type: "close", sessionId: sessionId, messageId: nil, payload: nil)
-            sendFrame(closeFrame)
-        }
-        connection?.cancel()
-        connection = nil
-        sessionState.state = "closed"
-        sessionState.closedAt = now()
-        return [
-            "success": true,
-            "sessionId": sessionId ?? sessionState.sessionId as Any,
-        ]
-    }
-
-    @objc public func sendMessage(
-        sessionId: String,
-        messageType: String,
-        payload: Any,
-        messageId: String?
-    ) -> [String: Any]? {
-        guard sessionState.state == "open" else {
-            sessionState.lastError = "SESSION_NOT_OPEN"
-            return nil
-        }
-
-        let targetMessageId = messageId ?? UUID().uuidString
-        let envelope: [String: Any] = [
-            "messageType": messageType,
-            "payload": payload,
-        ]
-        let messageFrame = frame(
-            type: "message",
-            sessionId: sessionId,
-            messageId: targetMessageId,
-            payload: envelope
-        )
-        sendFrame(messageFrame)
-        return [
-            "success": true,
-            "messageId": targetMessageId,
-            "sessionId": sessionId,
-        ]
-    }
-
-    @objc public func getSessionState(sessionId: String?) -> [String: Any] {
-        if let sessionId, let currentSessionId = sessionState.sessionId, sessionId != currentSessionId {
-            return [
-                "sessionId": sessionId,
-                "state": "closed",
-                "closedAt": now(),
-                "lastError": "SESSION_NOT_FOUND",
-            ]
-        }
-
-        return sessionState.toDictionary()
-    }
-
     private func mergeDevices(_ incoming: [DeviceRecord]) {
         for device in incoming {
             if let existing = devices[device.deviceId] {
@@ -317,7 +160,8 @@ import Darwin
         }
         defer { freeifaddrs(cursor) }
 
-        let host = Host.current().localizedName ?? "ios-host"
+        let hostName = ProcessInfo.processInfo.hostName
+        let host = hostName.isEmpty ? "ios-host" : hostName
         var records: [DeviceRecord] = []
         var pointer: UnsafeMutablePointer<ifaddrs>? = first
         while let current = pointer {
@@ -705,11 +549,7 @@ import Darwin
         return base
     }
 
-    private func sendFrame(_ frame: [String: Any], through connection: NWConnection? = nil) {
-        let target = connection ?? self.connection
-        guard let target else {
-            return
-        }
+    private func sendFrame(_ frame: [String: Any], through target: NWConnection) {
         guard let payload = try? JSONSerialization.data(withJSONObject: frame) else {
             return
         }
@@ -720,14 +560,9 @@ import Darwin
     }
 
     private func receiveSingleFrame(
-        through connection: NWConnection? = nil,
+        through target: NWConnection,
         completion: @escaping ([String: Any]?) -> Void
     ) {
-        let target = connection ?? self.connection
-        guard let target else {
-            completion(nil)
-            return
-        }
         target.receive(minimumIncompleteLength: 4, maximumLength: 4) { header, _, _, _ in
             guard
                 let header,
@@ -752,52 +587,6 @@ import Darwin
                 }
                 completion(object)
             }
-        }
-    }
-
-    private func startReceiveLoop() {
-        receiveSingleFrame { [weak self] frame in
-            guard let self else {
-                return
-            }
-            guard let frame else {
-                self.sessionState.state = "closed"
-                self.sessionState.closedAt = self.now()
-                return
-            }
-
-            if frame["type"] as? String == "close" {
-                self.sessionState.state = "closed"
-                self.sessionState.closedAt = self.now()
-                self.onSessionClosed?([
-                    "sessionId": frame["sessionId"] as Any,
-                    "reason": "peer-closed",
-                ])
-                return
-            }
-            if frame["type"] as? String == "message" {
-                let payload = frame["payload"] as? [String: Any]
-                self.onMessageReceived?([
-                    "sessionId": frame["sessionId"] as Any,
-                    "messageId": frame["messageId"] as Any,
-                    "messageType": payload?["messageType"] as? String ?? "transport.message.received",
-                    "payload": payload?["payload"] as Any,
-                    "timestamp": frame["timestamp"] as? Int ?? self.now(),
-                ])
-            } else if frame["type"] as? String == "ack" {
-                self.onMessageAck?([
-                    "sessionId": frame["sessionId"] as Any,
-                    "messageId": frame["messageId"] as Any,
-                    "timestamp": frame["timestamp"] as? Int ?? self.now(),
-                ])
-            } else if frame["type"] as? String == "error" {
-                self.onTransportError?([
-                    "sessionId": frame["sessionId"] as Any,
-                    "code": "TRANSPORT_IO_ERROR",
-                    "message": frame["error"] as? String ?? "Unknown transport error",
-                ])
-            }
-            self.startReceiveLoop()
         }
     }
 }
@@ -981,29 +770,5 @@ private struct DeviceRecord {
 private struct ProbeOutcome {
     let connectable: Bool
     let error: String?
-}
-
-private struct SessionState {
-    var sessionId: String?
-    var deviceId: String?
-    var host: String?
-    var port: Int?
-    var state: String = "idle"
-    var lastError: String?
-    var openedAt: Int?
-    var closedAt: Int?
-
-    func toDictionary() -> [String: Any] {
-        [
-            "sessionId": sessionId as Any,
-            "deviceId": deviceId as Any,
-            "host": host as Any,
-            "port": port as Any,
-            "state": state,
-            "lastError": lastError as Any,
-            "openedAt": openedAt as Any,
-            "closedAt": closedAt as Any,
-        ]
-    }
 }
 

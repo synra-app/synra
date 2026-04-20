@@ -1,0 +1,322 @@
+import Foundation
+import Network
+
+/// TCP session + framed JSON protocol (matches Android `DeviceConnectionPlugin`).
+public final class DeviceConnectionPluginCore: NSObject {
+    private let appId = "synra"
+    private let protocolVersion = "1.0"
+    private let sessionAckTimeoutMs = 3000
+
+    private var sessionState = SessionState()
+    private var connection: NWConnection?
+
+    public var onMessageReceived: (([String: Any]) -> Void)?
+    public var onMessageAck: (([String: Any]) -> Void)?
+    public var onSessionClosed: (([String: Any]) -> Void)?
+    public var onTransportError: (([String: Any]) -> Void)?
+
+    public func openSession(
+        deviceId: String,
+        host: String,
+        port: NSNumber,
+        token: String?
+    ) -> [String: Any]? {
+        let tcpPort = NWEndpoint.Port(rawValue: port.uint16Value)
+        guard let endpointPort = tcpPort else {
+            sessionState.state = "error"
+            sessionState.lastError = "INVALID_PORT"
+            return nil
+        }
+
+        closeSession(sessionId: nil)
+
+        sessionState.state = "connecting"
+        sessionState.deviceId = deviceId
+        sessionState.host = host
+        sessionState.port = Int(port.uint16Value)
+        sessionState.lastError = nil
+
+        let nwConnection = NWConnection(host: NWEndpoint.Host(host), port: endpointPort, using: .tcp)
+        connection = nwConnection
+        let semaphore = DispatchSemaphore(value: 0)
+        var opened = false
+        var openError: String?
+        let generatedSessionId = UUID().uuidString
+
+        let helloPayload: Any? = {
+            if let token {
+                return ["token": token]
+            }
+            return nil
+        }()
+
+        nwConnection.stateUpdateHandler = { [weak self] state in
+            guard let self else {
+                return
+            }
+            switch state {
+            case .ready:
+                let frame = self.frame(
+                    type: "hello",
+                    sessionId: generatedSessionId,
+                    messageId: nil,
+                    payload: helloPayload
+                )
+                self.sendFrame(frame, through: nwConnection)
+                self.receiveSingleFrame(through: nwConnection) { response in
+                    guard let response else {
+                        openError = "MISSING_HELLO_ACK"
+                        semaphore.signal()
+                        return
+                    }
+                    if response["type"] as? String != "helloAck" {
+                        openError = "MISSING_HELLO_ACK"
+                        semaphore.signal()
+                        return
+                    }
+                    if response["appId"] as? String != self.appId {
+                        openError = "APP_ID_MISMATCH"
+                        semaphore.signal()
+                        return
+                    }
+                    self.sessionState.state = "open"
+                    self.sessionState.sessionId = (response["sessionId"] as? String) ?? generatedSessionId
+                    self.sessionState.openedAt = self.now()
+                    opened = true
+                    self.startReceiveLoop(on: nwConnection)
+                    semaphore.signal()
+                }
+            case .failed(let error):
+                openError = error.localizedDescription
+                semaphore.signal()
+            default:
+                break
+            }
+        }
+
+        nwConnection.start(queue: .global(qos: .userInitiated))
+        let timeout = DispatchTime.now() + .milliseconds(sessionAckTimeoutMs)
+        if semaphore.wait(timeout: timeout) == .timedOut {
+            openError = "SESSION_OPEN_TIMEOUT"
+        }
+
+        if opened {
+            return [
+                "success": true,
+                "sessionId": sessionState.sessionId ?? generatedSessionId,
+                "state": sessionState.state,
+                "transport": "tcp",
+            ]
+        }
+
+        sessionState.state = "error"
+        sessionState.lastError = openError ?? "SESSION_OPEN_FAILED"
+        nwConnection.cancel()
+        connection = nil
+        return nil
+    }
+
+    public func closeSession(sessionId: String?) -> [String: Any] {
+        if let sid = sessionId ?? sessionState.sessionId {
+            let closeFrame = frame(type: "close", sessionId: sid, messageId: nil, payload: nil)
+            if let conn = connection {
+                sendFrame(closeFrame, through: conn)
+            }
+        }
+        connection?.cancel()
+        connection = nil
+        sessionState.state = "closed"
+        sessionState.closedAt = now()
+        return [
+            "success": true,
+            "sessionId": sessionId ?? sessionState.sessionId as Any,
+            "transport": "tcp",
+        ]
+    }
+
+    public func sendMessage(
+        sessionId: String,
+        messageType: String,
+        payload: Any,
+        messageId: String?
+    ) -> [String: Any]? {
+        guard sessionState.state == "open", let conn = connection else {
+            sessionState.lastError = "SESSION_NOT_OPEN"
+            return nil
+        }
+
+        let targetMessageId = messageId ?? UUID().uuidString
+        let envelope: [String: Any] = [
+            "messageType": messageType,
+            "payload": payload,
+        ]
+        let messageFrame = frame(
+            type: "message",
+            sessionId: sessionId,
+            messageId: targetMessageId,
+            payload: envelope
+        )
+        sendFrame(messageFrame, through: conn)
+        return [
+            "success": true,
+            "messageId": targetMessageId,
+            "sessionId": sessionId,
+            "transport": "tcp",
+        ]
+    }
+
+    public func getSessionState(sessionId: String?) -> [String: Any] {
+        if let sessionId, let currentSessionId = sessionState.sessionId, sessionId != currentSessionId {
+            return [
+                "sessionId": sessionId,
+                "state": "closed",
+                "transport": "tcp",
+                "closedAt": now(),
+                "lastError": "SESSION_NOT_FOUND",
+            ]
+        }
+
+        var dict = sessionState.toDictionary()
+        dict["transport"] = "tcp"
+        return dict
+    }
+
+    private func now() -> Int {
+        Int(Date().timeIntervalSince1970 * 1000)
+    }
+
+    private func frame(type: String, sessionId: String, messageId: String?, payload: Any?) -> [String: Any] {
+        var base: [String: Any] = [
+            "version": protocolVersion,
+            "type": type,
+            "sessionId": sessionId,
+            "timestamp": now(),
+            "appId": appId,
+            "protocolVersion": protocolVersion,
+            "capabilities": ["message"],
+        ]
+        if let messageId {
+            base["messageId"] = messageId
+        }
+        if let payload {
+            base["payload"] = payload
+        }
+        return base
+    }
+
+    private func sendFrame(_ frame: [String: Any], through target: NWConnection) {
+        guard let payload = try? JSONSerialization.data(withJSONObject: frame) else {
+            return
+        }
+        var length = UInt32(payload.count).bigEndian
+        let header = Data(bytes: &length, count: MemoryLayout<UInt32>.size)
+        let packet = header + payload
+        target.send(content: packet, completion: .contentProcessed({ _ in }))
+    }
+
+    private func receiveSingleFrame(
+        through target: NWConnection,
+        completion: @escaping ([String: Any]?) -> Void
+    ) {
+        target.receive(minimumIncompleteLength: 4, maximumLength: 4) { header, _, _, _ in
+            guard let header, header.count == 4 else {
+                completion(nil)
+                return
+            }
+
+            let length = header.withUnsafeBytes { pointer -> UInt32 in
+                pointer.load(as: UInt32.self).bigEndian
+            }
+
+            target.receive(minimumIncompleteLength: Int(length), maximumLength: Int(length)) {
+                payload, _, _, _ in
+                guard
+                    let payload,
+                    let object = try? JSONSerialization.jsonObject(with: payload) as? [String: Any]
+                else {
+                    completion(nil)
+                    return
+                }
+                completion(object)
+            }
+        }
+    }
+
+    private func startReceiveLoop(on target: NWConnection) {
+        receiveSingleFrame(through: target) { [weak self] frame in
+            guard let self else {
+                return
+            }
+            guard let frame else {
+                self.sessionState.state = "closed"
+                self.sessionState.closedAt = self.now()
+                self.connection?.cancel()
+                self.connection = nil
+                return
+            }
+
+            if frame["type"] as? String == "close" {
+                self.sessionState.state = "closed"
+                self.sessionState.closedAt = self.now()
+                self.connection?.cancel()
+                self.connection = nil
+                self.onSessionClosed?([
+                    "sessionId": frame["sessionId"] as Any,
+                    "reason": "peer-closed",
+                    "transport": "tcp",
+                ])
+                return
+            }
+            if frame["type"] as? String == "message" {
+                let payload = frame["payload"] as? [String: Any]
+                self.onMessageReceived?([
+                    "sessionId": frame["sessionId"] as Any,
+                    "messageId": frame["messageId"] as Any,
+                    "messageType": payload?["messageType"] as? String ?? "transport.message.received",
+                    "payload": payload?["payload"] as Any,
+                    "timestamp": frame["timestamp"] as? Int ?? self.now(),
+                    "transport": "tcp",
+                ])
+            } else if frame["type"] as? String == "ack" {
+                self.onMessageAck?([
+                    "sessionId": frame["sessionId"] as Any,
+                    "messageId": frame["messageId"] as Any,
+                    "timestamp": frame["timestamp"] as? Int ?? self.now(),
+                    "transport": "tcp",
+                ])
+            } else if frame["type"] as? String == "error" {
+                self.onTransportError?([
+                    "sessionId": frame["sessionId"] as Any,
+                    "code": "TRANSPORT_IO_ERROR",
+                    "message": frame["error"] as? String ?? "Unknown transport error",
+                    "transport": "tcp",
+                ])
+            }
+            self.startReceiveLoop(on: target)
+        }
+    }
+}
+
+private struct SessionState {
+    var sessionId: String?
+    var deviceId: String?
+    var host: String?
+    var port: Int?
+    var state: String = "idle"
+    var lastError: String?
+    var openedAt: Int?
+    var closedAt: Int?
+
+    func toDictionary() -> [String: Any] {
+        [
+            "sessionId": sessionId as Any,
+            "deviceId": deviceId as Any,
+            "host": host as Any,
+            "port": port as Any,
+            "state": state,
+            "lastError": lastError as Any,
+            "openedAt": openedAt as Any,
+            "closedAt": closedAt as Any,
+        ]
+    }
+}

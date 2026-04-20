@@ -1,15 +1,10 @@
 import XCTest
 @testable import LanDiscoveryPluginPlugin
 
-class LanDiscoveryPluginTests: XCTestCase {
-    func testEcho() {
-        // This is an example of a functional test case for a plugin.
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
-
+final class LanDiscoveryPluginTests: XCTestCase {
+    func testListDevicesInitialState() {
         let implementation = LanDiscoveryPlugin()
-        let value = "Hello, World!"
-        let result = implementation.echo(value)
-
-        XCTAssertEqual(value, result)
+        let result = implementation.listDevices()
+        XCTAssertEqual(result["state"] as? String, "idle")
     }
 }
