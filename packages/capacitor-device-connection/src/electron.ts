@@ -65,7 +65,11 @@ export class DeviceConnectionElectron extends WebPlugin implements DeviceConnect
     }
 
     subscribe((event) => {
-      if (!event.type.startsWith('transport.')) {
+      const isSupportedHostEvent =
+        event.type.startsWith('transport.') ||
+        event.type.startsWith('host.') ||
+        event.type.startsWith('election.')
+      if (!isSupportedHostEvent) {
         return
       }
       const normalized = {
@@ -100,9 +104,22 @@ export class DeviceConnectionElectron extends WebPlugin implements DeviceConnect
           transport: normalized.transport
         })
       } else if (normalized.type === 'transport.session.opened' && normalized.sessionId) {
+        const payload =
+          normalized.payload && typeof normalized.payload === 'object'
+            ? (normalized.payload as {
+                deviceId?: string
+                direction?: 'inbound' | 'outbound'
+                host?: string
+                port?: number
+              })
+            : undefined
         this.notifyListeners('sessionOpened', {
           sessionId: normalized.sessionId,
-          transport: normalized.transport
+          transport: normalized.transport,
+          deviceId: payload?.deviceId,
+          direction: payload?.direction,
+          host: payload?.host,
+          port: payload?.port
         })
       } else if (normalized.type === 'transport.session.closed') {
         this.notifyListeners('sessionClosed', {
@@ -147,6 +164,7 @@ export class DeviceConnectionElectron extends WebPlugin implements DeviceConnect
       sessionId: result.sessionId,
       transport: result.transport,
       deviceId: options.deviceId,
+      direction: 'outbound',
       host: options.host,
       port: options.port
     })

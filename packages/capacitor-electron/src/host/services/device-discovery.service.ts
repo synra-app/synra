@@ -1,7 +1,9 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { createSocket } from 'node:dgram'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createServer, Socket } from 'node:net'
-import { networkInterfaces } from 'node:os'
+import { homedir, networkInterfaces } from 'node:os'
+import { join } from 'node:path'
 import { Bonjour } from 'bonjour-service'
 import { BridgeError } from '../../shared/errors/bridge-error'
 import { BRIDGE_ERROR_CODES } from '../../shared/errors/codes'
@@ -36,6 +38,8 @@ const DEFAULT_ACK_TIMEOUT_MS = 3000
 const INBOUND_SESSION_STABLE_MS = 400
 const MAX_FRAME_BYTES = 256 * 1024
 const MAX_SEND_RETRIES = 3
+const HEARTBEAT_INTERVAL_MS = 10_000
+const HEARTBEAT_TIMEOUT_MS = 25_000
 const SYNRA_APP_ID = 'synra'
 const SYNRA_PROTOCOL_VERSION = '1.0'
 
@@ -75,7 +79,16 @@ type InternalDiscoveryState = {
 
 type LanFrame = {
   version: string
-  type: 'hello' | 'helloAck' | 'message' | 'ack' | 'close' | 'error'
+  type:
+    | 'hello'
+    | 'helloAck'
+    | 'message'
+    | 'ack'
+    | 'close'
+    | 'error'
+    | 'heartbeat'
+    | 'hostRetire'
+    | 'memberOffline'
   sessionId?: string
   messageId?: string
   timestamp: number
@@ -99,6 +112,7 @@ type SessionState = {
 
 type InboundSessionState = {
   sessionId: string
+  remoteDeviceId: string
   remote: string
   socket: Socket
   openedAt: number
@@ -151,6 +165,31 @@ function encodeFrame(frame: LanFrame): Buffer {
 
 function hashDeviceId(input: string): string {
   return `device-${createHash('sha1').update(input).digest('hex').slice(0, 12)}`
+}
+
+function isUuidLike(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+}
+
+function getOrCreateLocalDeviceUuid(): string {
+  const dir = join(homedir(), '.synra')
+  const file = join(dir, 'device-uuid')
+  try {
+    if (existsSync(file)) {
+      const existing = readFileSync(file, 'utf8').trim()
+      if (existing && isUuidLike(existing)) {
+        return existing
+      }
+    }
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true })
+    }
+    const created = randomUUID()
+    writeFileSync(file, created, 'utf8')
+    return created
+  } catch {
+    return randomUUID()
+  }
 }
 
 function toDevice(
@@ -271,6 +310,7 @@ function toErrorMessage(reason: unknown, fallback: string): string {
 export function createDeviceDiscoveryService(
   options: DeviceDiscoveryServiceOptions = {}
 ): DeviceDiscoveryService {
+  const localDeviceUuid = getOrCreateLocalDeviceUuid()
   const state: InternalDiscoveryState = {
     state: 'idle',
     devices: new Map(),
@@ -284,9 +324,11 @@ export function createDeviceDiscoveryService(
   const pendingAcks = new Map<string, () => void>()
   const queuedWriteBySocket = new WeakMap<Socket, Promise<void>>()
   const inboundSessions = new Map<string, InboundSessionState>()
+  const lastHeartbeatByInboundSessionId = new Map<string, number>()
   const socketSessionIds = new Map<Socket, Set<string>>()
   const emittedInboundSessionOpenIds = new Set<string>()
   const pendingInboundOpenTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  let lastHostHeartbeatAt = Date.now()
   const hostEvents: DeviceDiscoveryHostEvent[] = []
   let hostEventId = 0
   function pushHostEvent(
@@ -305,16 +347,95 @@ export function createDeviceDiscoveryService(
       hostEvents.splice(0, hostEvents.length - 300)
     }
   }
+  const hostRemote = (): string =>
+    `${session.host ?? 'unknown'}:${session.port ?? DEFAULT_TCP_PORT}`
+
+  function broadcastToInboundSessions(frame: LanFrame, excludeSocket?: Socket): Promise<void[]> {
+    const writes: Promise<void>[] = []
+    const seenSockets = new Set<Socket>()
+    for (const inbound of inboundSessions.values()) {
+      if (inbound.socket.destroyed) {
+        continue
+      }
+      if (excludeSocket && inbound.socket === excludeSocket) {
+        continue
+      }
+      if (seenSockets.has(inbound.socket)) {
+        continue
+      }
+      seenSockets.add(inbound.socket)
+      writes.push(writeSocketFrame(inbound.socket, frame).catch(() => undefined))
+    }
+    return Promise.all(writes)
+  }
+
+  async function broadcastHostMemberOffline(
+    sessionId: string,
+    remote: string,
+    excludeSocket?: Socket
+  ): Promise<void> {
+    await broadcastToInboundSessions(
+      {
+        version: SYNRA_PROTOCOL_VERSION,
+        type: 'memberOffline',
+        sessionId,
+        timestamp: Date.now(),
+        payload: {
+          remote,
+          offlineAt: Date.now()
+        }
+      },
+      excludeSocket
+    )
+  }
+
+  async function broadcastHostRetire(reason: string): Promise<void> {
+    pushHostEvent('host.retire', {
+      remote: 'local-host',
+      sessionId: session.sessionId,
+      payload: { reason, retiredAt: Date.now() }
+    })
+    await broadcastToInboundSessions({
+      version: SYNRA_PROTOCOL_VERSION,
+      type: 'hostRetire',
+      sessionId: session.sessionId,
+      timestamp: Date.now(),
+      payload: {
+        reason,
+        retiredAt: Date.now()
+      }
+    })
+  }
   const tcpServer = createServer((socket) => {
     const decoder = new FrameDecoder()
     const remote = `${socket.remoteAddress ?? 'unknown'}:${socket.remotePort ?? 'unknown'}`
-    console.log('[transport] tcp client connected:', remote)
     socket.on('data', (chunk: Buffer) => {
       const frames = decoder.push(chunk)
       for (const frame of frames) {
         if (frame.type === 'hello') {
-          if (frame.sessionId) {
-            bindInboundSession(frame.sessionId, socket, remote)
+          const helloPayload =
+            frame.payload && typeof frame.payload === 'object'
+              ? (frame.payload as { sourceDeviceId?: unknown; probe?: unknown })
+              : undefined
+          const sourceDeviceId =
+            typeof helloPayload?.sourceDeviceId === 'string'
+              ? helloPayload.sourceDeviceId
+              : undefined
+          const isProbe = helloPayload?.probe === true
+          if (!sourceDeviceId) {
+            void enqueueSocketFrame(socket, {
+              version: SYNRA_PROTOCOL_VERSION,
+              type: 'error',
+              sessionId: frame.sessionId,
+              timestamp: Date.now(),
+              error: 'SOURCE_DEVICE_ID_REQUIRED'
+            })
+              .catch(() => undefined)
+              .finally(() => socket.destroy())
+            continue
+          }
+          if (frame.sessionId && !isProbe) {
+            bindInboundSession(frame.sessionId, sourceDeviceId, socket, remote)
           }
           const response: LanFrame = {
             version: SYNRA_PROTOCOL_VERSION,
@@ -323,25 +444,30 @@ export function createDeviceDiscoveryService(
             timestamp: Date.now(),
             appId: SYNRA_APP_ID,
             protocolVersion: SYNRA_PROTOCOL_VERSION,
-            capabilities: ['message']
+            capabilities: ['message'],
+            payload: {
+              sourceDeviceId: localDeviceUuid
+            }
           }
-          void enqueueSocketFrame(socket, response)
+          if (isProbe) {
+            void enqueueSocketFrame(socket, response)
+              .catch(() => undefined)
+              .finally(() => socket.destroy())
+          } else {
+            void enqueueSocketFrame(socket, response).catch(() => undefined)
+          }
           continue
         }
 
         if (frame.type === 'message') {
           if (frame.sessionId) {
-            bindInboundSession(frame.sessionId, socket, remote)
             const currentInbound = inboundSessions.get(frame.sessionId)
-            if (currentInbound) {
-              currentInbound.lastActiveAt = Date.now()
+            if (!currentInbound) {
+              continue
             }
+            currentInbound.lastActiveAt = Date.now()
+            lastHeartbeatByInboundSessionId.set(frame.sessionId, Date.now())
           }
-          console.log('[transport] tcp message received:', {
-            remote,
-            sessionId: frame.sessionId,
-            messageId: frame.messageId
-          })
           const envelope =
             frame.payload && typeof frame.payload === 'object'
               ? (frame.payload as { messageType?: string; payload?: unknown })
@@ -362,12 +488,30 @@ export function createDeviceDiscoveryService(
               messageId: frame.messageId,
               timestamp: Date.now()
             }
-            void enqueueSocketFrame(socket, ack)
+            void enqueueSocketFrame(socket, ack).catch(() => undefined)
+          }
+          continue
+        }
+
+        if (frame.type === 'heartbeat') {
+          if (frame.sessionId) {
+            const currentInbound = inboundSessions.get(frame.sessionId)
+            if (!currentInbound) {
+              continue
+            }
+            lastHeartbeatByInboundSessionId.set(frame.sessionId, Date.now())
           }
           continue
         }
 
         if (frame.type === 'ack' && frame.messageId) {
+          if (frame.sessionId) {
+            const currentInbound = inboundSessions.get(frame.sessionId)
+            if (!currentInbound) {
+              continue
+            }
+            lastHeartbeatByInboundSessionId.set(frame.sessionId, Date.now())
+          }
           resolveAck(frame.sessionId, frame.messageId)
           pushHostEvent('transport.message.ack', {
             remote,
@@ -379,14 +523,29 @@ export function createDeviceDiscoveryService(
 
         if (frame.type === 'close') {
           if (frame.sessionId) {
+            const currentInbound = inboundSessions.get(frame.sessionId)
+            if (!currentInbound) {
+              socket.destroy()
+              continue
+            }
             clearPendingInboundOpenTimer(frame.sessionId)
             inboundSessions.delete(frame.sessionId)
+            lastHeartbeatByInboundSessionId.delete(frame.sessionId)
             const ids = socketSessionIds.get(socket)
             ids?.delete(frame.sessionId)
             pushHostEvent('transport.session.closed', {
               remote,
               sessionId: frame.sessionId
             })
+            pushHostEvent('host.member.offline', {
+              remote,
+              sessionId: frame.sessionId,
+              payload: {
+                reason: 'MEMBER_CLOSED_SESSION',
+                offlineAt: Date.now()
+              }
+            })
+            void broadcastHostMemberOffline(frame.sessionId, remote, socket)
           }
           socket.destroy()
           continue
@@ -394,14 +553,66 @@ export function createDeviceDiscoveryService(
       }
     })
     socket.on('close', () => {
-      console.log('[transport] tcp client closed:', remote)
       const closedSessionIds = [...(socketSessionIds.get(socket) ?? new Set<string>())]
       releaseSocketInboundSessions(socket)
       for (const closedSessionId of closedSessionIds) {
+        lastHeartbeatByInboundSessionId.delete(closedSessionId)
         pushHostEvent('transport.session.closed', {
           remote,
           sessionId: closedSessionId
         })
+        pushHostEvent('host.member.offline', {
+          remote,
+          sessionId: closedSessionId,
+          payload: {
+            reason: 'MEMBER_SOCKET_CLOSED',
+            offlineAt: Date.now()
+          }
+        })
+        void broadcastHostMemberOffline(closedSessionId, remote, socket)
+      }
+    })
+    socket.on('error', (error) => {
+      const reason = toErrorMessage(error, 'SOCKET_ERROR')
+      const normalizedReason = reason.toUpperCase()
+      const isProbeSocketNoise =
+        normalizedReason.includes('ECONNRESET') ||
+        normalizedReason.includes('EPIPE') ||
+        normalizedReason.includes('ECONNABORTED')
+      const closedSessionIds = [...(socketSessionIds.get(socket) ?? new Set<string>())]
+      if (!isProbeSocketNoise) {
+        console.warn('[transport] tcp client error:', remote, reason)
+        pushHostEvent('transport.error', {
+          remote,
+          code: 'TRANSPORT_IO_ERROR',
+          payload: {
+            message: reason
+          }
+        })
+      }
+      releaseSocketInboundSessions(socket)
+      for (const closedSessionId of closedSessionIds) {
+        lastHeartbeatByInboundSessionId.delete(closedSessionId)
+        pushHostEvent('host.member.offline', {
+          remote,
+          sessionId: closedSessionId,
+          payload: {
+            reason: 'MEMBER_SOCKET_ERROR',
+            offlineAt: Date.now()
+          }
+        })
+        void broadcastHostMemberOffline(closedSessionId, remote, socket)
+      }
+    })
+  })
+  tcpServer.on('error', (error) => {
+    const reason = toErrorMessage(error, 'TCP_SERVER_ERROR')
+    console.warn('[transport] tcp server error:', reason)
+    pushHostEvent('transport.error', {
+      remote: 'tcp-server',
+      code: 'TRANSPORT_IO_ERROR',
+      payload: {
+        message: reason
       }
     })
   })
@@ -414,7 +625,8 @@ export function createDeviceDiscoveryService(
     protocol: 'tcp',
     port: DEFAULT_TCP_PORT,
     txt: {
-      appId: SYNRA_APP_ID
+      appId: SYNRA_APP_ID,
+      deviceId: localDeviceUuid
     }
   })
   mdnsPublishedService?.start?.()
@@ -428,7 +640,8 @@ export function createDeviceDiscoveryService(
       JSON.stringify({
         appId: SYNRA_APP_ID,
         protocolVersion: SYNRA_PROTOCOL_VERSION,
-        port: DEFAULT_TCP_PORT
+        port: DEFAULT_TCP_PORT,
+        deviceId: localDeviceUuid
       }),
       'utf8'
     )
@@ -440,6 +653,54 @@ export function createDeviceDiscoveryService(
   udpResponder.bind(UDP_DISCOVERY_PORT, () => {
     udpResponder.setBroadcast(true)
   })
+
+  setInterval(() => {
+    const now = Date.now()
+
+    for (const inbound of inboundSessions.values()) {
+      if (inbound.socket.destroyed) {
+        continue
+      }
+      void enqueueSocketFrame(inbound.socket, {
+        version: SYNRA_PROTOCOL_VERSION,
+        type: 'heartbeat',
+        sessionId: inbound.sessionId,
+        timestamp: now
+      }).catch(() => undefined)
+    }
+
+    for (const [sessionId, inbound] of inboundSessions.entries()) {
+      const lastHeartbeat = lastHeartbeatByInboundSessionId.get(sessionId) ?? inbound.lastActiveAt
+      if (now - lastHeartbeat <= HEARTBEAT_TIMEOUT_MS) {
+        continue
+      }
+      pushHostEvent('host.member.offline', {
+        remote: inbound.remote,
+        sessionId,
+        payload: {
+          reason: 'HEARTBEAT_TIMEOUT',
+          offlineAt: now
+        }
+      })
+      void broadcastHostMemberOffline(sessionId, inbound.remote, inbound.socket)
+      inbound.socket.destroy()
+      inboundSessions.delete(sessionId)
+      lastHeartbeatByInboundSessionId.delete(sessionId)
+    }
+
+    if (session.state === 'open' && now - lastHostHeartbeatAt > HEARTBEAT_TIMEOUT_MS) {
+      pushHostEvent('host.heartbeat.timeout', {
+        remote: hostRemote(),
+        sessionId: session.sessionId,
+        code: 'HEARTBEAT_TIMEOUT',
+        payload: {
+          timeoutMs: HEARTBEAT_TIMEOUT_MS
+        }
+      })
+      setSessionClosed('HOST_HEARTBEAT_TIMEOUT')
+      clientSocket?.destroy()
+    }
+  }, HEARTBEAT_INTERVAL_MS)
 
   async function discoverViaMdns(
     options: {
@@ -565,14 +826,21 @@ export function createDeviceDiscoveryService(
     }
   }
 
-  function bindInboundSession(sessionId: string, socket: Socket, remote: string): void {
+  function bindInboundSession(
+    sessionId: string,
+    remoteDeviceId: string,
+    socket: Socket,
+    remote: string
+  ): void {
     inboundSessions.set(sessionId, {
       sessionId,
+      remoteDeviceId,
       remote,
       socket,
       openedAt: Date.now(),
       lastActiveAt: Date.now()
     })
+    lastHeartbeatByInboundSessionId.set(sessionId, Date.now())
     let ids = socketSessionIds.get(socket)
     if (!ids) {
       ids = new Set<string>()
@@ -591,7 +859,13 @@ export function createDeviceDiscoveryService(
       emittedInboundSessionOpenIds.add(sessionId)
       pushHostEvent('transport.session.opened', {
         remote: inbound.remote,
-        sessionId: inbound.sessionId
+        sessionId: inbound.sessionId,
+        payload: {
+          deviceId: inbound.remoteDeviceId,
+          direction: 'inbound',
+          host: inbound.socket.remoteAddress,
+          port: inbound.socket.remotePort
+        }
       })
     }, INBOUND_SESSION_STABLE_MS)
     pendingInboundOpenTimers.set(sessionId, timer)
@@ -614,6 +888,7 @@ export function createDeviceDiscoveryService(
     for (const id of ids) {
       clearPendingInboundOpenTimer(id)
       inboundSessions.delete(id)
+      lastHeartbeatByInboundSessionId.delete(id)
       emittedInboundSessionOpenIds.delete(id)
     }
     socketSessionIds.delete(socket)
@@ -637,13 +912,54 @@ export function createDeviceDiscoveryService(
             pendingHelloResolve = undefined
             continue
           }
+          const helloAckPayload =
+            frame.payload && typeof frame.payload === 'object'
+              ? (frame.payload as { sourceDeviceId?: unknown })
+              : undefined
+          const remoteDeviceId =
+            typeof helloAckPayload?.sourceDeviceId === 'string'
+              ? helloAckPayload.sourceDeviceId
+              : undefined
+          if (!remoteDeviceId) {
+            pendingHelloReject?.('SOURCE_DEVICE_ID_REQUIRED')
+            pendingHelloReject = undefined
+            pendingHelloResolve = undefined
+            continue
+          }
 
           session.state = 'open'
           session.sessionId = frame.sessionId ?? session.sessionId ?? randomUUID()
+          session.deviceId = remoteDeviceId
           session.openedAt = Date.now()
+          lastHostHeartbeatAt = Date.now()
           pendingHelloResolve?.(session.sessionId ?? randomUUID())
           pendingHelloResolve = undefined
           pendingHelloReject = undefined
+          continue
+        }
+
+        if (frame.type === 'heartbeat') {
+          lastHostHeartbeatAt = Date.now()
+          continue
+        }
+
+        if (frame.type === 'hostRetire') {
+          pushHostEvent('host.retire', {
+            remote: hostRemote(),
+            sessionId: frame.sessionId ?? session.sessionId,
+            payload: frame.payload
+          })
+          setSessionClosed('HOST_RETIRED')
+          clientSocket?.destroy()
+          continue
+        }
+
+        if (frame.type === 'memberOffline') {
+          pushHostEvent('host.member.offline', {
+            remote: hostRemote(),
+            sessionId: frame.sessionId,
+            payload: frame.payload
+          })
           continue
         }
 
@@ -718,9 +1034,13 @@ export function createDeviceDiscoveryService(
           timestamp: Date.now(),
           appId: SYNRA_APP_ID,
           protocolVersion: SYNRA_PROTOCOL_VERSION,
-          capabilities: ['message']
+          capabilities: ['message'],
+          payload: {
+            sourceDeviceId: localDeviceUuid,
+            probe: true
+          }
         }
-        void enqueueSocketFrame(socket, hello)
+        void enqueueSocketFrame(socket, hello).catch(() => undefined)
       })
     })
   }
@@ -803,10 +1123,7 @@ export function createDeviceDiscoveryService(
         port: options.port ?? DEFAULT_TCP_PORT,
         timeoutMs: options.timeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS,
         concurrency,
-        deadlineAt:
-          options.discoveryTimeoutMs && options.discoveryTimeoutMs > 0
-            ? Date.now() + options.discoveryTimeoutMs
-            : undefined
+        deadlineAt: Date.now() + Math.max(500, discoveryTimeoutMs)
       })
 
       for (const device of probeResult) {
@@ -861,6 +1178,12 @@ export function createDeviceDiscoveryService(
       }
     },
     async openSession(options: DeviceSessionOpenOptions): Promise<DeviceSessionOpenResult> {
+      if (session.state === 'connecting') {
+        throw new BridgeError(
+          BRIDGE_ERROR_CODES.unsupportedOperation,
+          'Session is already connecting.'
+        )
+      }
       if (clientSocket) {
         clientSocket.destroy()
         clientSocket = undefined
@@ -881,7 +1204,11 @@ export function createDeviceDiscoveryService(
         socket.setTimeout(DEFAULT_ACK_TIMEOUT_MS, () => reject('SESSION_OPEN_TIMEOUT'))
         socket.on('error', (error) => reject(error.message))
         socket.connect(options.port, options.host, () => {
-          void writeClientFrame({
+          if (clientSocket !== socket || socket.destroyed) {
+            reject('SESSION_SOCKET_REPLACED')
+            return
+          }
+          void enqueueSocketFrame(socket, {
             version: SYNRA_PROTOCOL_VERSION,
             type: 'hello',
             sessionId: randomUUID(),
@@ -890,9 +1217,11 @@ export function createDeviceDiscoveryService(
             protocolVersion: SYNRA_PROTOCOL_VERSION,
             capabilities: ['message'],
             payload: {
-              token: options.token
+              token: options.token,
+              sourceDeviceId: localDeviceUuid,
+              probe: false
             }
-          })
+          }).catch((error: unknown) => reject(toErrorMessage(error, 'SESSION_OPEN_FAILED')))
         })
       }).catch((reason: unknown) => {
         setSessionClosed(toErrorMessage(reason, 'SESSION_OPEN_FAILED'))
@@ -912,24 +1241,32 @@ export function createDeviceDiscoveryService(
     },
     async closeSession(options: DeviceSessionCloseOptions = {}): Promise<DeviceSessionCloseResult> {
       const targetSessionId = options.sessionId ?? session.sessionId
-      if (targetSessionId) {
-        clearPendingInboundOpenTimer(targetSessionId)
-        const inbound = inboundSessions.get(targetSessionId)
-        if (inbound && !inbound.socket.destroyed) {
-          try {
-            await writeSocketFrame(inbound.socket, {
-              version: SYNRA_PROTOCOL_VERSION,
-              type: 'close',
-              sessionId: targetSessionId,
-              timestamp: Date.now()
-            })
-          } catch {
-            // ignore
-          }
-          inbound.socket.destroy()
-          inboundSessions.delete(targetSessionId)
-        }
+      if (inboundSessions.size > 0 && !options.sessionId) {
+        await broadcastHostRetire('HOST_SHUTDOWN')
       }
+
+      const inboundTargetIds = targetSessionId ? [targetSessionId] : [...inboundSessions.keys()]
+      for (const inboundTargetId of inboundTargetIds) {
+        clearPendingInboundOpenTimer(inboundTargetId)
+        const inbound = inboundSessions.get(inboundTargetId)
+        if (!inbound || inbound.socket.destroyed) {
+          continue
+        }
+        try {
+          await writeSocketFrame(inbound.socket, {
+            version: SYNRA_PROTOCOL_VERSION,
+            type: 'close',
+            sessionId: inboundTargetId,
+            timestamp: Date.now()
+          })
+        } catch {
+          // ignore
+        }
+        inbound.socket.destroy()
+        inboundSessions.delete(inboundTargetId)
+        lastHeartbeatByInboundSessionId.delete(inboundTargetId)
+      }
+
       if (clientSocket && !clientSocket.destroyed) {
         try {
           await writeClientFrame({

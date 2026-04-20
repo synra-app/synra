@@ -6,6 +6,7 @@ public final class DeviceConnectionPluginCore: NSObject {
     private let appId = "synra"
     private let protocolVersion = "1.0"
     private let sessionAckTimeoutMs = 3000
+    private let deviceUuidStorageKey = "synra.device-connection.device-uuid"
 
     private var sessionState = SessionState()
     private var connection: NWConnection?
@@ -44,10 +45,14 @@ public final class DeviceConnectionPluginCore: NSObject {
         let generatedSessionId = UUID().uuidString
 
         let helloPayload: Any? = {
+            var payload: [String: Any] = [
+                "sourceDeviceId": localDeviceUuid(),
+                "probe": false,
+            ]
             if let token {
-                return ["token": token]
+                payload["token"] = token
             }
-            return nil
+            return payload
         }()
 
         nwConnection.stateUpdateHandler = { [weak self] state in
@@ -79,7 +84,15 @@ public final class DeviceConnectionPluginCore: NSObject {
                         semaphore.signal()
                         return
                     }
+                    let helloAckPayload = response["payload"] as? [String: Any]
+                    let remoteDeviceId = helloAckPayload?["sourceDeviceId"] as? String
+                    if remoteDeviceId?.isEmpty != false {
+                        openError = "SOURCE_DEVICE_ID_REQUIRED"
+                        semaphore.signal()
+                        return
+                    }
                     self.sessionState.state = "open"
+                    self.sessionState.deviceId = remoteDeviceId
                     self.sessionState.sessionId = (response["sessionId"] as? String) ?? generatedSessionId
                     self.sessionState.openedAt = self.now()
                     opened = true
@@ -183,6 +196,16 @@ public final class DeviceConnectionPluginCore: NSObject {
 
     private func now() -> Int {
         Int(Date().timeIntervalSince1970 * 1000)
+    }
+
+    private func localDeviceUuid() -> String {
+        let defaults = UserDefaults.standard
+        if let existing = defaults.string(forKey: deviceUuidStorageKey), !existing.isEmpty {
+            return existing
+        }
+        let created = UUID().uuidString
+        defaults.set(created, forKey: deviceUuidStorageKey)
+        return created
     }
 
     private func frame(type: String, sessionId: String, messageId: String?, payload: Any?) -> [String: Any] {

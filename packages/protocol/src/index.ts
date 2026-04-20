@@ -21,9 +21,31 @@ export type TransportMessageType =
   | 'transport.message.ack'
   | 'transport.error'
 
+export type ClusterSessionMessageType = 'session.open' | 'session.close' | 'session.keepalive'
+
+export type RelayMessageType = 'relay.request' | 'relay.ack' | 'relay.result'
+
+export type ClusterHostMessageType =
+  | 'host.announce'
+  | 'host.retire'
+  | 'host.member.offline'
+  | 'host.heartbeat'
+
+export type ElectionMessageType =
+  | 'election.vote.request'
+  | 'election.vote.response'
+  | 'election.win'
+
 export type CustomMessageType = `custom.${string}`
 
-export type SynraMessageType = LegacySynraMessageType | TransportMessageType | CustomMessageType
+export type SynraMessageType =
+  | LegacySynraMessageType
+  | TransportMessageType
+  | ClusterSessionMessageType
+  | RelayMessageType
+  | ClusterHostMessageType
+  | ElectionMessageType
+  | CustomMessageType
 
 export type RuntimeMessageType =
   | 'runtime.request'
@@ -111,6 +133,85 @@ export type TransportErrorPayload = {
   details?: unknown
 }
 
+export type SessionOpenPayload = {
+  nodeId: DeviceId
+  requestedAt: number
+}
+
+export type SessionClosePayload = {
+  sessionId: SessionId
+  reason?: string
+  closedAt: number
+}
+
+export type SessionKeepalivePayload = {
+  sessionId: SessionId
+  sentAt: number
+}
+
+export type RelayRequestPayload = {
+  requestId: string
+  routeTo: DeviceId
+  data: unknown
+}
+
+export type RelayAckPayload = {
+  requestId: string
+  ackedAt: number
+}
+
+export type RelayResultPayload = {
+  requestId: string
+  ok: boolean
+  result?: unknown
+  error?: ProtocolErrorPayload
+}
+
+export type HostAnnouncePayload = {
+  hostId: DeviceId
+  term: number
+  epoch: number
+}
+
+export type HostRetirePayload = {
+  hostId: DeviceId
+  term: number
+  retireAt: number
+  reason?: string
+}
+
+export type HostMemberOfflinePayload = {
+  nodeId: DeviceId
+  sessionId?: SessionId
+  offlineAt: number
+  reason?: string
+}
+
+export type HostHeartbeatPayload = {
+  hostId: DeviceId
+  term?: number
+  epoch?: number
+  timestamp: number
+}
+
+export type ElectionVoteRequestPayload = {
+  candidateId: DeviceId
+  term: number
+  candidateEpochHint?: number
+}
+
+export type ElectionVoteResponsePayload = {
+  voterId: DeviceId
+  term: number
+  granted: boolean
+}
+
+export type ElectionWinPayload = {
+  hostId: DeviceId
+  term: number
+  epoch: number
+}
+
 export type SynraCrossDevicePayloadByType = {
   'share.detected': ShareDetectedPayload
   'action.proposed': ActionProposedPayload
@@ -123,6 +224,19 @@ export type SynraCrossDevicePayloadByType = {
   'transport.message.received': TransportMessageReceivedPayload
   'transport.message.ack': TransportMessageAckPayload
   'transport.error': TransportErrorPayload
+  'session.open': SessionOpenPayload
+  'session.close': SessionClosePayload
+  'session.keepalive': SessionKeepalivePayload
+  'relay.request': RelayRequestPayload
+  'relay.ack': RelayAckPayload
+  'relay.result': RelayResultPayload
+  'host.announce': HostAnnouncePayload
+  'host.retire': HostRetirePayload
+  'host.member.offline': HostMemberOfflinePayload
+  'host.heartbeat': HostHeartbeatPayload
+  'election.vote.request': ElectionVoteRequestPayload
+  'election.vote.response': ElectionVoteResponsePayload
+  'election.win': ElectionWinPayload
 } & {
   [K in CustomMessageType]: unknown
 }

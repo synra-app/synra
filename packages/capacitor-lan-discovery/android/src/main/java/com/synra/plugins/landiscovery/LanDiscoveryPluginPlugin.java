@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.content.Context;
 import android.net.nsd.NsdManager;
 import android.net.nsd.NsdServiceInfo;
+import android.util.Log;
 import androidx.annotation.NonNull;
 
 import com.getcapacitor.JSArray;
@@ -26,23 +27,29 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
+import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ConcurrentHashMap;
 
 @CapacitorPlugin(name = "LanDiscovery")
 public class LanDiscoveryPluginPlugin extends Plugin {
+    private static final String TAG = "SynraLanDiscovery";
     private static final int DEFAULT_TCP_PORT = 32100;
     private static final int DEFAULT_TIMEOUT_MS = 1500;
     private static final int DEFAULT_DISCOVERY_TIMEOUT_MS = 1500;
@@ -51,18 +58,29 @@ public class LanDiscoveryPluginPlugin extends Plugin {
     private static final String DEFAULT_MDNS_SERVICE_TYPE = "_synra._tcp.";
     private static final String APP_ID = "synra";
     private static final String PROTOCOL_VERSION = "1.0";
+    private static final String PREFS_NAME = "synra_lan_discovery";
+    private static final String PREFS_DEVICE_UUID_KEY = "device_uuid";
 
     private final LanDiscoveryPlugin implementation = new LanDiscoveryPlugin();
     private DatagramSocket udpResponderSocket;
     private ExecutorService discoveryExecutor;
+    private ExecutorService tcpServerExecutor;
+    private ExecutorService tcpClientExecutor;
+    private ServerSocket tcpServerSocket;
+    private volatile boolean tcpServerRunning = false;
+    private final Set<Socket> inboundTcpSockets = Collections.synchronizedSet(new HashSet<>());
+    private final Map<String, Socket> inboundSessionSockets = new ConcurrentHashMap<>();
     private NsdManager.RegistrationListener mdnsRegistrationListener;
 
     @Override
     public void load() {
         super.load();
         this.discoveryExecutor = Executors.newSingleThreadExecutor();
+        this.tcpServerExecutor = Executors.newSingleThreadExecutor();
+        this.tcpClientExecutor = Executors.newCachedThreadPool();
         startUdpDiscoveryResponder();
         registerMdnsService();
+        startTcpServer();
     }
 
     @PluginMethod
@@ -158,6 +176,72 @@ public class LanDiscoveryPluginPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void sendMessage(PluginCall call) {
+        String sessionId = call.getString("sessionId");
+        String messageType = call.getString("messageType");
+        Object payload = call.getData().opt("payload");
+        String messageId = call.getString("messageId", UUID.randomUUID().toString());
+
+        if (sessionId == null || messageType == null) {
+            call.reject("sessionId/messageType are required.");
+            return;
+        }
+
+        Socket socket = inboundSessionSockets.get(sessionId);
+        if (socket == null || socket.isClosed()) {
+            call.reject("Session is not open.");
+            return;
+        }
+
+        ioExecutor().submit(() -> {
+            try {
+                JSObject envelope = new JSObject();
+                envelope.put("messageType", messageType);
+                envelope.put("payload", payload);
+                writeSocketFrame(socket, frame("message", sessionId, messageId, envelope));
+                JSObject result = new JSObject();
+                result.put("success", true);
+                result.put("sessionId", sessionId);
+                result.put("messageId", messageId);
+                result.put("transport", "tcp");
+                call.resolve(result);
+            } catch (Exception error) {
+                call.reject("sendMessage failed: " + error.getMessage());
+            }
+        });
+    }
+
+    @PluginMethod
+    public void closeSession(PluginCall call) {
+        String sessionId = call.getString("sessionId");
+        if (sessionId == null) {
+            call.reject("sessionId is required.");
+            return;
+        }
+        Socket socket = inboundSessionSockets.remove(sessionId);
+        if (socket != null && !socket.isClosed()) {
+            try {
+                writeSocketFrame(socket, frame("close", sessionId, null, null));
+            } catch (Exception ignored) {
+                // noop
+            }
+            closeQuietly(socket);
+            inboundTcpSockets.remove(socket);
+        }
+        JSObject closed = new JSObject();
+        closed.put("sessionId", sessionId);
+        closed.put("reason", "closed-by-host");
+        closed.put("transport", "tcp");
+        notifyListeners("sessionClosed", closed);
+
+        JSObject result = new JSObject();
+        result.put("success", true);
+        result.put("sessionId", sessionId);
+        result.put("transport", "tcp");
+        call.resolve(result);
+    }
+
+    @PluginMethod
     public void stopDiscovery(PluginCall call) {
         JSObject result = implementation.stopDiscovery();
         JSObject payload = new JSObject();
@@ -176,8 +260,15 @@ public class LanDiscoveryPluginPlugin extends Plugin {
     protected void handleOnDestroy() {
         unregisterMdnsService();
         stopUdpDiscoveryResponder();
+        stopTcpServer();
         if (discoveryExecutor != null) {
             discoveryExecutor.shutdownNow();
+        }
+        if (tcpServerExecutor != null) {
+            tcpServerExecutor.shutdownNow();
+        }
+        if (tcpClientExecutor != null) {
+            tcpClientExecutor.shutdownNow();
         }
     }
 
@@ -372,6 +463,7 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                 DatagramSocket socket = new DatagramSocket(UDP_DISCOVERY_PORT);
                 socket.setBroadcast(true);
                 this.udpResponderSocket = socket;
+                Log.i(TAG, "UDP discovery responder started on port " + UDP_DISCOVERY_PORT + ".");
                 byte[] buffer = new byte[256];
                 while (!socket.isClosed()) {
                     DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
@@ -394,7 +486,7 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                     socket.send(responsePacket);
                 }
             } catch (Exception ignored) {
-                // noop
+                Log.w(TAG, "Failed to start UDP discovery responder: " + ignored.getMessage());
             }
         });
     }
@@ -402,6 +494,7 @@ public class LanDiscoveryPluginPlugin extends Plugin {
     private void stopUdpDiscoveryResponder() {
         if (udpResponderSocket != null && !udpResponderSocket.isClosed()) {
             udpResponderSocket.close();
+            Log.i(TAG, "UDP discovery responder stopped.");
         }
         udpResponderSocket = null;
     }
@@ -443,8 +536,14 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         };
         try {
             nsdManager.registerService(info, NsdManager.PROTOCOL_DNS_SD, mdnsRegistrationListener);
+            Log.i(
+                TAG,
+                "mDNS service registration requested. serviceType=" + DEFAULT_MDNS_SERVICE_TYPE +
+                    ", port=" + DEFAULT_TCP_PORT
+            );
         } catch (Exception ignored) {
             this.mdnsRegistrationListener = null;
+            Log.w(TAG, "mDNS registration failed: " + ignored.getMessage());
         }
     }
 
@@ -460,11 +559,209 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         }
         try {
             nsdManager.unregisterService(mdnsRegistrationListener);
+            Log.i(TAG, "mDNS service unregistered.");
         } catch (Exception ignored) {
-            // noop
+            Log.w(TAG, "mDNS unregistration failed: " + ignored.getMessage());
         } finally {
             mdnsRegistrationListener = null;
         }
+    }
+
+    private void startTcpServer() {
+        ExecutorService serverExecutor = tcpServerExecutor;
+        if (serverExecutor == null) {
+            Log.w(TAG, "TCP server executor is unavailable.");
+            return;
+        }
+        if (tcpServerRunning) {
+            Log.i(TAG, "TCP server already running.");
+            return;
+        }
+        tcpServerRunning = true;
+        serverExecutor.submit(() -> {
+            try {
+                ServerSocket serverSocket = new ServerSocket();
+                serverSocket.setReuseAddress(true);
+                serverSocket.bind(new InetSocketAddress("0.0.0.0", DEFAULT_TCP_PORT));
+                serverSocket.setSoTimeout(1000);
+                tcpServerSocket = serverSocket;
+                Log.i(TAG, "TCP server started on port " + DEFAULT_TCP_PORT + ".");
+                while (tcpServerRunning && !serverSocket.isClosed()) {
+                    try {
+                        Socket socket = serverSocket.accept();
+                        Log.i(
+                            TAG,
+                            "TCP client connected: " + describeRemote(socket)
+                        );
+                        inboundTcpSockets.add(socket);
+                        handleInboundTcpSocket(socket);
+                    } catch (SocketTimeoutException ignored) {
+                        // continue accepting
+                    } catch (IOException error) {
+                        if (tcpServerRunning) {
+                            Log.w(TAG, "TCP accept failed: " + error.getMessage());
+                        }
+                    }
+                }
+            } catch (IOException error) {
+                Log.w(TAG, "Failed to start TCP server: " + error.getMessage());
+            } finally {
+                tcpServerRunning = false;
+                ServerSocket current = tcpServerSocket;
+                tcpServerSocket = null;
+                if (current != null) {
+                    try {
+                        current.close();
+                    } catch (IOException ignored) {
+                        // noop
+                    }
+                }
+                Log.i(TAG, "TCP server stopped.");
+            }
+        });
+    }
+
+    private void stopTcpServer() {
+        tcpServerRunning = false;
+        ServerSocket current = tcpServerSocket;
+        if (current != null) {
+            try {
+                current.close();
+            } catch (IOException ignored) {
+                // noop
+            }
+        }
+        synchronized (inboundTcpSockets) {
+            for (Socket socket : inboundTcpSockets) {
+                closeQuietly(socket);
+            }
+            inboundTcpSockets.clear();
+        }
+        inboundSessionSockets.clear();
+    }
+
+    private void handleInboundTcpSocket(Socket socket) {
+        ExecutorService clientExecutor = tcpClientExecutor;
+        if (clientExecutor == null) {
+            closeQuietly(socket);
+            return;
+        }
+        clientExecutor.submit(() -> {
+            String activeSessionId = null;
+            boolean sessionClosedNotified = false;
+            try {
+                socket.setSoTimeout(DEFAULT_TIMEOUT_MS);
+                DataInputStream input = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
+                DataOutputStream output = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
+                while (!socket.isClosed()) {
+                    JSONObject request;
+                    try {
+                        request = readFrame(input);
+                    } catch (SocketTimeoutException ignored) {
+                        continue;
+                    }
+                    String type = request.optString("type");
+                    String sessionId = request.optString("sessionId", UUID.randomUUID().toString());
+                    if ("hello".equals(type)) {
+                        JSONObject helloPayload = request.optJSONObject("payload");
+                        String sourceDeviceId =
+                            helloPayload == null ? null : helloPayload.optString("sourceDeviceId", null);
+                        boolean isProbe = helloPayload != null && helloPayload.optBoolean("probe", false);
+                        if (sourceDeviceId == null || sourceDeviceId.isBlank()) {
+                            writeFrame(output, frame("error", sessionId, null, "SOURCE_DEVICE_ID_REQUIRED"));
+                            sessionClosedNotified = true;
+                            break;
+                        }
+                        JSObject helloAckPayload = new JSObject();
+                        helloAckPayload.put("sourceDeviceId", getOrCreateLocalDeviceUuid());
+                        writeFrame(output, frame("helloAck", sessionId, null, helloAckPayload));
+                        if (isProbe) {
+                            sessionClosedNotified = true;
+                            break;
+                        }
+                        activeSessionId = sessionId;
+                        inboundSessionSockets.put(sessionId, socket);
+                        JSObject opened = new JSObject();
+                        opened.put("sessionId", sessionId);
+                        opened.put("transport", "tcp");
+                        opened.put("deviceId", sourceDeviceId);
+                        opened.put("direction", "inbound");
+                        opened.put("host", socket.getInetAddress().getHostAddress());
+                        opened.put("port", DEFAULT_TCP_PORT);
+                        notifyListeners("sessionOpened", opened);
+                        continue;
+                    }
+                    if ("message".equals(type)) {
+                        if (activeSessionId == null || !activeSessionId.equals(sessionId)) {
+                            writeFrame(output, frame("error", sessionId, null, "SESSION_NOT_ESTABLISHED"));
+                            continue;
+                        }
+                        String messageId = request.optString("messageId", null);
+                        Object rawPayload = request.opt("payload");
+                        JSONObject envelope = rawPayload instanceof JSONObject ? (JSONObject) rawPayload : null;
+                        JSObject received = new JSObject();
+                        received.put("sessionId", sessionId);
+                        received.put("messageId", messageId);
+                        received.put(
+                            "messageType",
+                            envelope == null ? "transport.message.received" : envelope.optString("messageType", "transport.message.received")
+                        );
+                        received.put("payload", envelope == null ? null : envelope.opt("payload"));
+                        received.put("timestamp", request.optLong("timestamp", System.currentTimeMillis()));
+                        received.put("transport", "tcp");
+                        notifyListeners("messageReceived", received);
+                        if (messageId != null && !messageId.isBlank()) {
+                            writeFrame(output, frame("ack", sessionId, messageId, null));
+                        }
+                        continue;
+                    }
+                    if ("close".equals(type)) {
+                        if (activeSessionId == null || !activeSessionId.equals(sessionId)) {
+                            break;
+                        }
+                        inboundSessionSockets.remove(activeSessionId);
+                        JSObject closed = new JSObject();
+                        closed.put("sessionId", activeSessionId);
+                        closed.put("reason", "peer-closed");
+                        closed.put("transport", "tcp");
+                        notifyListeners("sessionClosed", closed);
+                        sessionClosedNotified = true;
+                        break;
+                    }
+                }
+            } catch (IOException error) {
+                Log.w(TAG, "TCP client closed with error: " + error.getMessage());
+            } finally {
+                if (activeSessionId != null) {
+                    inboundSessionSockets.remove(activeSessionId);
+                }
+                if (!sessionClosedNotified && activeSessionId != null) {
+                    JSObject closed = new JSObject();
+                    closed.put("sessionId", activeSessionId);
+                    closed.put("reason", "socket-closed");
+                    closed.put("transport", "tcp");
+                    notifyListeners("sessionClosed", closed);
+                }
+                inboundTcpSockets.remove(socket);
+                closeQuietly(socket);
+            }
+        });
+    }
+
+    private ExecutorService ioExecutor() {
+        if (tcpClientExecutor == null) {
+            tcpClientExecutor = Executors.newCachedThreadPool();
+        }
+        return tcpClientExecutor;
+    }
+
+    private String describeRemote(Socket socket) {
+        if (socket == null) {
+            return "unknown";
+        }
+        InetAddress address = socket.getInetAddress();
+        String host = address != null ? address.getHostAddress() : "unknown";
+        return host + ":" + socket.getPort();
     }
 
     private ProbeOutcome probeDevice(String host, int port, int timeoutMs) {
@@ -474,7 +771,10 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             socket.setSoTimeout(timeoutMs);
             DataInputStream input = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
             DataOutputStream output = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
-            writeFrame(output, frame("hello", UUID.randomUUID().toString(), null, null));
+            JSObject probePayload = new JSObject();
+            probePayload.put("sourceDeviceId", getOrCreateLocalDeviceUuid());
+            probePayload.put("probe", true);
+            writeFrame(output, frame("hello", UUID.randomUUID().toString(), null, probePayload));
             JSONObject response = readFrame(input);
             if (!"helloAck".equals(response.optString("type"))) {
                 return new ProbeOutcome(false, "MISSING_HELLO_ACK");
@@ -546,6 +846,13 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         output.flush();
     }
 
+    private void writeSocketFrame(Socket socket, JSObject frame) throws IOException {
+        synchronized (socket) {
+            DataOutputStream output = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
+            writeFrame(output, frame);
+        }
+    }
+
     private JSONObject readFrame(DataInputStream input) throws IOException {
         int length = input.readInt();
         byte[] payload = new byte[length];
@@ -563,6 +870,26 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         } catch (IOException ignored) {
             // ignore
         }
+    }
+
+    private String getOrCreateLocalDeviceUuid() {
+        Context context = getContext();
+        if (context == null) {
+            return UUID.randomUUID().toString();
+        }
+        String existing = context
+            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(PREFS_DEVICE_UUID_KEY, null);
+        if (existing != null && !existing.isBlank()) {
+            return existing;
+        }
+        String created = UUID.randomUUID().toString();
+        context
+            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(PREFS_DEVICE_UUID_KEY, created)
+            .apply();
+        return created;
     }
 
     private static final class ProbeOutcome {

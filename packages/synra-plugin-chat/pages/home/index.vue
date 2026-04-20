@@ -39,19 +39,18 @@ function onSelectDevice(deviceId: string): void {
 </script>
 
 <template>
-  <section class="synra-chat-app space-y-4">
+  <section
+    class="synra-chat-app mx-auto w-full max-w-7xl space-y-4 px-3 py-4 sm:px-4 md:space-y-5 md:px-6"
+  >
     <PanelCard class="lg:hidden">
       <div class="flex items-center justify-between gap-3">
         <div class="min-w-0">
-          <p class="truncate text-sm font-semibold text-gray-900">{{ selectedDeviceLabel }}</p>
-          <p class="truncate text-xs text-gray-500">
+          <p class="truncate text-sm font-semibold text-slate-100">{{ selectedDeviceLabel }}</p>
+          <p class="truncate text-xs text-slate-400">
             Session: {{ selectedSessionId || 'Not connected' }}
           </p>
         </div>
-        <button
-          class="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 transition hover:bg-gray-50"
-          @click="drawerOpen = true"
-        >
+        <button class="glass-button app-focus-ring px-3 py-2 text-sm" @click="drawerOpen = true">
           Device Menu
         </button>
       </div>
@@ -95,7 +94,9 @@ function onSelectDevice(deviceId: string): void {
 
       <div class="space-y-4 lg:col-span-8">
         <PanelCard title="Conversation">
-          <div class="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
+          <div
+            class="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-300"
+          >
             <p><strong>Session:</strong> {{ selectedSessionId || '-' }}</p>
             <p><strong>Status:</strong> {{ selectedSession?.status ?? 'idle' }}</p>
             <p><strong>Remote:</strong> {{ selectedSession?.remote ?? '-' }}</p>
@@ -116,22 +117,26 @@ function onSelectDevice(deviceId: string): void {
         />
 
         <PanelCard v-if="activeSessions.length > 0" title="Open Sessions">
-          <ul class="space-y-2 text-sm text-gray-700">
+          <ul class="space-y-2 text-sm text-slate-200">
             <li
               v-for="session in activeSessions"
               :key="session.sessionId"
-              class="flex flex-wrap items-center justify-between gap-2 rounded-md border border-gray-200 px-3 py-2"
+              class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/12 bg-white/6 px-3 py-2"
             >
               <div>
-                <p class="font-medium">{{ session.deviceId ?? session.sessionId }}</p>
-                <p class="text-xs text-gray-500">
+                <p class="font-medium text-slate-100">
+                  {{ session.deviceId ?? session.sessionId }}
+                </p>
+                <p class="text-xs text-slate-400">
                   {{ session.remote ?? '-' }} | {{ session.lastActiveAt ?? '-' }}
                 </p>
               </div>
               <button
-                class="rounded-md border border-gray-300 px-2 py-1 text-xs transition hover:bg-gray-50"
+                class="glass-button app-focus-ring px-2 py-1 text-xs"
                 :class="
-                  selectedSessionId === session.sessionId ? 'border-blue-400 text-blue-700' : ''
+                  selectedSessionId === session.sessionId
+                    ? 'border-indigo-300/55 bg-indigo-500/22 text-white'
+                    : ''
                 "
                 @click="openSession(session.sessionId)"
               >

@@ -1,5 +1,9 @@
 import { WebPlugin } from '@capacitor/core'
 import type {
+  DiscoveryCloseSessionOptions,
+  DiscoveryCloseSessionResult,
+  DiscoverySendMessageOptions,
+  DiscoverySendMessageResult,
   LanDiscoveryPlugin,
   ListDiscoveredDevicesResult,
   ProbeConnectableOptions,
@@ -99,5 +103,13 @@ export class LanDiscoveryWeb extends WebPlugin implements LanDiscoveryPlugin {
       port,
       devices: this.scanState.devices
     }
+  }
+
+  async closeSession(_options: DiscoveryCloseSessionOptions): Promise<DiscoveryCloseSessionResult> {
+    throw this.unavailable('closeSession is unavailable on web runtime.')
+  }
+
+  async sendMessage(_options: DiscoverySendMessageOptions): Promise<DiscoverySendMessageResult> {
+    throw this.unavailable('sendMessage is unavailable on web runtime.')
   }
 }

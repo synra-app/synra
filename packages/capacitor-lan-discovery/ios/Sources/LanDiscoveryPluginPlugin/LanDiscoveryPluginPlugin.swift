@@ -14,8 +14,26 @@ public class LanDiscoveryPluginPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "stopDiscovery", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getDiscoveredDevices", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "probeConnectable", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "closeSession", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "sendMessage", returnType: CAPPluginReturnPromise),
     ]
     private let implementation = LanDiscoveryPlugin()
+
+    public override func load() {
+        super.load()
+        implementation.onSessionOpened = { [weak self] payload in
+            self?.notifyListeners("sessionOpened", data: payload)
+        }
+        implementation.onSessionClosed = { [weak self] payload in
+            self?.notifyListeners("sessionClosed", data: payload)
+        }
+        implementation.onMessageReceived = { [weak self] payload in
+            self?.notifyListeners("messageReceived", data: payload)
+        }
+        implementation.onTransportError = { [weak self] payload in
+            self?.notifyListeners("transportError", data: payload)
+        }
+    }
 
     @objc func startDiscovery(_ call: CAPPluginCall) {
         let includeLoopback = call.getBool("includeLoopback") ?? false
@@ -76,6 +94,41 @@ public class LanDiscoveryPluginPlugin: CAPPlugin, CAPBridgedPlugin {
                 notifyListeners("deviceConnectableUpdated", data: ["device": device])
             }
         }
+        call.resolve(result)
+    }
+
+    @objc func closeSession(_ call: CAPPluginCall) {
+        guard let sessionId = call.getString("sessionId") else {
+            call.reject("sessionId is required.")
+            return
+        }
+        let result = implementation.closeSession(sessionId: sessionId)
+        call.resolve(result)
+    }
+
+    @objc func sendMessage(_ call: CAPPluginCall) {
+        guard
+            let sessionId = call.getString("sessionId"),
+            let messageType = call.getString("messageType")
+        else {
+            call.reject("sessionId/messageType are required.")
+            return
+        }
+        let payload = call.options["payload"] ?? NSNull()
+        let messageId = call.getString("messageId")
+
+        guard
+            let result = implementation.sendMessage(
+                sessionId: sessionId,
+                messageType: messageType,
+                payload: payload,
+                messageId: messageId
+            )
+        else {
+            call.reject("Session is not open.")
+            return
+        }
+
         call.resolve(result)
     }
 }

@@ -1,4 +1,5 @@
 import type { PluginListenerHandle } from '@capacitor/core'
+import type { SynraMessageType } from '@synra/protocol'
 
 export type DiscoverySource = 'mdns' | 'probe' | 'manual'
 export type DiscoveryMode = 'hybrid' | 'mdns' | 'subnet' | 'manual'
@@ -45,6 +46,16 @@ export type StopDiscoveryResult = {
   success: true
 }
 
+export type DiscoveryCloseSessionOptions = {
+  sessionId: string
+}
+
+export type DiscoveryCloseSessionResult = {
+  success: true
+  sessionId: string
+  transport: 'tcp'
+}
+
 export type ListDiscoveredDevicesResult = {
   state: DiscoveryState
   startedAt?: number
@@ -64,6 +75,20 @@ export type ProbeConnectableResult = {
   devices: DiscoveredDevice[]
 }
 
+export type DiscoverySendMessageOptions = {
+  sessionId: string
+  messageType: SynraMessageType
+  payload: unknown
+  messageId?: string
+}
+
+export type DiscoverySendMessageResult = {
+  success: true
+  sessionId: string
+  messageId: string
+  transport: 'tcp'
+}
+
 export type ScanStateChangedEvent = {
   state: DiscoveryState
   startedAt?: number
@@ -73,11 +98,37 @@ export type DeviceConnectableUpdatedEvent = {
   device: DiscoveredDevice
 }
 
+export type DiscoverySessionOpenedEvent = {
+  sessionId: string
+  transport: 'tcp'
+  deviceId?: string
+  direction?: 'inbound' | 'outbound'
+  host?: string
+  port?: number
+}
+
+export type DiscoverySessionClosedEvent = {
+  sessionId?: string
+  transport: 'tcp'
+  reason?: string
+}
+
+export type DiscoveryMessageReceivedEvent = {
+  sessionId: string
+  messageId?: string
+  messageType: SynraMessageType
+  payload: unknown
+  timestamp: number
+  transport: 'tcp'
+}
+
 export interface LanDiscoveryPlugin {
   startDiscovery(options?: StartDiscoveryOptions): Promise<StartDiscoveryResult>
   stopDiscovery(): Promise<StopDiscoveryResult>
   getDiscoveredDevices(): Promise<ListDiscoveredDevicesResult>
   probeConnectable(options?: ProbeConnectableOptions): Promise<ProbeConnectableResult>
+  closeSession(options: DiscoveryCloseSessionOptions): Promise<DiscoveryCloseSessionResult>
+  sendMessage(options: DiscoverySendMessageOptions): Promise<DiscoverySendMessageResult>
   addListener(
     eventName: 'deviceFound',
     listenerFunc: (event: { device: DiscoveredDevice }) => void
@@ -97,5 +148,17 @@ export interface LanDiscoveryPlugin {
   addListener(
     eventName: 'deviceConnectableUpdated',
     listenerFunc: (event: DeviceConnectableUpdatedEvent) => void
+  ): Promise<PluginListenerHandle>
+  addListener(
+    eventName: 'sessionOpened',
+    listenerFunc: (event: DiscoverySessionOpenedEvent) => void
+  ): Promise<PluginListenerHandle>
+  addListener(
+    eventName: 'sessionClosed',
+    listenerFunc: (event: DiscoverySessionClosedEvent) => void
+  ): Promise<PluginListenerHandle>
+  addListener(
+    eventName: 'messageReceived',
+    listenerFunc: (event: DiscoveryMessageReceivedEvent) => void
   ): Promise<PluginListenerHandle>
 }

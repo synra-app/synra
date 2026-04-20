@@ -74,6 +74,9 @@ export type HostEvent = {
     | 'transport.message.received'
     | 'transport.message.ack'
     | 'transport.error'
+    | 'host.retire'
+    | 'host.member.offline'
+    | 'host.heartbeat.timeout'
   remote: string
   sessionId?: string
   messageId?: string
@@ -91,6 +94,7 @@ export type SessionOpenedEvent = {
   sessionId: string
   transport: ConnectionTransport
   deviceId?: string
+  direction?: 'inbound' | 'outbound'
   host?: string
   port?: number
 }

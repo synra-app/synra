@@ -160,18 +160,6 @@ export function useMessagesPage() {
         }
       }
 
-      if (entry.type === 'sessionOpened' || entry.type === 'sessionClosed') {
-        mapped.push({
-          id: entry.id,
-          direction: 'system',
-          text: entry.type === 'sessionOpened' ? 'Session connected.' : 'Session disconnected.',
-          timestamp: entry.timestamp,
-          timeLabel: new Date(entry.timestamp).toLocaleTimeString(),
-          status: 'system'
-        })
-        continue
-      }
-
       if (entry.type === 'transportError') {
         const payload = isObjectPayload(entry.payload) ? entry.payload : undefined
         mapped.push({

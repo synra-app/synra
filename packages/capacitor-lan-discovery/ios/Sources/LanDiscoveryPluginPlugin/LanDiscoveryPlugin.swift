@@ -12,6 +12,7 @@ import Darwin
     private let defaultMdnsServiceType = "_synra._tcp."
     private let udpDiscoveryPort: UInt16 = 32101
     private let udpDiscoveryMagic = "SYNRA_DISCOVERY_V1"
+    private let deviceUuidStorageKey = "synra.lan-discovery.device-uuid"
     private var state: String = "idle"
     private var startedAt: Int?
     private var scanWindowMs: Int = 15_000
@@ -20,6 +21,14 @@ import Darwin
     private var udpResponderSocket: Int32 = -1
     private var udpResponderSource: DispatchSourceRead?
     private let udpResponderQueue = DispatchQueue(label: "com.synra.lan-discovery.udp-responder")
+    private let tcpServerQueue = DispatchQueue(label: "com.synra.lan-discovery.tcp-server")
+    private var tcpListener: NWListener?
+    private var inboundConnections: [String: InboundConnectionContext] = [:]
+
+    public var onSessionOpened: (([String: Any]) -> Void)?
+    public var onSessionClosed: (([String: Any]) -> Void)?
+    public var onMessageReceived: (([String: Any]) -> Void)?
+    public var onTransportError: (([String: Any]) -> Void)?
 
     public override init() {
         super.init()
@@ -132,6 +141,48 @@ import Darwin
         ]
     }
 
+    @objc public func sendMessage(
+        sessionId: String,
+        messageType: String,
+        payload: Any,
+        messageId: String?
+    ) -> [String: Any]? {
+        guard let context = inboundConnections.first(where: { $0.value.sessionId == sessionId })?.value else {
+            return nil
+        }
+        let targetMessageId = messageId ?? UUID().uuidString
+        let envelope: [String: Any] = [
+            "messageType": messageType,
+            "payload": payload,
+        ]
+        sendFrame(
+            frame(type: "message", sessionId: sessionId, messageId: targetMessageId, payload: envelope),
+            through: context.connection
+        )
+        return [
+            "success": true,
+            "sessionId": sessionId,
+            "messageId": targetMessageId,
+            "transport": "tcp",
+        ]
+    }
+
+    @objc public func closeSession(sessionId: String) -> [String: Any] {
+        guard let connectionId = inboundConnections.first(where: { $0.value.sessionId == sessionId })?.key else {
+            return [
+                "success": true,
+                "sessionId": sessionId,
+                "transport": "tcp",
+            ]
+        }
+        closeInboundConnection(connectionId: connectionId, reason: "closed-by-host", emitSessionClosed: true)
+        return [
+            "success": true,
+            "sessionId": sessionId,
+            "transport": "tcp",
+        ]
+    }
+
     private func mergeDevices(_ incoming: [DeviceRecord]) {
         for device in incoming {
             if let existing = devices[device.deviceId] {
@@ -228,17 +279,276 @@ import Darwin
     }
 
     @objc public func startBackgroundDiscoveryServices() {
+        validateLocalNetworkPermissionConfiguration()
         startMdnsAdvertisement()
         startUdpDiscoveryResponder()
+        startTcpServer()
     }
 
     @objc public func stopBackgroundDiscoveryServices() {
+        stopTcpServer()
         stopMdnsAdvertisement()
         stopUdpDiscoveryResponder()
     }
 
+    private func validateLocalNetworkPermissionConfiguration() {
+        let info = Bundle.main.infoDictionary ?? [:]
+        let localNetworkUsageDescription = info["NSLocalNetworkUsageDescription"] as? String
+        if localNetworkUsageDescription?.isEmpty != false {
+            print("[SynraLanDiscovery] WARNING: NSLocalNetworkUsageDescription is missing. Local network discovery may fail.")
+        }
+        let bonjourServices = info["NSBonjourServices"] as? [String] ?? []
+        let expectedService = normalizeMdnsType(defaultMdnsServiceType)
+        let hasExpectedService = bonjourServices.contains { normalizeMdnsType($0) == expectedService }
+        if !hasExpectedService {
+            print("[SynraLanDiscovery] WARNING: NSBonjourServices does not include \(expectedService).")
+        }
+    }
+
+    private func startTcpServer() {
+        if tcpListener != nil {
+            print("[SynraLanDiscovery] TCP server already active.")
+            return
+        }
+        guard let port = NWEndpoint.Port(rawValue: defaultTcpPort) else {
+            print("[SynraLanDiscovery] Failed to create TCP listener port: \(defaultTcpPort).")
+            return
+        }
+        do {
+            let listener = try NWListener(using: .tcp, on: port)
+            listener.stateUpdateHandler = { [weak self] state in
+                switch state {
+                case .ready:
+                    print("[SynraLanDiscovery] TCP server started on port \(self?.defaultTcpPort ?? 0).")
+                case .failed(let error):
+                    print("[SynraLanDiscovery] TCP server failed: \(error.localizedDescription)")
+                    self?.onTransportError?([
+                        "code": "TRANSPORT_IO_ERROR",
+                        "message": error.localizedDescription,
+                        "transport": "tcp",
+                    ])
+                default:
+                    break
+                }
+            }
+            listener.newConnectionHandler = { [weak self] connection in
+                self?.acceptInboundConnection(connection)
+            }
+            listener.start(queue: tcpServerQueue)
+            tcpListener = listener
+        } catch {
+            print("[SynraLanDiscovery] Failed to start TCP server: \(error.localizedDescription)")
+        }
+    }
+
+    private func stopTcpServer() {
+        tcpListener?.cancel()
+        tcpListener = nil
+        let connectionIds = Array(inboundConnections.keys)
+        for connectionId in connectionIds {
+            closeInboundConnection(connectionId: connectionId, reason: "server-stopped", emitSessionClosed: true)
+        }
+    }
+
+    private func acceptInboundConnection(_ connection: NWConnection) {
+        let connectionId = UUID().uuidString
+        let remote = describeEndpoint(connection.endpoint)
+        inboundConnections[connectionId] = InboundConnectionContext(connection: connection, remote: remote)
+
+        connection.stateUpdateHandler = { [weak self] state in
+            guard let self else { return }
+            switch state {
+            case .failed(let error):
+                self.onTransportError?([
+                    "code": "TRANSPORT_IO_ERROR",
+                    "message": error.localizedDescription,
+                    "transport": "tcp",
+                ])
+                self.closeInboundConnection(
+                    connectionId: connectionId,
+                    reason: "socket-failed",
+                    emitSessionClosed: true
+                )
+            case .cancelled:
+                self.closeInboundConnection(
+                    connectionId: connectionId,
+                    reason: "socket-cancelled",
+                    emitSessionClosed: true
+                )
+            default:
+                break
+            }
+        }
+
+        connection.start(queue: tcpServerQueue)
+        startInboundReceiveLoop(connectionId: connectionId)
+    }
+
+    private func startInboundReceiveLoop(connectionId: String) {
+        guard let context = inboundConnections[connectionId] else {
+            return
+        }
+
+        receiveSingleFrame(through: context.connection) { [weak self] frame in
+            guard let self else {
+                return
+            }
+            guard let current = self.inboundConnections[connectionId] else {
+                return
+            }
+            guard let frame else {
+                self.closeInboundConnection(
+                    connectionId: connectionId,
+                    reason: "peer-closed",
+                    emitSessionClosed: true
+                )
+                return
+            }
+
+            let type = frame["type"] as? String ?? ""
+            var sessionId = current.sessionId ?? frame["sessionId"] as? String ?? UUID().uuidString
+            if type == "hello" {
+                let helloPayload = frame["payload"] as? [String: Any]
+                let sourceDeviceId = helloPayload?["sourceDeviceId"] as? String
+                let isProbe = (helloPayload?["probe"] as? Bool) ?? false
+                guard let sourceDeviceId, !sourceDeviceId.isEmpty else {
+                    self.sendFrame(
+                        self.frame(
+                            type: "error",
+                            sessionId: sessionId,
+                            messageId: nil,
+                            payload: "SOURCE_DEVICE_ID_REQUIRED"
+                        ),
+                        through: current.connection
+                    )
+                    self.closeInboundConnection(
+                        connectionId: connectionId,
+                        reason: "missing-device-id",
+                        emitSessionClosed: false
+                    )
+                    return
+                }
+                current.sessionId = sessionId
+                self.sendFrame(
+                    self.frame(
+                        type: "helloAck",
+                        sessionId: sessionId,
+                        messageId: nil,
+                        payload: [
+                            "sourceDeviceId": self.localDeviceUuid(),
+                        ]
+                    ),
+                    through: current.connection
+                )
+                if isProbe {
+                    self.closeInboundConnection(
+                        connectionId: connectionId,
+                        reason: "probe-completed",
+                        emitSessionClosed: false
+                    )
+                    return
+                }
+                let (host, _) = self.describeHostPort(current.connection.endpoint)
+                self.onSessionOpened?([
+                    "sessionId": sessionId,
+                    "deviceId": sourceDeviceId,
+                    "direction": "inbound",
+                    "transport": "tcp",
+                    "host": host as Any,
+                    // Always report host TCP server port for reverse-connect handoff.
+                    "port": Int(self.defaultTcpPort),
+                ])
+            } else if type == "message" {
+                guard let establishedSessionId = current.sessionId, establishedSessionId == sessionId else {
+                    self.sendFrame(
+                        self.frame(
+                            type: "error",
+                            sessionId: sessionId,
+                            messageId: nil,
+                            payload: "SESSION_NOT_ESTABLISHED"
+                        ),
+                        through: current.connection
+                    )
+                    self.startInboundReceiveLoop(connectionId: connectionId)
+                    return
+                }
+                let payload = frame["payload"] as? [String: Any]
+                let messageId = frame["messageId"] as? String
+                self.onMessageReceived?([
+                    "sessionId": establishedSessionId,
+                    "messageId": messageId as Any,
+                    "messageType": payload?["messageType"] as? String ?? "transport.message.received",
+                    "payload": payload?["payload"] as Any,
+                    "timestamp": frame["timestamp"] as? Int ?? self.now(),
+                    "transport": "tcp",
+                ])
+                if let messageId, !messageId.isEmpty {
+                    self.sendFrame(
+                        self.frame(type: "ack", sessionId: establishedSessionId, messageId: messageId, payload: nil),
+                        through: current.connection
+                    )
+                }
+            } else if type == "close" {
+                guard let establishedSessionId = current.sessionId, establishedSessionId == sessionId else {
+                    self.closeInboundConnection(
+                        connectionId: connectionId,
+                        reason: "peer-closed",
+                        emitSessionClosed: false
+                    )
+                    return
+                }
+                current.sessionId = establishedSessionId
+                self.closeInboundConnection(
+                    connectionId: connectionId,
+                    reason: "peer-closed",
+                    emitSessionClosed: true
+                )
+                return
+            }
+
+            self.startInboundReceiveLoop(connectionId: connectionId)
+        }
+    }
+
+    private func closeInboundConnection(
+        connectionId: String,
+        reason: String,
+        emitSessionClosed: Bool
+    ) {
+        guard let context = inboundConnections.removeValue(forKey: connectionId) else {
+            return
+        }
+        if emitSessionClosed, context.sessionId != nil {
+            onSessionClosed?([
+                "sessionId": context.sessionId as Any,
+                "reason": reason,
+                "transport": "tcp",
+            ])
+        }
+        context.connection.cancel()
+    }
+
+    private func describeEndpoint(_ endpoint: NWEndpoint) -> String {
+        switch endpoint {
+        case .hostPort(let host, let port):
+            return "\(host):\(port.rawValue)"
+        default:
+            return "\(endpoint)"
+        }
+    }
+
+    private func describeHostPort(_ endpoint: NWEndpoint) -> (String?, Int?) {
+        switch endpoint {
+        case .hostPort(let host, let port):
+            return ("\(host)", Int(port.rawValue))
+        default:
+            return (nil, nil)
+        }
+    }
+
     private func startMdnsAdvertisement() {
         if advertisedService != nil {
+            print("[SynraLanDiscovery] mDNS advertisement already active.")
             return
         }
         let serviceName = "synra-\(UUID().uuidString.prefix(8))"
@@ -250,11 +560,13 @@ import Darwin
         )
         service.publish()
         advertisedService = service
+        print("[SynraLanDiscovery] mDNS advertisement started. type=\(defaultMdnsServiceType) port=\(defaultTcpPort)")
     }
 
     private func stopMdnsAdvertisement() {
         advertisedService?.stop()
         advertisedService = nil
+        print("[SynraLanDiscovery] mDNS advertisement stopped.")
     }
 
     private func discoverByMdns(serviceType: String, timeoutMs: Int) -> [String] {
@@ -456,10 +768,12 @@ import Darwin
 
     private func startUdpDiscoveryResponder() {
         if udpResponderSocket >= 0 {
+            print("[SynraLanDiscovery] UDP responder already active.")
             return
         }
         let socketFd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)
         guard socketFd >= 0 else {
+            print("[SynraLanDiscovery] Failed to create UDP responder socket.")
             return
         }
         var reuseFlag: Int32 = 1
@@ -486,9 +800,11 @@ import Darwin
         }
         guard bindResult == 0 else {
             close(socketFd)
+            print("[SynraLanDiscovery] Failed to bind UDP responder on port \(udpDiscoveryPort).")
             return
         }
         udpResponderSocket = socketFd
+        print("[SynraLanDiscovery] UDP responder started on port \(udpDiscoveryPort).")
         let source = DispatchSource.makeReadSource(fileDescriptor: socketFd, queue: udpResponderQueue)
         source.setEventHandler { [weak self] in
             self?.handleUdpResponderRead(socketFd: socketFd)
@@ -504,6 +820,7 @@ import Darwin
         udpResponderSource?.cancel()
         udpResponderSource = nil
         udpResponderSocket = -1
+        print("[SynraLanDiscovery] UDP responder stopped.")
     }
 
     private func handleUdpResponderRead(socketFd: Int32) {
@@ -564,6 +881,16 @@ import Darwin
         Int(Date().timeIntervalSince1970 * 1000)
     }
 
+    private func localDeviceUuid() -> String {
+        let defaults = UserDefaults.standard
+        if let existing = defaults.string(forKey: deviceUuidStorageKey), !existing.isEmpty {
+            return existing
+        }
+        let created = UUID().uuidString
+        defaults.set(created, forKey: deviceUuidStorageKey)
+        return created
+    }
+
     private func hashDeviceId(_ value: String) -> String {
         let digest = Insecure.SHA1.hash(data: Data(value.utf8))
         let prefix = digest.map { String(format: "%02x", $0) }.joined().prefix(12)
@@ -590,7 +917,10 @@ import Darwin
                         type: "hello",
                         sessionId: UUID().uuidString,
                         messageId: nil,
-                        payload: nil
+                        payload: [
+                            "sourceDeviceId": self.localDeviceUuid(),
+                            "probe": true,
+                        ]
                     ),
                     through: connection
                 )
@@ -879,5 +1209,16 @@ private struct DeviceRecord {
 private struct ProbeOutcome {
     let connectable: Bool
     let error: String?
+}
+
+private final class InboundConnectionContext {
+    let connection: NWConnection
+    let remote: String
+    var sessionId: String?
+
+    init(connection: NWConnection, remote: String) {
+        self.connection = connection
+        self.remote = remote
+    }
 }
 

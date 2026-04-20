@@ -7,7 +7,6 @@ type KeydownLikeEvent = {
   key?: string
 }
 
-const DEBUG_PREFIX = '[synra-plugin-chat/DeviceDrawer]'
 const browserWindow = globalThis as {
   addEventListener?: (type: string, listener: (event: KeydownLikeEvent) => void) => void
   removeEventListener?: (type: string, listener: (event: KeydownLikeEvent) => void) => void
@@ -19,11 +18,6 @@ const browserWindow = globalThis as {
     }
   }
 }
-
-console.info(`${DEBUG_PREFIX} module loaded`, {
-  hasDeviceSidebar: Boolean(DeviceSidebar),
-  deviceSidebarName: (DeviceSidebar as { name?: string } | undefined)?.name ?? null
-})
 
 const props = defineProps<{
   open: boolean
@@ -57,12 +51,6 @@ function onWindowKeydown(event: KeydownLikeEvent): void {
 watch(
   () => props.open,
   (isOpen) => {
-    console.info(`${DEBUG_PREFIX} props.open changed`, {
-      isOpen,
-      devices: props.devices.length,
-      selectedDeviceId: props.selectedDeviceId ?? null,
-      selectedSessionId: props.selectedSessionId ?? null
-    })
     if (!browserWindow.document?.body) {
       return
     }
@@ -72,10 +60,6 @@ watch(
 )
 
 onMounted(() => {
-  console.info(`${DEBUG_PREFIX} mounted`, {
-    hasWindow: Boolean(browserWindow.addEventListener),
-    hasDocument: Boolean(browserWindow.document)
-  })
   if (!browserWindow.addEventListener) {
     return
   }
@@ -103,7 +87,7 @@ onUnmounted(() => {
   >
     <div
       v-if="open"
-      class="fixed inset-0 z-40 bg-black/40 lg:hidden"
+      class="fixed inset-x-0 bottom-0 top-14 z-[75] bg-black/60 backdrop-blur-sm lg:hidden"
       role="button"
       tabindex="0"
       aria-label="Close device menu"
@@ -122,17 +106,14 @@ onUnmounted(() => {
   >
     <aside
       v-if="open"
-      class="fixed inset-y-0 left-0 z-50 w-[86%] max-w-sm overflow-auto border-r border-gray-200 bg-white p-4 shadow-lg lg:hidden"
+      class="fixed bottom-0 left-0 top-14 z-[80] w-[86%] max-w-sm overflow-auto border-r border-white/14 bg-[#0f172af2] p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] text-slate-100 shadow-2xl backdrop-blur-xl lg:hidden"
     >
-      <div class="mb-4 flex items-center justify-between border-b border-gray-100 pb-3">
+      <div class="mb-4 flex items-center justify-between border-b border-white/12 pb-3">
         <div>
-          <p class="text-sm font-semibold text-gray-900">Device Menu</p>
-          <p class="text-xs text-gray-500">{{ selectedDeviceLabel }}</p>
+          <p class="text-sm font-semibold text-slate-100">Device Menu</p>
+          <p class="text-xs text-slate-400">{{ selectedDeviceLabel }}</p>
         </div>
-        <button
-          class="rounded-md border border-gray-300 px-2 py-1 text-xs text-gray-700 transition hover:bg-gray-50"
-          @click="emit('close')"
-        >
+        <button class="glass-button app-focus-ring px-3 py-1.5 text-xs" @click="emit('close')">
           Close
         </button>
       </div>

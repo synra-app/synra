@@ -86,6 +86,14 @@ export type ConnectionRuntime = SynraConnectionRuntimeState & {
 }
 
 function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionRuntime {
+  const runtimePlatform = (
+    globalThis as {
+      Capacitor?: {
+        getPlatform?: () => string
+      }
+    }
+  ).Capacitor?.getPlatform?.()
+  const isMobileRuntime = runtimePlatform === 'android' || runtimePlatform === 'ios'
   const scanState = ref('idle')
   const startedAt = ref<number | undefined>(undefined)
   const scanWindowMs = ref(15_000)
@@ -103,6 +111,8 @@ function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionR
   const reconnectLocks = new Set<string>()
   const listeners = new Set<RuntimeMessageHandler>()
   const seenEventIds = new Set<string>()
+  const pendingHandoffHosts = new Set<string>()
+  const handoffOutboundSessionIdByHost = new Map<string, string>()
   let listenersRegistered = false
   let connectedSessionsRebuildTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -241,6 +251,28 @@ function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionR
     })
   }
 
+  function findOpenSessionIdsByHostDirection(
+    host: string,
+    direction: 'inbound' | 'outbound',
+    excludeSessionId?: string
+  ): string[] {
+    const matched: string[] = []
+    for (const session of connectedSessionMap.values()) {
+      if (session.status !== 'open') {
+        continue
+      }
+      if (excludeSessionId && session.sessionId === excludeSessionId) {
+        continue
+      }
+      const sessionHost = typeof session.host === 'string' ? session.host : undefined
+      const sessionDirection = session.direction === 'inbound' ? 'inbound' : 'outbound'
+      if (sessionHost === host && sessionDirection === direction) {
+        matched.push(session.sessionId)
+      }
+    }
+    return matched
+  }
+
   function emitIncomingMessage(event: MessageReceivedEvent, deviceId?: string): void {
     const normalized: SynraConnectionMessage = {
       eventId: resolveMessageEventId({
@@ -278,7 +310,6 @@ function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionR
       startedAt.value = result.startedAt
       scanWindowMs.value = result.scanWindowMs
       devices.value = sortDevices(result.devices)
-      await probeConnectable()
       error.value = null
     } catch (unknownError) {
       error.value = unknownToErrorMessage(unknownError, 'Failed to load devices.')
@@ -345,29 +376,12 @@ function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionR
   }): Promise<void> {
     loading.value = true
     try {
-      const result = await adapter.openSession(options)
-      sessionState.value = {
-        sessionId: result.sessionId,
-        deviceId: options.deviceId,
-        host: options.host,
-        port: options.port,
-        state: result.state,
-        transport: result.transport
+      if (!isMobileRuntime && options.host) {
+        // On desktop, "connect" means finishing mobile->PC reverse link (chain B).
+        // The initial PC->mobile channel (chain A) is only a handoff signal.
+        pendingHandoffHosts.add(options.host)
       }
-      upsertConnectedSession(
-        {
-          sessionId: result.sessionId,
-          status: 'open',
-          deviceId: options.deviceId,
-          host: options.host,
-          remote: options.host,
-          port: options.port,
-          openedAt: Date.now(),
-          lastActiveAt: Date.now(),
-          direction: 'outbound'
-        },
-        { immediate: true }
-      )
+      await adapter.openSession(options)
       error.value = null
     } catch (unknownError) {
       error.value = unknownToErrorMessage(unknownError, 'Failed to open session.')
@@ -520,16 +534,58 @@ function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionR
 
     await adapter.addSessionOpenedListener((event) => {
       appendEventLog('sessionOpened', event)
+      const rawDirection = (event as { direction?: unknown }).direction
+      const explicitDirection =
+        rawDirection === 'inbound' || rawDirection === 'outbound' ? rawDirection : undefined
       const inferredDirection =
-        typeof event.deviceId === 'string' && event.deviceId.length > 0 ? 'outbound' : 'inbound'
-      sessionState.value = {
-        ...sessionState.value,
-        sessionId: event.sessionId,
-        deviceId: event.deviceId,
-        host: event.host,
-        port: event.port,
-        state: 'open',
-        openedAt: Date.now()
+        explicitDirection ??
+        (typeof event.deviceId === 'string' && event.deviceId.length > 0 ? 'outbound' : 'inbound')
+
+      if (!isMobileRuntime && inferredDirection === 'outbound' && event.host) {
+        if (pendingHandoffHosts.has(event.host)) {
+          handoffOutboundSessionIdByHost.set(event.host, event.sessionId)
+          return
+        }
+      }
+
+      if (!isMobileRuntime && inferredDirection === 'inbound' && event.host) {
+        pendingHandoffHosts.delete(event.host)
+        const handoffSessionId = handoffOutboundSessionIdByHost.get(event.host)
+        if (handoffSessionId && handoffSessionId !== event.sessionId) {
+          handoffOutboundSessionIdByHost.delete(event.host)
+          markConnectionClosed(handoffSessionId, Date.now())
+          void adapter.closeSession(handoffSessionId).catch(() => undefined)
+        }
+        const staleOutboundSessionIds = findOpenSessionIdsByHostDirection(
+          event.host,
+          'outbound',
+          event.sessionId
+        )
+        for (const staleSessionId of staleOutboundSessionIds) {
+          markConnectionClosed(staleSessionId, Date.now())
+          void adapter.closeSession(staleSessionId).catch(() => undefined)
+        }
+      }
+
+      const currentSessionId = sessionState.value.sessionId
+      const currentDirection = sessionState.value.direction === 'inbound' ? 'inbound' : 'outbound'
+      const shouldReplacePrimarySession =
+        !currentSessionId ||
+        currentSessionId === event.sessionId ||
+        inferredDirection === 'inbound' ||
+        (inferredDirection === 'outbound' && currentDirection !== 'inbound') ||
+        sessionState.value.state !== 'open'
+      if (shouldReplacePrimarySession) {
+        sessionState.value = {
+          ...sessionState.value,
+          sessionId: event.sessionId,
+          deviceId: event.deviceId,
+          host: event.host,
+          port: event.port,
+          direction: inferredDirection,
+          state: 'open',
+          openedAt: Date.now()
+        }
       }
       upsertConnectedSession(
         {
@@ -549,23 +605,35 @@ function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionR
 
     await adapter.addSessionClosedListener((event) => {
       appendEventLog('sessionClosed', event)
-      const shouldClearCurrentSession =
-        !sessionState.value.sessionId || sessionState.value.sessionId === event.sessionId
-      sessionState.value = shouldClearCurrentSession
-        ? {
-            ...sessionState.value,
-            sessionId: undefined,
-            deviceId: undefined,
-            host: undefined,
-            port: undefined,
-            state: 'closed',
-            closedAt: Date.now()
+      if (event.sessionId) {
+        for (const [host, handoffSessionId] of handoffOutboundSessionIdByHost.entries()) {
+          if (handoffSessionId === event.sessionId) {
+            handoffOutboundSessionIdByHost.delete(host)
+            pendingHandoffHosts.delete(host)
           }
-        : {
-            ...sessionState.value,
-            state: 'closed',
-            closedAt: Date.now()
-          }
+        }
+      }
+      const currentSessionId = sessionState.value.sessionId
+      const shouldAffectPrimarySession =
+        !currentSessionId || !event.sessionId || currentSessionId === event.sessionId
+      if (shouldAffectPrimarySession) {
+        const shouldClearCurrentSession = !currentSessionId || currentSessionId === event.sessionId
+        sessionState.value = shouldClearCurrentSession
+          ? {
+              ...sessionState.value,
+              sessionId: undefined,
+              deviceId: undefined,
+              host: undefined,
+              port: undefined,
+              state: 'closed',
+              closedAt: Date.now()
+            }
+          : {
+              ...sessionState.value,
+              state: 'closed',
+              closedAt: Date.now()
+            }
+      }
       markConnectionClosed(event.sessionId, Date.now())
     })
 

@@ -1,5 +1,9 @@
 import { WebPlugin } from '@capacitor/core'
 import type {
+  DiscoveryCloseSessionOptions,
+  DiscoveryCloseSessionResult,
+  DiscoverySendMessageOptions,
+  DiscoverySendMessageResult,
   LanDiscoveryPlugin,
   ListDiscoveredDevicesResult,
   ProbeConnectableOptions,
@@ -20,6 +24,9 @@ type BridgeInvoke = (
   payload: unknown,
   options?: { timeoutMs?: number; signal?: AbortSignal }
 ) => Promise<unknown>
+
+const DISCOVERY_START_TIMEOUT_MS = 30_000
+const DISCOVERY_PROBE_TIMEOUT_MS = 20_000
 
 type DiscoveryStartBridgeResult = {
   requestId: string
@@ -54,6 +61,14 @@ type DiscoveryBridgeMethods = {
   'discovery.probeConnectable': {
     payload: ProbeConnectableOptions
     result: ProbeConnectableBridgeResult
+  }
+  'discovery.closeSession': {
+    payload: DiscoveryCloseSessionOptions
+    result: DiscoveryCloseSessionResult
+  }
+  'discovery.sendMessage': {
+    payload: DiscoverySendMessageOptions
+    result: DiscoverySendMessageResult
   }
 }
 
@@ -97,14 +112,17 @@ export class LanDiscoveryElectron extends WebPlugin implements LanDiscoveryPlugi
 
   private async invokeBridge<TMethod extends keyof DiscoveryBridgeMethods>(
     method: TMethod,
-    payload: DiscoveryBridgeMethods[TMethod]['payload']
+    payload: DiscoveryBridgeMethods[TMethod]['payload'],
+    options?: { timeoutMs?: number; signal?: AbortSignal }
   ): Promise<DiscoveryBridgeMethods[TMethod]['result']> {
     const invoke = this.resolveInvoke()
-    return invoke(method, payload) as Promise<DiscoveryBridgeMethods[TMethod]['result']>
+    return invoke(method, payload, options) as Promise<DiscoveryBridgeMethods[TMethod]['result']>
   }
 
   async startDiscovery(options: StartDiscoveryOptions = {}): Promise<StartDiscoveryResult> {
-    const result = await this.invokeBridge('discovery.start', options)
+    const result = await this.invokeBridge('discovery.start', options, {
+      timeoutMs: DISCOVERY_START_TIMEOUT_MS
+    })
     const listResult = toListResult(result)
     this.notifyListeners('scanStateChanged', {
       state: listResult.state,
@@ -135,10 +153,20 @@ export class LanDiscoveryElectron extends WebPlugin implements LanDiscoveryPlugi
   }
 
   async probeConnectable(options: ProbeConnectableOptions = {}): Promise<ProbeConnectableResult> {
-    const result = await this.invokeBridge('discovery.probeConnectable', options)
+    const result = await this.invokeBridge('discovery.probeConnectable', options, {
+      timeoutMs: DISCOVERY_PROBE_TIMEOUT_MS
+    })
     for (const device of result.devices) {
       this.notifyListeners('deviceConnectableUpdated', { device })
     }
     return result
+  }
+
+  async closeSession(options: DiscoveryCloseSessionOptions): Promise<DiscoveryCloseSessionResult> {
+    return this.invokeBridge('discovery.closeSession', options)
+  }
+
+  async sendMessage(options: DiscoverySendMessageOptions): Promise<DiscoverySendMessageResult> {
+    return this.invokeBridge('discovery.sendMessage', options)
   }
 }

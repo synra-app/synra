@@ -5,6 +5,7 @@ import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import android.content.Context;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -28,6 +29,8 @@ public class DeviceConnectionPlugin extends Plugin {
     private static final int SESSION_ACK_TIMEOUT_MS = 3000;
     private static final String APP_ID = "synra";
     private static final String PROTOCOL_VERSION = "1.0";
+  private static final String PREFS_NAME = "synra_device_connection";
+  private static final String PREFS_DEVICE_UUID_KEY = "device_uuid";
 
     private final ExecutorService ioExecutor = Executors.newSingleThreadExecutor();
     private final ExecutorService readerExecutor = Executors.newSingleThreadExecutor();
@@ -62,7 +65,10 @@ public class DeviceConnectionPlugin extends Plugin {
                     new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
 
                 String sessionId = UUID.randomUUID().toString();
-                writeFrame(output, frame("hello", sessionId, null, null));
+                JSObject helloPayload = new JSObject();
+                helloPayload.put("sourceDeviceId", getOrCreateLocalDeviceUuid());
+                helloPayload.put("probe", false);
+                writeFrame(output, frame("hello", sessionId, null, helloPayload));
                 JSONObject helloAck = readFrame(input);
                 if (!"helloAck".equals(helloAck.optString("type"))) {
                     call.reject("Handshake failed: missing helloAck.");
@@ -74,13 +80,21 @@ public class DeviceConnectionPlugin extends Plugin {
                     closeQuietly(socket);
                     return;
                 }
+                JSONObject helloAckPayload = helloAck.optJSONObject("payload");
+                String remoteDeviceId =
+                    helloAckPayload == null ? null : helloAckPayload.optString("sourceDeviceId", null);
+                if (remoteDeviceId == null || remoteDeviceId.isBlank()) {
+                    call.reject("Handshake failed: missing sourceDeviceId.");
+                    closeQuietly(socket);
+                    return;
+                }
                 socket.setSoTimeout(0);
 
                 this.sessionSocket = socket;
                 this.sessionInput = input;
                 this.sessionOutput = output;
                 this.currentSessionId = helloAck.optString("sessionId", sessionId);
-                this.currentDeviceId = deviceId;
+                this.currentDeviceId = remoteDeviceId;
                 this.currentHost = host;
                 this.currentPort = port;
                 this.lastSessionError = null;
@@ -91,6 +105,10 @@ public class DeviceConnectionPlugin extends Plugin {
                 JSObject result = new JSObject();
                 result.put("success", true);
                 result.put("sessionId", this.currentSessionId);
+                result.put("deviceId", this.currentDeviceId);
+                result.put("direction", "outbound");
+                result.put("host", this.currentHost);
+                result.put("port", this.currentPort);
                 result.put("state", "open");
                 result.put("transport", "tcp");
                 notifyListeners("sessionOpened", result);
@@ -320,5 +338,25 @@ public class DeviceConnectionPlugin extends Plugin {
         } catch (IOException ignored) {
             // ignore
         }
+    }
+
+    private String getOrCreateLocalDeviceUuid() {
+        Context context = getContext();
+        if (context == null) {
+            return UUID.randomUUID().toString();
+        }
+        String existing = context
+            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(PREFS_DEVICE_UUID_KEY, null);
+        if (existing != null && !existing.isBlank()) {
+            return existing;
+        }
+        String created = UUID.randomUUID().toString();
+        context
+            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(PREFS_DEVICE_UUID_KEY, created)
+            .apply();
+        return created;
     }
 }
