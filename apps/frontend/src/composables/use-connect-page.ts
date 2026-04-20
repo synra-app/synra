@@ -28,6 +28,7 @@ export function useConnectPage() {
 
   const manualTarget = ref('')
   const socketPort = ref(32100)
+  const connectInFlight = ref(false)
   const removeDialogOpen = ref(false)
   const removeDialogMessage = ref('')
   const removeDialogResolver = ref<((confirmed: boolean) => void) | null>(null)
@@ -151,7 +152,7 @@ export function useConnectPage() {
 
   async function onConnect(deviceId: string): Promise<void> {
     const selectedDevice = devices.value.find((device) => device.deviceId === deviceId)
-    if (!selectedDevice || loading.value) {
+    if (!selectedDevice || loading.value || connectInFlight.value) {
       return
     }
     if (sessionState.value.state === 'open') {
@@ -160,12 +161,16 @@ export function useConnectPage() {
     if (typeof selectedDevice.ipAddress !== 'string' || selectedDevice.ipAddress.length === 0) {
       return
     }
-
-    await store.openSession({
-      deviceId: selectedDevice.deviceId,
-      host: selectedDevice.ipAddress,
-      port: socketPort.value
-    })
+    connectInFlight.value = true
+    try {
+      await store.openSession({
+        deviceId: selectedDevice.deviceId,
+        host: selectedDevice.ipAddress,
+        port: socketPort.value
+      })
+    } finally {
+      connectInFlight.value = false
+    }
   }
 
   async function onDisconnect(deviceId: string): Promise<void> {

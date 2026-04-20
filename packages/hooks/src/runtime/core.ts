@@ -113,6 +113,7 @@ function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionR
   const seenEventIds = new Set<string>()
   const pendingHandoffHosts = new Set<string>()
   const handoffOutboundSessionIdByHost = new Map<string, string>()
+  let openSessionInFlight = false
   let listenersRegistered = false
   let connectedSessionsRebuildTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -374,6 +375,10 @@ function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionR
     port: number
     transport?: 'tcp'
   }): Promise<void> {
+    if (openSessionInFlight) {
+      return
+    }
+    openSessionInFlight = true
     loading.value = true
     try {
       if (!isMobileRuntime && options.host) {
@@ -387,6 +392,7 @@ function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): ConnectionR
       error.value = unknownToErrorMessage(unknownError, 'Failed to open session.')
       throw unknownError
     } finally {
+      openSessionInFlight = false
       loading.value = false
     }
   }

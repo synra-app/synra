@@ -53,6 +53,7 @@ export function useMessagesPage() {
   const sending = ref(false)
   const failedMessageIds = ref<Set<string>>(new Set())
   const pendingMessages = ref<ChatMessage[]>([])
+  const connectInFlight = ref(false)
 
   const activeSessions = computed<ChatSession[]>(() =>
     rawActiveSessions.value.map((session) => ({
@@ -296,7 +297,12 @@ export function useMessagesPage() {
   }
 
   async function connectSelectedDevice(): Promise<void> {
-    if (!selectedDevice.value || loading.value || !selectedDevice.value.connectable) {
+    if (
+      !selectedDevice.value ||
+      loading.value ||
+      connectInFlight.value ||
+      !selectedDevice.value.connectable
+    ) {
       return
     }
     if (!selectedDevice.value.ipAddress) {
@@ -304,17 +310,23 @@ export function useMessagesPage() {
       return
     }
     localError.value = null
-    await openSessionByDevice({
-      deviceId: selectedDevice.value.deviceId,
-      host: selectedDevice.value.ipAddress,
-      port: DEFAULT_SOCKET_PORT
-    })
-    await syncSessionState()
-    const linkedSession = activeSessions.value.find(
-      (session) => session.deviceId === selectedDevice.value?.deviceId && session.status === 'open'
-    )
-    if (linkedSession?.sessionId) {
-      selectedSessionId.value = linkedSession.sessionId
+    connectInFlight.value = true
+    try {
+      await openSessionByDevice({
+        deviceId: selectedDevice.value.deviceId,
+        host: selectedDevice.value.ipAddress,
+        port: DEFAULT_SOCKET_PORT
+      })
+      await syncSessionState()
+      const linkedSession = activeSessions.value.find(
+        (session) =>
+          session.deviceId === selectedDevice.value?.deviceId && session.status === 'open'
+      )
+      if (linkedSession?.sessionId) {
+        selectedSessionId.value = linkedSession.sessionId
+      }
+    } finally {
+      connectInFlight.value = false
     }
   }
 
