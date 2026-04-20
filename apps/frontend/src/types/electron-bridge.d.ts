@@ -26,6 +26,8 @@ declare global {
       onHostEvent?: (listener: (event: SynraHostEvent) => void) => () => void
     }
     __synraWindowControls?: {
+      /** Node/Electron `process.platform` (e.g. `darwin`, `win32`, `linux`). */
+      platform?: string
       minimize: () => Promise<void>
       toggleMaximize: () => Promise<boolean>
       close: () => Promise<void>

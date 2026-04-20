@@ -69,6 +69,11 @@ export function useConnectPage() {
   }
 
   async function onStartDiscovery(): Promise<void> {
+    // Avoid iOS keyboard (TUI*) constraint noise when inputs still have focus.
+    const active = document.activeElement
+    if (active instanceof HTMLElement) {
+      active.blur()
+    }
     await store.startDiscovery(parseManualTargets(manualTarget.value))
   }
 

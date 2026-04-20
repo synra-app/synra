@@ -55,6 +55,7 @@ contextBridge.exposeInMainWorld('__synraCapElectron', {
 })
 
 contextBridge.exposeInMainWorld('__synraWindowControls', {
+  platform: process.platform,
   minimize: () => ipcRenderer.invoke(WINDOW_CONTROL_CHANNELS.minimize) as Promise<void>,
   toggleMaximize: () =>
     ipcRenderer.invoke(WINDOW_CONTROL_CHANNELS.toggleMaximize) as Promise<boolean>,

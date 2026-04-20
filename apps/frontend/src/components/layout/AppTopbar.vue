@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import AppButton from '../base/AppButton.vue'
 
 defineProps<{
@@ -11,7 +11,14 @@ const emit = defineEmits<{
 }>()
 
 const hasWindowControls = ref(false)
+const electronPlatform = ref<string | undefined>(undefined)
 const isMaximized = ref(false)
+
+const useMacNativeTitlebar = computed(() => electronPlatform.value === 'darwin')
+
+const showCustomWindowButtons = computed(
+  () => hasWindowControls.value && electronPlatform.value !== 'darwin'
+)
 
 let offWindowStateChange: (() => void) | undefined
 
@@ -48,14 +55,18 @@ function onHeaderDoubleClick(event: MouseEvent): void {
 }
 
 onMounted(() => {
-  hasWindowControls.value = Boolean(window.__synraWindowControls)
+  const wc = window.__synraWindowControls
+  hasWindowControls.value = Boolean(wc)
+  electronPlatform.value = wc?.platform
   if (!hasWindowControls.value) {
     return
   }
-  syncWindowState()
-  offWindowStateChange = window.__synraWindowControls?.onWindowStateChange?.((state) => {
-    isMaximized.value = state.maximized
-  })
+  if (electronPlatform.value !== 'darwin') {
+    syncWindowState()
+    offWindowStateChange = wc?.onWindowStateChange?.((state) => {
+      isMaximized.value = state.maximized
+    })
+  }
 })
 
 onUnmounted(() => {
@@ -65,7 +76,8 @@ onUnmounted(() => {
 
 <template>
   <header
-    class="app-titlebar-drag z-[60] h-14 border-b border-white/10 bg-[#0d142acc] px-2.5 backdrop-blur-xl lg:h-11 lg:px-3"
+    class="app-titlebar-drag z-[60] h-14 border-b border-white/10 bg-[#0d142acc] backdrop-blur-xl lg:h-11"
+    :class="useMacNativeTitlebar ? 'pl-[78px] pr-2.5 lg:pr-3' : 'px-2.5 lg:px-3'"
     @dblclick="onHeaderDoubleClick"
   >
     <div class="flex h-full items-center justify-between gap-2.5">
@@ -78,13 +90,22 @@ onUnmounted(() => {
         >
           <span class="i-lucide-menu text-sm" />
         </AppButton>
-        <span class="fcc h-6.5 w-6.5 rounded-md bg-primary/24 text-primary-3">
-          <span class="i-lucide-sparkles text-[13px]" />
-        </span>
-        <p class="truncate text-xs font-semibold text-slate-100">Synra</p>
+        <template v-if="!useMacNativeTitlebar">
+          <span class="fcc h-6.5 w-6.5 rounded-md bg-primary/24 text-primary-3">
+            <span class="i-lucide-sparkles text-[13px]" />
+          </span>
+          <p class="truncate text-xs font-semibold text-slate-100">Synra</p>
+        </template>
       </div>
 
-      <div v-if="hasWindowControls" class="app-titlebar-no-drag flex items-center gap-1">
+      <div v-if="useMacNativeTitlebar" class="app-titlebar-no-drag flex min-w-0 items-center gap-2">
+        <p class="truncate text-xs font-semibold text-slate-100">Synra</p>
+        <span class="fcc h-6.5 w-6.5 shrink-0 rounded-md bg-primary/24 text-primary-3">
+          <span class="i-lucide-sparkles text-[13px]" />
+        </span>
+      </div>
+
+      <div v-if="showCustomWindowButtons" class="app-titlebar-no-drag flex items-center gap-1">
         <AppButton
           class="app-titlebar-no-drag h-7 min-w-8 px-2"
           size="icon"
