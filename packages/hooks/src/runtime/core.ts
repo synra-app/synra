@@ -1,4 +1,3 @@
-import { resolveSessionIdFromPayload } from './session-payload'
 import { createConnectionRuntime, type ConnectionRuntime } from './create-connection-runtime'
 import { resolveRuntimeAdapter } from './resolve-adapter'
 
@@ -15,8 +14,4 @@ export function getConnectionRuntime(): ConnectionRuntime {
 
 export function resetConnectionRuntime(): void {
   runtimeSingleton = null
-}
-
-export function resolveSessionIdFromLogPayload(payload: unknown): string | undefined {
-  return resolveSessionIdFromPayload(payload)
 }

@@ -1,102 +1,20 @@
 import type { DiscoveredDevice } from '@synra/capacitor-lan-discovery'
 import type { Ref } from 'vue'
-import type { SynraHookEventLog, SynraHookSessionState } from '../types'
+import type { RuntimeSessionState } from '../types'
 import type { ConnectionRuntimeAdapter } from './adapter'
 import type { ConnectedSessionsBook } from './connected-sessions-book'
 import type { DesktopHandoffState } from './desktop-handoff'
+import { upsertDiscoveredDevice, upsertDiscoveredPeerFromSession } from './discovered-device-upsert'
+import { normalizeHost } from './host-normalization'
 import { sortDevices } from './device-sort'
-import { resolveMessageEventId } from './message-event-id'
 import type { MessageListenersRegistry } from './message-listeners'
-
-type SessionOpenedLike = {
-  deviceId?: string
-  host?: string
-  displayName?: string
-  port?: number
-}
-
-function normalizeHost(value: string): string {
-  return value.trim().toLowerCase()
-}
-
-function nonEmptyTrimmed(value: string | undefined): string | undefined {
-  if (typeof value !== 'string') {
-    return undefined
-  }
-  const trimmed = value.trim()
-  return trimmed.length > 0 ? trimmed : undefined
-}
-
-function resolveValidPort(
-  eventPort: number | undefined,
-  fallbackPort: number | undefined
-): number | undefined {
-  if (typeof eventPort === 'number' && eventPort > 0) {
-    return eventPort
-  }
-  return fallbackPort
-}
-
-function upsertDiscoveredPeerFromSession(
-  devices: Ref<DiscoveredDevice[]>,
-  event: SessionOpenedLike
-): void {
-  if (typeof event.deviceId !== 'string' || event.deviceId.length === 0) {
-    return
-  }
-  if (typeof event.host !== 'string' || event.host.length === 0) {
-    return
-  }
-  const host = normalizeHost(event.host)
-  if (host.length === 0) {
-    return
-  }
-  const now = Date.now()
-  const existing =
-    devices.value.find((device) => device.deviceId === event.deviceId) ??
-    devices.value.find((device) => normalizeHost(device.ipAddress) === host)
-  const existingName = nonEmptyTrimmed(existing?.name)
-  const eventDisplayName = nonEmptyTrimmed(event.displayName)
-  const displayName = existingName ?? eventDisplayName ?? `Peer ${event.deviceId.slice(0, 8)}`
-  const port = resolveValidPort(event.port, existing?.port)
-  const peer: DiscoveredDevice = existing
-    ? {
-        ...existing,
-        name: displayName,
-        ipAddress: existing.ipAddress || host,
-        port,
-        source: existing.source,
-        connectable: true,
-        connectCheckAt: now,
-        lastSeenAt: now
-      }
-    : {
-        deviceId: event.deviceId,
-        name: displayName,
-        ipAddress: host,
-        port,
-        source: 'session',
-        connectable: true,
-        connectCheckAt: now,
-        discoveredAt: now,
-        lastSeenAt: now
-      }
-  const others = devices.value.filter((device) => {
-    if (device.deviceId === peer.deviceId) {
-      return false
-    }
-    return normalizeHost(device.ipAddress) !== host
-  })
-  devices.value = sortDevices([...others, peer])
-}
 
 export async function registerAdapterListeners(options: {
   adapter: ConnectionRuntimeAdapter
   isMobileRuntime: boolean
   devices: Ref<DiscoveredDevice[]>
-  sessionState: Ref<SynraHookSessionState>
+  sessionState: Ref<RuntimeSessionState>
   error: Ref<string | null>
-  appendEventLog: (type: SynraHookEventLog['type'], payload: unknown, id?: string) => boolean
   sessionsBook: ConnectedSessionsBook
   handoff: DesktopHandoffState
   messageRegistry: MessageListenersRegistry
@@ -107,7 +25,6 @@ export async function registerAdapterListeners(options: {
     devices,
     sessionState,
     error,
-    appendEventLog,
     sessionsBook,
     handoff,
     messageRegistry
@@ -116,15 +33,28 @@ export async function registerAdapterListeners(options: {
   const { emitIncomingMessage } = messageRegistry
 
   await adapter.addDeviceConnectableUpdatedListener((event) => {
+    upsertDiscoveredDevice(devices, event.device)
+  })
+
+  await adapter.addDeviceLostListener((event) => {
+    if (!event.deviceId && !event.ipAddress) {
+      return
+    }
+    const normalizedIp = normalizeHost(event.ipAddress ?? '')
     devices.value = sortDevices(
-      devices.value.map((device) =>
-        device.deviceId === event.device.deviceId ? event.device : device
-      )
+      devices.value.filter((device) => {
+        if (event.deviceId && device.deviceId === event.deviceId) {
+          return false
+        }
+        if (normalizedIp.length > 0 && normalizeHost(device.ipAddress) === normalizedIp) {
+          return false
+        }
+        return true
+      })
     )
   })
 
   await adapter.addSessionOpenedListener((event) => {
-    appendEventLog('sessionOpened', event)
     const rawDirection = (event as { direction?: unknown }).direction
     const explicitDirection =
       rawDirection === 'inbound' || rawDirection === 'outbound' ? rawDirection : undefined
@@ -186,7 +116,6 @@ export async function registerAdapterListeners(options: {
         status: 'open',
         deviceId: event.deviceId,
         host: event.host,
-        remote: event.host,
         port: event.port,
         openedAt: Date.now(),
         lastActiveAt: Date.now(),
@@ -197,7 +126,6 @@ export async function registerAdapterListeners(options: {
   })
 
   await adapter.addSessionClosedListener((event) => {
-    appendEventLog('sessionClosed', event)
     if (event.sessionId) {
       for (const [host, handoffSessionId] of handoff.handoffOutboundSessionIdByHost.entries()) {
         if (handoffSessionId === event.sessionId) {
@@ -231,36 +159,15 @@ export async function registerAdapterListeners(options: {
   })
 
   await adapter.addMessageReceivedListener((event) => {
-    appendEventLog(
-      'messageReceived',
-      event,
-      resolveMessageEventId({
-        type: 'messageReceived',
-        sessionId: event.sessionId,
-        messageId: event.messageId,
-        timestamp: event.timestamp
-      })
-    )
     sessionsBook.touchSessionActivity(event.sessionId, Date.now(), 'inbound')
     emitIncomingMessage(event)
   })
 
   await adapter.addMessageAckListener((event) => {
-    appendEventLog(
-      'messageAck',
-      event,
-      resolveMessageEventId({
-        type: 'messageAck',
-        sessionId: event.sessionId,
-        messageId: event.messageId,
-        timestamp: event.timestamp
-      })
-    )
     sessionsBook.touchSessionActivity(event.sessionId, Date.now(), 'outbound')
   })
 
   await adapter.addTransportErrorListener((event) => {
-    appendEventLog('transportError', event)
     error.value = event.message
   })
 
@@ -273,7 +180,6 @@ export async function registerAdapterListeners(options: {
         status: 'open',
         deviceId: snapshot.deviceId,
         host: snapshot.host,
-        remote: snapshot.host,
         port: snapshot.port,
         openedAt: snapshot.openedAt,
         lastActiveAt: Date.now(),

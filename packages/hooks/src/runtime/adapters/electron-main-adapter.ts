@@ -1,5 +1,6 @@
 import type {
   DeviceConnectableUpdatedEvent,
+  DiscoveryState,
   DiscoveredDevice,
   StartDiscoveryOptions
 } from '@synra/capacitor-lan-discovery'
@@ -10,6 +11,7 @@ import type {
   MessageReceivedEvent,
   OpenSessionOptions,
   SendMessageOptions,
+  SessionState,
   SessionClosedEvent,
   SessionOpenedEvent,
   TransportErrorEvent
@@ -18,29 +20,15 @@ import type { ConnectionRuntimeAdapter } from '../adapter'
 
 type MainHooksBridge = {
   startDiscovery: (options?: StartDiscoveryOptions) => Promise<{
-    state: string
-    startedAt?: number
-    scanWindowMs: number
+    state: DiscoveryState
     devices: DiscoveredDevice[]
   }>
-  stopDiscovery: () => Promise<unknown>
-  getDiscoveredDevices: () => Promise<{
-    state: string
-    startedAt?: number
-    scanWindowMs: number
-    devices: DiscoveredDevice[]
-  }>
-  probeConnectable: (options?: {
-    port?: number
-    timeoutMs?: number
-  }) => Promise<{ devices: DiscoveredDevice[] }>
   openSession: (
     options: OpenSessionOptions
-  ) => Promise<{ sessionId: string; state: string; transport: 'tcp' }>
+  ) => Promise<{ sessionId: string; state: SessionState; transport: 'tcp' }>
   closeSession: (sessionId?: string) => Promise<unknown>
   sendMessage: (options: SendMessageOptions) => Promise<unknown>
   getSessionState: (sessionId?: string) => Promise<GetSessionStateResult>
-  pullHostEvents: () => Promise<{ events: HostEvent[] }>
   onHostEvent: (listener: (event: HostEvent) => void) => () => void
 }
 
@@ -91,12 +79,7 @@ export function createElectronMainRuntimeAdapter(): ConnectionRuntimeAdapter {
   }
 
   return {
-    getDiscoveredDevices: () => bridge.getDiscoveredDevices(),
     startDiscovery: (options) => bridge.startDiscovery(options),
-    stopDiscovery: async () => {
-      await bridge.stopDiscovery()
-    },
-    probeConnectable: (port, timeoutMs) => bridge.probeConnectable({ port, timeoutMs }),
     openSession: (options) => bridge.openSession(options),
     closeSession: async (sessionId) => {
       await bridge.closeSession(sessionId)
@@ -105,10 +88,33 @@ export function createElectronMainRuntimeAdapter(): ConnectionRuntimeAdapter {
       await bridge.sendMessage(options)
     },
     getSessionState: (sessionId) => bridge.getSessionState(sessionId),
-    pullHostEvents: () => bridge.pullHostEvents(),
     addDeviceConnectableUpdatedListener: async (
       _listener: (event: DeviceConnectableUpdatedEvent) => void
     ) => createNoopHandle(),
+    addDeviceLostListener: async (listener) =>
+      addHostListener((event) => {
+        if (event.type !== 'host.member.offline') {
+          return
+        }
+        const payload =
+          event.payload && typeof event.payload === 'object'
+            ? (event.payload as Record<string, unknown>)
+            : {}
+        const deviceId =
+          typeof payload.deviceId === 'string' && payload.deviceId.length > 0
+            ? payload.deviceId
+            : undefined
+        if (!deviceId) {
+          return
+        }
+        listener({
+          deviceId,
+          ipAddress:
+            typeof payload.sourceHostIp === 'string' && payload.sourceHostIp.length > 0
+              ? payload.sourceHostIp
+              : undefined
+        })
+      }),
     addSessionOpenedListener: async (listener: (event: SessionOpenedEvent) => void) =>
       addHostListener((event) => {
         if (event.type === 'transport.session.opened' && event.sessionId) {

@@ -6,14 +6,19 @@ import type {
   DiscoverySendMessageResult,
   LanDiscoveryPlugin,
   ListDiscoveredDevicesResult,
-  ProbeConnectableOptions,
-  ProbeConnectableResult,
   StartDiscoveryOptions,
   StartDiscoveryResult,
   StopDiscoveryResult
 } from './definitions'
 
 const DEFAULT_SCAN_WINDOW_MS = 15_000
+
+type WebScanState = {
+  state: ListDiscoveredDevicesResult['state']
+  startedAt?: number
+  scanWindowMs: number
+  devices: ListDiscoveredDevicesResult['devices']
+}
 
 function now(): number {
   return Date.now()
@@ -37,7 +42,7 @@ function toManualWebDevices(manualTargets: string[]) {
 }
 
 export class LanDiscoveryWeb extends WebPlugin implements LanDiscoveryPlugin {
-  private scanState: ListDiscoveredDevicesResult = {
+  private scanState: WebScanState = {
     state: 'idle',
     scanWindowMs: DEFAULT_SCAN_WINDOW_MS,
     devices: []
@@ -48,20 +53,17 @@ export class LanDiscoveryWeb extends WebPlugin implements LanDiscoveryPlugin {
     this.scanState = {
       state: 'scanning',
       startedAt: now(),
-      scanWindowMs: options.scanWindowMs ?? DEFAULT_SCAN_WINDOW_MS,
+      scanWindowMs: DEFAULT_SCAN_WINDOW_MS,
       devices: manualDevices
     }
 
     this.notifyListeners('scanStateChanged', {
-      state: this.scanState.state,
-      startedAt: this.scanState.startedAt
+      state: this.scanState.state
     })
 
     return {
       requestId: `web-${this.scanState.startedAt ?? now()}`,
       state: this.scanState.state,
-      startedAt: this.scanState.startedAt,
-      scanWindowMs: this.scanState.scanWindowMs,
       devices: this.scanState.devices
     }
   }
@@ -73,34 +75,15 @@ export class LanDiscoveryWeb extends WebPlugin implements LanDiscoveryPlugin {
     }
 
     this.notifyListeners('scanStateChanged', {
-      state: 'idle',
-      startedAt: this.scanState.startedAt
+      state: 'idle'
     })
 
     return { success: true }
   }
 
   async getDiscoveredDevices(): Promise<ListDiscoveredDevicesResult> {
-    return this.scanState
-  }
-
-  async probeConnectable(options: ProbeConnectableOptions = {}): Promise<ProbeConnectableResult> {
-    const checkedAt = now()
-    const timeoutMs = options.timeoutMs ?? 1500
-    const port = options.port ?? 32100
-    this.scanState = {
-      ...this.scanState,
-      devices: this.scanState.devices.map((device) => ({
-        ...device,
-        connectable: false,
-        connectCheckAt: checkedAt,
-        connectCheckError: 'UNSUPPORTED_OPERATION'
-      }))
-    }
     return {
-      checkedAt,
-      timeoutMs,
-      port,
+      state: this.scanState.state,
       devices: this.scanState.devices
     }
   }

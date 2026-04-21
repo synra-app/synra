@@ -55,7 +55,7 @@ watch(
     </div>
 
     <div v-else-if="messages.length === 0" class="text-center text-sm text-slate-400">
-      No messages yet. Start chatting when a device session is ready.
+      No messages yet. Start chatting after connecting a device.
     </div>
 
     <article

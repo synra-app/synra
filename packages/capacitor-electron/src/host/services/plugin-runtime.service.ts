@@ -208,7 +208,6 @@ export function createPluginRuntimeService(
         const receipt = await withTimeout(
           plugin.execute(options.action, {
             deviceId: 'pc-host',
-            sessionId: options.sessionId,
             traceId
           }),
           options.timeoutMs ?? 10_000

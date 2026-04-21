@@ -4,7 +4,6 @@ import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { BRIDGE_HOST_EVENT_CHANNEL, setupBridgeMainRuntime } from './bridge/main'
 import type {
   DeviceDiscoveryHostEvent,
-  DeviceDiscoveryProbeConnectableOptions,
   DeviceDiscoveryStartOptions,
   DeviceSessionOpenOptions,
   DeviceSessionSendMessageOptions
@@ -12,14 +11,10 @@ import type {
 
 type MainHooksBridge = {
   startDiscovery: (options?: DeviceDiscoveryStartOptions) => Promise<unknown>
-  stopDiscovery: () => Promise<unknown>
-  getDiscoveredDevices: () => Promise<unknown>
-  probeConnectable: (options?: DeviceDiscoveryProbeConnectableOptions) => Promise<unknown>
   openSession: (options: DeviceSessionOpenOptions) => Promise<unknown>
   closeSession: (sessionId?: string) => Promise<unknown>
   sendMessage: (options: DeviceSessionSendMessageOptions) => Promise<unknown>
   getSessionState: (sessionId?: string) => Promise<unknown>
-  pullHostEvents: () => Promise<{ events: DeviceDiscoveryHostEvent[] }>
   onHostEvent: (listener: (event: DeviceDiscoveryHostEvent) => void) => () => void
 }
 
@@ -42,6 +37,9 @@ const WINDOW_CONTROL_CHANNELS = {
   isMaximized: 'synra:window:is-maximized',
   stateChange: 'synra:window:state-change'
 } as const
+
+let stopDiscoveryOnQuit: (() => Promise<unknown>) | undefined
+let isQuittingAfterCleanup = false
 
 function styleTag(tag: string): string {
   const style = TAG_STYLES[tag] ?? 'cyan'
@@ -179,14 +177,10 @@ function registerCapacitorElectronBridge(): void {
   const bridgeTarget = globalThis as MainHooksGlobal
   bridgeTarget.__synraHooksMainBridge = {
     startDiscovery: (options) => runtime.deviceDiscoveryService.startDiscovery(options),
-    stopDiscovery: () => runtime.deviceDiscoveryService.stopDiscovery(),
-    getDiscoveredDevices: () => runtime.deviceDiscoveryService.listDevices(),
-    probeConnectable: (options) => runtime.deviceDiscoveryService.probeConnectable(options),
     openSession: (options) => runtime.connectionService.openSession(options),
     closeSession: (sessionId) => runtime.connectionService.closeSession({ sessionId }),
     sendMessage: (options) => runtime.connectionService.sendMessage(options),
     getSessionState: (sessionId) => runtime.connectionService.getSessionState({ sessionId }),
-    pullHostEvents: () => runtime.connectionService.pullHostEvents(),
     onHostEvent(listener) {
       hostEventListeners.add(listener)
       return () => {
@@ -194,6 +188,7 @@ function registerCapacitorElectronBridge(): void {
       }
     }
   }
+  stopDiscoveryOnQuit = () => runtime.deviceDiscoveryService.stopDiscovery()
 }
 
 function registerWindowControlBridge(): void {
@@ -242,4 +237,19 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
+})
+
+app.on('before-quit', (event) => {
+  if (isQuittingAfterCleanup) {
+    return
+  }
+  event.preventDefault()
+  void Promise.resolve()
+    .then(async () => {
+      await stopDiscoveryOnQuit?.().catch(() => undefined)
+    })
+    .finally(() => {
+      isQuittingAfterCleanup = true
+      app.quit()
+    })
 })

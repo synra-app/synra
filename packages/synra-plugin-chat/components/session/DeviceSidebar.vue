@@ -5,7 +5,6 @@ defineProps<{
   devices: ChatDevice[]
   loading: boolean
   selectedDeviceId?: string
-  selectedSessionId?: string
 }>()
 
 const emit = defineEmits<{
@@ -59,21 +58,18 @@ const emit = defineEmits<{
               {{ device.connectable ? 'Connectable' : 'Unavailable' }}
             </span>
             <span
-              v-if="device.sessionId"
+              v-if="device.connectionStatus"
               class="rounded-full px-2 py-0.5 font-medium"
               :class="
-                device.sessionStatus === 'open'
+                device.connectionStatus === 'connected'
                   ? 'bg-sky-400/20 text-sky-200'
                   : 'bg-slate-400/18 text-slate-300'
               "
             >
-              {{ device.sessionStatus === 'open' ? 'Connected' : 'Closed' }}
+              {{ device.connectionStatus === 'connected' ? 'Connected' : 'Idle' }}
             </span>
           </div>
           <p class="mt-1 text-[11px] text-slate-400">Seen {{ device.lastSeenLabel }}</p>
-          <p v-if="device.connectCheckError" class="mt-1 text-[11px] text-amber-200">
-            {{ device.connectCheckError }}
-          </p>
         </button>
       </li>
     </ul>
@@ -95,7 +91,7 @@ const emit = defineEmits<{
       </button>
       <button
         class="glass-button app-focus-ring px-3 py-2 text-sm"
-        :disabled="!selectedSessionId || loading"
+        :disabled="!selectedDeviceId || loading"
         @click="emit('disconnect')"
       >
         Disconnect

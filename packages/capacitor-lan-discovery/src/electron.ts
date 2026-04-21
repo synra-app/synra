@@ -6,8 +6,6 @@ import type {
   DiscoverySendMessageResult,
   LanDiscoveryPlugin,
   ListDiscoveredDevicesResult,
-  ProbeConnectableOptions,
-  ProbeConnectableResult,
   StartDiscoveryOptions,
   StartDiscoveryResult,
   StopDiscoveryResult
@@ -16,6 +14,7 @@ import type {
 type ElectronBridgeTarget = {
   __synraCapElectron?: {
     invoke?: BridgeInvoke
+    onHostEvent?: (listener: (event: { type: string; payload?: unknown }) => void) => () => void
   }
 }
 
@@ -26,24 +25,17 @@ type BridgeInvoke = (
 ) => Promise<unknown>
 
 const DISCOVERY_START_TIMEOUT_MS = 30_000
-const DISCOVERY_PROBE_TIMEOUT_MS = 20_000
 
 type DiscoveryStartBridgeResult = {
   requestId: string
   state: 'idle' | 'scanning'
-  startedAt?: number
-  scanWindowMs: number
   devices: ListDiscoveredDevicesResult['devices']
 }
 
 type DiscoveryListBridgeResult = {
   state: 'idle' | 'scanning'
-  startedAt?: number
-  scanWindowMs: number
   devices: ListDiscoveredDevicesResult['devices']
 }
-
-type ProbeConnectableBridgeResult = ProbeConnectableResult
 
 type DiscoveryBridgeMethods = {
   'discovery.start': {
@@ -58,10 +50,6 @@ type DiscoveryBridgeMethods = {
     payload: Record<string, never>
     result: DiscoveryListBridgeResult
   }
-  'discovery.probeConnectable': {
-    payload: ProbeConnectableOptions
-    result: ProbeConnectableBridgeResult
-  }
   'discovery.closeSession': {
     payload: DiscoveryCloseSessionOptions
     result: DiscoveryCloseSessionResult
@@ -75,8 +63,6 @@ type DiscoveryBridgeMethods = {
 function toListResult(result: DiscoveryListBridgeResult) {
   return {
     state: result.state,
-    startedAt: result.startedAt,
-    scanWindowMs: result.scanWindowMs,
     devices: result.devices.map((device) => ({
       deviceId: device.deviceId,
       name: device.name,
@@ -94,6 +80,7 @@ function toListResult(result: DiscoveryListBridgeResult) {
 
 export class LanDiscoveryElectron extends WebPlugin implements LanDiscoveryPlugin {
   private invoke: BridgeInvoke | undefined
+  private hostEventSubscribed = false
 
   private resolveInvoke(): BridgeInvoke {
     if (this.invoke) {
@@ -120,14 +107,49 @@ export class LanDiscoveryElectron extends WebPlugin implements LanDiscoveryPlugi
     return invoke(method, payload, options) as Promise<DiscoveryBridgeMethods[TMethod]['result']>
   }
 
+  private ensureHostEventSubscription(): void {
+    if (this.hostEventSubscribed) {
+      return
+    }
+    const target = globalThis as unknown as ElectronBridgeTarget
+    const subscribe = target.__synraCapElectron?.onHostEvent
+    if (!subscribe) {
+      return
+    }
+    subscribe((event) => {
+      if (event.type !== 'host.member.offline') {
+        return
+      }
+      const payload =
+        event.payload && typeof event.payload === 'object'
+          ? (event.payload as Record<string, unknown>)
+          : {}
+      const deviceId =
+        typeof payload.deviceId === 'string' && payload.deviceId.length > 0
+          ? payload.deviceId
+          : undefined
+      if (!deviceId) {
+        return
+      }
+      this.notifyListeners('deviceLost', {
+        deviceId,
+        ipAddress:
+          typeof payload.sourceHostIp === 'string' && payload.sourceHostIp.length > 0
+            ? payload.sourceHostIp
+            : undefined
+      })
+    })
+    this.hostEventSubscribed = true
+  }
+
   async startDiscovery(options: StartDiscoveryOptions = {}): Promise<StartDiscoveryResult> {
+    this.ensureHostEventSubscription()
     const result = await this.invokeBridge('discovery.start', options, {
       timeoutMs: DISCOVERY_START_TIMEOUT_MS
     })
     const listResult = toListResult(result)
     this.notifyListeners('scanStateChanged', {
-      state: listResult.state,
-      startedAt: listResult.startedAt
+      state: listResult.state
     })
     for (const device of listResult.devices) {
       this.notifyListeners('deviceFound', { device })
@@ -136,38 +158,30 @@ export class LanDiscoveryElectron extends WebPlugin implements LanDiscoveryPlugi
     return {
       requestId: result.requestId,
       state: listResult.state,
-      startedAt: listResult.startedAt,
-      scanWindowMs: listResult.scanWindowMs,
       devices: listResult.devices
     }
   }
 
   async stopDiscovery(): Promise<StopDiscoveryResult> {
+    this.ensureHostEventSubscription()
     const result = await this.invokeBridge('discovery.stop', {})
     this.notifyListeners('scanStateChanged', { state: 'idle' })
     return result
   }
 
   async getDiscoveredDevices(): Promise<ListDiscoveredDevicesResult> {
+    this.ensureHostEventSubscription()
     const result = await this.invokeBridge('discovery.list', {})
     return toListResult(result)
   }
 
-  async probeConnectable(options: ProbeConnectableOptions = {}): Promise<ProbeConnectableResult> {
-    const result = await this.invokeBridge('discovery.probeConnectable', options, {
-      timeoutMs: DISCOVERY_PROBE_TIMEOUT_MS
-    })
-    for (const device of result.devices) {
-      this.notifyListeners('deviceConnectableUpdated', { device })
-    }
-    return result
-  }
-
   async closeSession(options: DiscoveryCloseSessionOptions): Promise<DiscoveryCloseSessionResult> {
+    this.ensureHostEventSubscription()
     return this.invokeBridge('discovery.closeSession', options)
   }
 
   async sendMessage(options: DiscoverySendMessageOptions): Promise<DiscoverySendMessageResult> {
+    this.ensureHostEventSubscription()
     return this.invokeBridge('discovery.sendMessage', options)
   }
 }

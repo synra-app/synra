@@ -2,8 +2,6 @@ import { BridgeError } from '../shared/errors/bridge-error'
 import { BRIDGE_ERROR_CODES } from '../shared/errors/codes'
 import type {
   DeviceDiscoveryListResult,
-  DeviceDiscoveryProbeConnectableOptions,
-  DeviceDiscoveryProbeConnectableResult,
   DeviceSessionCloseOptions,
   DeviceSessionCloseResult,
   DeviceSessionGetStateOptions,
@@ -72,27 +70,23 @@ export interface ElectronBridgePlugin {
     timeoutMs?: number
     signal?: AbortSignal
   }): Promise<DeviceDiscoveryListResult>
-  probeDiscoveredDevicesConnectable(
-    options?: DeviceDiscoveryProbeConnectableOptions,
-    invokeOptions?: { timeoutMs?: number; signal?: AbortSignal }
-  ): Promise<DeviceDiscoveryProbeConnectableResult>
-  openDiscoverySession(
+  openConnectionSession(
     options: DeviceSessionOpenOptions,
     invokeOptions?: { timeoutMs?: number; signal?: AbortSignal }
   ): Promise<DeviceSessionOpenResult>
-  closeDiscoverySession(
+  closeConnectionSession(
     options?: DeviceSessionCloseOptions,
     invokeOptions?: { timeoutMs?: number; signal?: AbortSignal }
   ): Promise<DeviceSessionCloseResult>
-  sendDiscoverySessionMessage(
+  sendConnectionSessionMessage(
     options: DeviceSessionSendMessageOptions,
     invokeOptions?: { timeoutMs?: number; signal?: AbortSignal }
   ): Promise<DeviceSessionSendMessageResult>
-  getDiscoverySessionState(
+  getConnectionSessionState(
     options?: DeviceSessionGetStateOptions,
     invokeOptions?: { timeoutMs?: number; signal?: AbortSignal }
   ): Promise<DeviceSessionSnapshot>
-  pullDiscoveryHostEvents(invokeOptions?: {
+  pullConnectionHostEvents(invokeOptions?: {
     timeoutMs?: number
     signal?: AbortSignal
   }): Promise<DeviceDiscoveryPullHostEventsResult>
@@ -169,45 +163,38 @@ export function createElectronBridgePlugin(invoke: BridgeInvoke): ElectronBridge
     ): Promise<DeviceDiscoveryListResult> {
       return invoke(API_METHODS.listDiscoveredDevices, {}, invokeOptions)
     },
-    async probeDiscoveredDevicesConnectable(
-      options: DeviceDiscoveryProbeConnectableOptions = {},
-      invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {}
-    ): Promise<DeviceDiscoveryProbeConnectableResult> {
-      ensureObject(options, 'probeDiscoveredDevicesConnectable options must be an object.')
-      return invoke(API_METHODS.probeDiscoveredDevicesConnectable, options, invokeOptions)
-    },
-    async openDiscoverySession(
+    async openConnectionSession(
       options: DeviceSessionOpenOptions,
       invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {}
     ): Promise<DeviceSessionOpenResult> {
-      ensureObject(options, 'openDiscoverySession options must be an object.')
-      return invoke(API_METHODS.openDiscoverySession, options, invokeOptions)
+      ensureObject(options, 'openConnectionSession options must be an object.')
+      return invoke(API_METHODS.openConnectionSession, options, invokeOptions)
     },
-    async closeDiscoverySession(
+    async closeConnectionSession(
       options: DeviceSessionCloseOptions = {},
       invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {}
     ): Promise<DeviceSessionCloseResult> {
-      ensureObject(options, 'closeDiscoverySession options must be an object.')
-      return invoke(API_METHODS.closeDiscoverySession, options, invokeOptions)
+      ensureObject(options, 'closeConnectionSession options must be an object.')
+      return invoke(API_METHODS.closeConnectionSession, options, invokeOptions)
     },
-    async sendDiscoverySessionMessage(
+    async sendConnectionSessionMessage(
       options: DeviceSessionSendMessageOptions,
       invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {}
     ): Promise<DeviceSessionSendMessageResult> {
-      ensureObject(options, 'sendDiscoverySessionMessage options must be an object.')
-      return invoke(API_METHODS.sendDiscoverySessionMessage, options, invokeOptions)
+      ensureObject(options, 'sendConnectionSessionMessage options must be an object.')
+      return invoke(API_METHODS.sendConnectionSessionMessage, options, invokeOptions)
     },
-    async getDiscoverySessionState(
+    async getConnectionSessionState(
       options: DeviceSessionGetStateOptions = {},
       invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {}
     ): Promise<DeviceSessionSnapshot> {
-      ensureObject(options, 'getDiscoverySessionState options must be an object.')
-      return invoke(API_METHODS.getDiscoverySessionState, options, invokeOptions)
+      ensureObject(options, 'getConnectionSessionState options must be an object.')
+      return invoke(API_METHODS.getConnectionSessionState, options, invokeOptions)
     },
-    async pullDiscoveryHostEvents(
+    async pullConnectionHostEvents(
       invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {}
     ): Promise<DeviceDiscoveryPullHostEventsResult> {
-      return invoke(API_METHODS.pullDiscoveryHostEvents, {}, invokeOptions)
+      return invoke(API_METHODS.pullConnectionHostEvents, {}, invokeOptions)
     }
   }
 }

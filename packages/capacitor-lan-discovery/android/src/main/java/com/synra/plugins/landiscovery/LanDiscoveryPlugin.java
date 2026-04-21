@@ -94,6 +94,16 @@ public class LanDiscoveryPlugin {
         return updated;
     }
 
+    public synchronized DeviceRecord updateDeviceName(String deviceId, String name) {
+        DeviceRecord selected = this.devices.get(deviceId);
+        if (selected == null || name == null || name.isBlank()) {
+            return selected;
+        }
+        DeviceRecord updated = selected.withName(name.trim());
+        this.devices.put(deviceId, updated);
+        return updated;
+    }
+
     public synchronized DeviceRecord rekeyDeviceAfterProbe(
         String oldDeviceId,
         String newDeviceId,
@@ -326,6 +336,20 @@ public class LanDiscoveryPlugin {
         DeviceRecord withDeviceId(String newDeviceId, String newName) {
             return new DeviceRecord(
                 newDeviceId,
+                newName,
+                this.ipAddress,
+                this.source,
+                this.connectable,
+                this.connectCheckAt,
+                this.connectCheckError,
+                this.discoveredAt,
+                this.lastSeenAt
+            );
+        }
+
+        DeviceRecord withName(String newName) {
+            return new DeviceRecord(
+                this.deviceId,
                 newName,
                 this.ipAddress,
                 this.source,

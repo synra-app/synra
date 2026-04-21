@@ -1,1 +1,1 @@
-export * from '@synra/hooks'
+export { useTransport } from '@synra/hooks'

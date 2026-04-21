@@ -6,34 +6,10 @@ import {
   getSynraUiManifestMetadata,
   normalizePluginPagePath,
   parsePluginIdFromPackageName,
-  SynraPlugin,
-  toActionSelectedMessage
+  SynraPlugin
 } from '../src/index.ts'
-import { useConnection } from '../src/hooks/index.ts'
+import { useTransport } from '../src/hooks/index.ts'
 import { synraVitePluginConfig } from '../src/vite.ts'
-
-test('toActionSelectedMessage should enforce action.selected type', () => {
-  const message = toActionSelectedMessage({
-    protocolVersion: '1.0',
-    messageId: 'm1',
-    sessionId: 's1',
-    traceId: 't1',
-    sentAt: Date.now(),
-    ttlMs: 30_000,
-    fromDeviceId: 'mobile-1',
-    toDeviceId: 'pc-1',
-    payload: {
-      actionId: 'a1',
-      pluginId: 'github-open',
-      actionType: 'openInBrowser',
-      label: 'Open in desktop browser',
-      requiresConfirm: true,
-      payload: { url: 'https://github.com/imba97/smserialport' }
-    }
-  })
-
-  expect(message.type).toBe('action.selected')
-})
 
 test('parsePluginIdFromPackageName supports scoped and unscoped names', () => {
   expect(parsePluginIdFromPackageName('@synra-plugin/chat')).toBe('chat')
@@ -124,8 +100,9 @@ test('synraVitePluginConfig generates default plugin package config', () => {
   }
 })
 
-test('plugin-sdk hooks should re-export useConnection from @synra/hooks', () => {
-  const connection = useConnection()
-  expect(typeof connection.sendMessage).toBe('function')
-  expect(typeof connection.onMessage).toBe('function')
+test('plugin-sdk hooks should re-export useTransport from @synra/hooks', () => {
+  const transport = useTransport()
+  expect(typeof transport.sendToDevice).toBe('function')
+  expect(typeof transport.broadcast).toBe('function')
+  expect(typeof transport.onMessage).toBe('function')
 })

@@ -6,6 +6,7 @@ import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.net.nsd.NsdManager;
 import android.net.nsd.NsdServiceInfo;
+import android.util.Log;
 import androidx.annotation.NonNull;
 
 import com.getcapacitor.JSArray;
@@ -34,6 +35,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -55,11 +57,14 @@ import java.util.concurrent.atomic.AtomicLong;
 
 @CapacitorPlugin(name = "LanDiscovery")
 public class LanDiscoveryPluginPlugin extends Plugin {
+    private static final String TAG = "SynraLanDiscovery";
+    private static final boolean VERBOSE_LOGS = BuildConfig.DEBUG;
     private static final int DEFAULT_TCP_PORT = 32100;
     private static final int DEFAULT_TIMEOUT_MS = 1500;
     private static final int DEFAULT_DISCOVERY_TIMEOUT_MS = 1500;
     private static final int UDP_DISCOVERY_PORT = 32101;
     private static final String UDP_DISCOVERY_MAGIC = "SYNRA_DISCOVERY_V1";
+    private static final String UDP_OFFLINE_TYPE = "offline";
     private static final String DEFAULT_MDNS_SERVICE_TYPE = "_synra._tcp.";
     private static final String APP_ID = "synra";
     private static final String PROTOCOL_VERSION = "1.0";
@@ -82,6 +87,20 @@ public class LanDiscoveryPluginPlugin extends Plugin {
     private final Map<String, Socket> inboundSessionSockets = new ConcurrentHashMap<>();
     private NsdManager.RegistrationListener mdnsRegistrationListener;
     private volatile String registeredMdnsServiceName;
+
+    private static void logDebug(String message) {
+        if (VERBOSE_LOGS) {
+            Log.d(TAG, message);
+        }
+    }
+
+    private static void logWarn(String message) {
+        Log.w(TAG, message);
+    }
+
+    private static void logWarn(String message, Throwable error) {
+        Log.w(TAG, message, error);
+    }
 
     @Override
     public void load() {
@@ -144,9 +163,6 @@ public class LanDiscoveryPluginPlugin extends Plugin {
 
         JSObject scanStateEvent = new JSObject();
         scanStateEvent.put("state", result.optString("state"));
-        if (result.has("startedAt")) {
-            scanStateEvent.put("startedAt", result.optLong("startedAt"));
-        }
         notifyListeners("scanStateChanged", scanStateEvent);
 
         JSONArray devices = result.optJSONArray("devices");
@@ -254,6 +270,7 @@ public class LanDiscoveryPluginPlugin extends Plugin {
 
     @PluginMethod
     public void stopDiscovery(PluginCall call) {
+        broadcastOfflineAnnouncement();
         JSObject result = implementation.stopDiscovery();
         unregisterMdnsService();
         stopUdpDiscoveryResponder();
@@ -272,6 +289,7 @@ public class LanDiscoveryPluginPlugin extends Plugin {
 
     @Override
     protected void handleOnDestroy() {
+        broadcastOfflineAnnouncement();
         unregisterMdnsService();
         stopUdpDiscoveryResponder();
         stopTcpServer();
@@ -551,6 +569,11 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                     DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
                     socket.receive(packet);
                     String payload = new String(packet.getData(), 0, packet.getLength(), StandardCharsets.UTF_8).trim();
+                    if (payload.startsWith(UDP_DISCOVERY_MAGIC + " ")) {
+                        String metadataRaw = payload.substring((UDP_DISCOVERY_MAGIC + " ").length()).trim();
+                        handleUdpAnnouncement(metadataRaw);
+                        continue;
+                    }
                     if (!UDP_DISCOVERY_MAGIC.equals(payload)) {
                         continue;
                     }
@@ -558,6 +581,8 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                     response.put("appId", APP_ID);
                     response.put("protocolVersion", PROTOCOL_VERSION);
                     response.put("port", DEFAULT_TCP_PORT);
+                    response.put("sourceDeviceId", getOrCreateLocalDeviceUuid());
+                    response.put("displayName", localSynraDisplayName());
                     byte[] responseBytes = response.toString().getBytes(StandardCharsets.UTF_8);
                     DatagramPacket responsePacket = new DatagramPacket(
                         responseBytes,
@@ -579,6 +604,73 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         }
         udpResponderSocket = null;
         udpResponderScheduled.set(false);
+    }
+
+    private void handleUdpAnnouncement(String metadataRaw) {
+        try {
+            JSONObject metadata = new JSONObject(metadataRaw);
+            String type = metadata.optString("type", "");
+            if (!UDP_OFFLINE_TYPE.equals(type)) {
+                return;
+            }
+            String sourceDeviceId = metadata.optString("sourceDeviceId", null);
+            if (sourceDeviceId == null || sourceDeviceId.isBlank()) {
+                return;
+            }
+            String sourceHostIp = metadata.optString("sourceHostIp", null);
+            String localDeviceId = getOrCreateLocalDeviceUuid();
+            if (sourceDeviceId.equals(localDeviceId)) {
+                return;
+            }
+            String offlineDeviceId = hashDeviceId(sourceDeviceId);
+            JSObject payload = new JSObject();
+            payload.put("deviceId", offlineDeviceId);
+            if (sourceHostIp != null && !sourceHostIp.isBlank() && isIpv4Address(sourceHostIp)) {
+                payload.put("ipAddress", sourceHostIp);
+            }
+            notifyListeners("deviceLost", payload);
+            logDebug("Received offline announcement for deviceId=" + offlineDeviceId);
+        } catch (Exception ignored) {
+            // noop
+        }
+    }
+
+    private void broadcastOfflineAnnouncement() {
+        try (DatagramSocket socket = new DatagramSocket()) {
+            socket.setBroadcast(true);
+            String sourceHostIp = primarySourceHostIp();
+            List<InetAddress> destinations = collectUdpBroadcastDestinations();
+            for (int attempt = 0; attempt < 3; attempt += 1) {
+                JSONObject metadata = new JSONObject();
+                metadata.put("type", UDP_OFFLINE_TYPE);
+                metadata.put("sourceDeviceId", getOrCreateLocalDeviceUuid());
+                metadata.put("timestamp", System.currentTimeMillis());
+                if (sourceHostIp != null && !sourceHostIp.isBlank()) {
+                    metadata.put("sourceHostIp", sourceHostIp);
+                }
+                byte[] payload =
+                    (UDP_DISCOVERY_MAGIC + " " + metadata.toString()).getBytes(StandardCharsets.UTF_8);
+                for (InetAddress destination : destinations) {
+                    DatagramPacket packet = new DatagramPacket(
+                        payload,
+                        payload.length,
+                        destination,
+                        UDP_DISCOVERY_PORT
+                    );
+                    socket.send(packet);
+                }
+                if (attempt < 2) {
+                    try {
+                        Thread.sleep(120L);
+                    } catch (InterruptedException ignored) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+            }
+            logDebug("Broadcasted offline announcement to " + destinations.size() + " UDP targets.");
+        } catch (Exception error) {
+            logWarn("Failed to broadcast offline announcement.", error);
+        }
     }
 
     @SuppressLint("MissingPermission")
@@ -769,6 +861,8 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                         String sourceDeviceId =
                             helloPayload == null ? null : helloPayload.optString("sourceDeviceId", null);
                         boolean isProbe = helloPayload != null && helloPayload.optBoolean("probe", false);
+                        String sourceHostIp =
+                            helloPayload == null ? null : helloPayload.optString("sourceHostIp", null);
                         String peerDisplay =
                             helloPayload == null ? null : helloPayload.optString("displayName", null);
                         if (peerDisplay != null) {
@@ -778,9 +872,33 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                             }
                         }
                         if (sourceDeviceId == null || sourceDeviceId.isBlank()) {
+                            logWarn("Inbound hello missing sourceDeviceId.");
                             writeFrame(output, frame("error", sessionId, null, "SOURCE_DEVICE_ID_REQUIRED"));
                             sessionClosedNotified = true;
                             break;
+                        }
+                        logDebug(
+                            "Inbound hello received: sourceDeviceId=" + sourceDeviceId
+                                + ", peerDisplay=" + peerDisplay
+                                + ", sourceHostIp=" + sourceHostIp
+                                + ", remote=" + socket.getInetAddress().getHostAddress()
+                                + ", probe=" + isProbe
+                        );
+                        JSObject discoveredPeerDevice = buildDiscoveredPeerDevicePayload(
+                            sourceDeviceId,
+                            peerDisplay,
+                            sourceHostIp,
+                            socket
+                        );
+                        if (discoveredPeerDevice != null) {
+                            JSObject payload = new JSObject();
+                            payload.put("device", discoveredPeerDevice);
+                            logDebug("Publishing discovered peer from inbound hello: " + discoveredPeerDevice);
+                            notifyListeners("deviceFound", payload);
+                            notifyListeners("deviceUpdated", payload);
+                            notifyListeners("deviceConnectableUpdated", payload);
+                        } else {
+                            logWarn("Failed to build discovered peer payload from inbound hello.");
                         }
                         JSObject helloAckPayload = new JSObject();
                         helloAckPayload.put("sourceDeviceId", getOrCreateLocalDeviceUuid());
@@ -891,6 +1009,98 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         return "Synra";
     }
 
+    private JSObject buildDiscoveredPeerDevicePayload(
+        String sourceDeviceId,
+        String displayName,
+        String sourceHostIp,
+        Socket socket
+    ) {
+        String normalizedDeviceId = hashDeviceId(sourceDeviceId);
+        String host = normalizePeerHost(sourceHostIp, socket);
+        if (host == null || host.isBlank()) {
+            logWarn("Cannot resolve peer host for sourceDeviceId=" + sourceDeviceId);
+            return null;
+        }
+        String normalizedName = displayName;
+        if (normalizedName != null) {
+            normalizedName = normalizedName.trim();
+        }
+        if (normalizedName == null || normalizedName.isBlank()) {
+            normalizedName = "Synra " + normalizedDeviceId.substring(0, Math.min(8, normalizedDeviceId.length()));
+        }
+        long now = System.currentTimeMillis();
+        JSObject device = new JSObject();
+        device.put("deviceId", normalizedDeviceId);
+        device.put("name", normalizedName);
+        device.put("ipAddress", host);
+        device.put("port", DEFAULT_TCP_PORT);
+        device.put("source", "session");
+        device.put("connectable", true);
+        device.put("connectCheckAt", now);
+        device.put("discoveredAt", now);
+        device.put("lastSeenAt", now);
+        return device;
+    }
+
+    private String normalizePeerHost(String sourceHostIp, Socket socket) {
+        if (sourceHostIp != null) {
+            String trimmed = sourceHostIp.trim();
+            if (isIpv4Address(trimmed)) {
+                return trimmed;
+            }
+        }
+        InetAddress peerAddr = socket.getInetAddress();
+        if (peerAddr == null) {
+            return null;
+        }
+        String observed = peerAddr.getHostAddress();
+        if (observed == null || observed.isBlank() || observed.contains(":")) {
+            return null;
+        }
+        return observed;
+    }
+
+    private boolean isIpv4Address(String value) {
+        if (value == null || value.isBlank() || value.contains(":")) {
+            return false;
+        }
+        String[] parts = value.split("\\.");
+        if (parts.length != 4) {
+            return false;
+        }
+        for (String part : parts) {
+            if (part == null || part.isBlank()) {
+                return false;
+            }
+            try {
+                int parsed = Integer.parseInt(part);
+                if (parsed < 0 || parsed > 255) {
+                    return false;
+                }
+            } catch (NumberFormatException error) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private String hashDeviceId(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-1");
+            byte[] bytes = digest.digest(value.getBytes(StandardCharsets.UTF_8));
+            StringBuilder builder = new StringBuilder();
+            for (byte current : bytes) {
+                if (builder.length() >= 12) {
+                    break;
+                }
+                builder.append(String.format("%02x", current));
+            }
+            return "device-" + builder;
+        } catch (Exception ignored) {
+            return "device-" + Math.abs(value.hashCode());
+        }
+    }
+
     private String primarySourceHostIp() {
         try {
             List<String> candidates = new ArrayList<>();
@@ -940,24 +1150,32 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             }
             JSONObject response = readFrame(input);
             if (!"helloAck".equals(response.optString("type"))) {
-                return new ProbeOutcome(false, "MISSING_HELLO_ACK", null);
+                return new ProbeOutcome(false, "MISSING_HELLO_ACK", null, null);
             }
             if (!APP_ID.equals(response.optString("appId"))) {
-                return new ProbeOutcome(false, "APP_ID_MISMATCH", null);
+                return new ProbeOutcome(false, "APP_ID_MISMATCH", null, null);
             }
             JSONObject ackPayload = response.optJSONObject("payload");
             String remote =
                 ackPayload == null ? null : ackPayload.optString("sourceDeviceId", null);
+            String remoteDisplayName =
+                ackPayload == null ? null : ackPayload.optString("displayName", null);
             if (remote != null && remote.isBlank()) {
                 remote = null;
             }
+            if (remoteDisplayName != null) {
+                remoteDisplayName = remoteDisplayName.trim();
+                if (remoteDisplayName.isEmpty()) {
+                    remoteDisplayName = null;
+                }
+            }
             String localUuid = getOrCreateLocalDeviceUuid();
             if (remote != null && remote.equals(localUuid)) {
-                return new ProbeOutcome(false, "SELF_DEVICE", null);
+                return new ProbeOutcome(false, "SELF_DEVICE", null, remoteDisplayName);
             }
-            return new ProbeOutcome(true, null, remote);
+            return new ProbeOutcome(true, null, remote, remoteDisplayName);
         } catch (Exception error) {
-            return new ProbeOutcome(false, error.getMessage(), null);
+            return new ProbeOutcome(false, error.getMessage(), null, null);
         } finally {
             closeQuietly(socket);
         }
@@ -994,6 +1212,14 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                     deviceId,
                     outcome.connectable,
                     outcome.error
+                );
+            }
+            if (updated != null
+                && outcome.remoteDisplayName != null
+                && !outcome.remoteDisplayName.isBlank()) {
+                updated = implementation.updateDeviceName(
+                    updated.toJSObject().optString("deviceId"),
+                    outcome.remoteDisplayName
                 );
             }
             if (updated != null) {
@@ -1093,11 +1319,18 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         private final boolean connectable;
         private final String error;
         private final String remoteDeviceId;
+        private final String remoteDisplayName;
 
-        private ProbeOutcome(boolean connectable, String error, String remoteDeviceId) {
+        private ProbeOutcome(
+            boolean connectable,
+            String error,
+            String remoteDeviceId,
+            String remoteDisplayName
+        ) {
             this.connectable = connectable;
             this.error = error;
             this.remoteDeviceId = remoteDeviceId;
+            this.remoteDisplayName = remoteDisplayName;
         }
     }
 

@@ -53,19 +53,11 @@ describe('bridge/main runtime e2e flow', () => {
         startDiscovery: vi.fn(async () => ({
           requestId: 'discovery-e2e-1',
           state: 'scanning' as const,
-          scanWindowMs: 10_000,
           devices: []
         })),
         stopDiscovery: vi.fn(async () => ({ success: true as const })),
         listDevices: vi.fn(async () => ({
           state: 'idle' as const,
-          scanWindowMs: 10_000,
-          devices: []
-        })),
-        probeConnectable: vi.fn(async () => ({
-          checkedAt: Date.now(),
-          port: 32100,
-          timeoutMs: 1500,
           devices: []
         })),
         openSession: vi.fn(async () => ({
@@ -193,19 +185,11 @@ describe('bridge/main runtime e2e flow', () => {
         startDiscovery: vi.fn(async () => ({
           requestId: 'discovery-e2e-2',
           state: 'scanning' as const,
-          scanWindowMs: 10_000,
           devices: []
         })),
         stopDiscovery: vi.fn(async () => ({ success: true as const })),
         listDevices: vi.fn(async () => ({
           state: 'idle' as const,
-          scanWindowMs: 10_000,
-          devices: []
-        })),
-        probeConnectable: vi.fn(async () => ({
-          checkedAt: Date.now(),
-          port: 32100,
-          timeoutMs: 1500,
           devices: []
         })),
         openSession: vi.fn(async () => ({

@@ -17,7 +17,6 @@ export const BRIDGE_METHODS = {
   discoveryStart: 'discovery.start',
   discoveryStop: 'discovery.stop',
   discoveryList: 'discovery.list',
-  discoveryProbeConnectable: 'discovery.probeConnectable',
   discoveryOpenSession: 'discovery.openSession',
   discoveryCloseSession: 'discovery.closeSession',
   discoverySendMessage: 'discovery.sendMessage',

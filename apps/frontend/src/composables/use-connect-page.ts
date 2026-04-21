@@ -1,17 +1,6 @@
 import { storeToRefs } from 'pinia'
 import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { buildActiveConnections } from './build-active-connections'
-import { useConfirmDialog } from './use-confirm-dialog'
-import { openPluginPage } from '../plugins/host'
 import { useLanDiscoveryStore } from '../stores/lan-discovery'
-
-function parseManualTargets(value: string): string[] {
-  return value
-    .split(',')
-    .map((item) => item.trim())
-    .filter((item) => item.length > 0)
-}
 
 function isIpv4Address(value: string | undefined): boolean {
   if (typeof value !== 'string') {
@@ -27,171 +16,80 @@ function isIpv4Address(value: string | undefined): boolean {
 }
 
 export function useConnectPage() {
-  const router = useRouter()
   const store = useLanDiscoveryStore()
-  const {
-    scanState,
-    startedAt,
-    scanWindowMs,
-    devices,
-    loading,
-    error,
-    sessionState,
-    connectedSessions,
-    reconnectTasks
-  } = storeToRefs(store)
+  const { scanState, peers, connectedDeviceIds, loading, error } = storeToRefs(store)
+  const pendingDeviceActionIds = ref<string[]>([])
+  function isDeviceActionPending(deviceId: string): boolean {
+    return pendingDeviceActionIds.value.includes(deviceId)
+  }
 
-  const {
-    dialogMessage: removeDialogMessage,
-    isDialogOpen: isRemoveDialogOpen,
-    askConfirmation: askRemoveConfirmation,
-    resolveDialog: resolveRemoveDialog
-  } = useConfirmDialog()
+  function addPendingDeviceAction(deviceId: string): void {
+    if (!isDeviceActionPending(deviceId)) {
+      pendingDeviceActionIds.value = [...pendingDeviceActionIds.value, deviceId]
+    }
+  }
 
-  const manualTarget = ref('')
-  const socketPort = ref(32100)
-  const connectInFlight = ref(false)
+  function removePendingDeviceAction(deviceId: string): void {
+    pendingDeviceActionIds.value = pendingDeviceActionIds.value.filter((id) => id !== deviceId)
+  }
 
-  const statusLabel = computed(() => (scanState.value === 'scanning' ? 'Scanning' : 'Idle'))
   const connectableDevices = computed(() =>
-    [...devices.value]
-      .filter((device) => isIpv4Address(device.ipAddress) && Boolean(device.connectable))
+    peers.value
+      .filter((device) => isIpv4Address(device.ipAddress))
+      .map((device) => ({
+        deviceId: device.deviceId,
+        name: device.name,
+        ipAddress: device.ipAddress,
+        port: device.port,
+        source: device.source ?? 'probe',
+        connectable: device.connectable,
+        discoveredAt: device.lastSeenAt ?? Date.now(),
+        lastSeenAt: device.lastSeenAt ?? Date.now()
+      }))
       .sort((left, right) => right.lastSeenAt - left.lastSeenAt)
   )
-  const connectedDevice = computed(() => {
-    if (sessionState.value.state !== 'open' || !sessionState.value.deviceId) {
-      return null
-    }
 
-    return devices.value.find((device) => device.deviceId === sessionState.value.deviceId) ?? null
-  })
-
-  const activeConnections = computed(() =>
-    buildActiveConnections(devices.value, connectedSessions.value)
-  )
-
-  const connectedDeviceIds = computed(() =>
-    activeConnections.value
-      .map((session) => session.deviceId)
-      .filter((deviceId): deviceId is string => typeof deviceId === 'string' && deviceId.length > 0)
-  )
-
-  async function onStartDiscovery(): Promise<void> {
-    // Avoid iOS keyboard (TUI*) constraint noise when inputs still have focus.
-    const active = document.activeElement
-    if (active instanceof HTMLElement) {
-      active.blur()
-    }
-    await store.startDiscovery(parseManualTargets(manualTarget.value))
-  }
-
-  async function onStopDiscovery(): Promise<void> {
-    await store.stopDiscovery()
-  }
-
-  async function onRefreshDiscovery(): Promise<void> {
-    await store.refreshDevices()
+  async function onScanDiscovery(): Promise<void> {
+    await store.startScan()
   }
 
   async function onConnect(deviceId: string): Promise<void> {
-    const selectedDevice = devices.value.find((device) => device.deviceId === deviceId)
-    if (!selectedDevice || loading.value || connectInFlight.value) {
+    if (isDeviceActionPending(deviceId) || loading.value) {
       return
     }
-    if (sessionState.value.state === 'open') {
-      return
-    }
-    if (typeof selectedDevice.ipAddress !== 'string' || selectedDevice.ipAddress.length === 0) {
-      return
-    }
-    connectInFlight.value = true
+    addPendingDeviceAction(deviceId)
     try {
-      const targetPort =
-        typeof selectedDevice.port === 'number' && selectedDevice.port > 0
-          ? selectedDevice.port
-          : socketPort.value
-      await store.openSession({
-        deviceId: selectedDevice.deviceId,
-        host: selectedDevice.ipAddress,
-        port: targetPort
-      })
+      await store.connectToDevice(deviceId)
     } finally {
-      connectInFlight.value = false
+      removePendingDeviceAction(deviceId)
     }
   }
 
   async function onDisconnect(deviceId: string): Promise<void> {
-    const targetSession =
-      activeConnections.value.find((session) => session.deviceId === deviceId) ??
-      (sessionState.value.sessionId ? { sessionId: sessionState.value.sessionId } : undefined)
-    if (!targetSession?.sessionId) {
+    if (isDeviceActionPending(deviceId)) {
       return
     }
-    await store.closeSession(targetSession.sessionId)
-  }
-
-  async function onDisconnectSession(sessionId: string): Promise<void> {
-    if (!sessionId) {
-      return
+    addPendingDeviceAction(deviceId)
+    try {
+      await store.disconnectDevice(deviceId)
+    } finally {
+      removePendingDeviceAction(deviceId)
     }
-    await store.closeSession(sessionId)
-  }
-
-  async function onRemoveDevice(deviceId: string): Promise<void> {
-    const targetDevice = devices.value.find((device) => device.deviceId === deviceId)
-    const targetLabel = targetDevice?.name ?? deviceId
-    const confirmed = await askRemoveConfirmation(
-      `Remove device "${targetLabel}" from the current list?`
-    )
-    if (!confirmed) {
-      return
-    }
-    await onDisconnect(deviceId)
-    devices.value = devices.value.filter((device) => device.deviceId !== deviceId)
-  }
-
-  function onConfirmRemoveDevice(): void {
-    resolveRemoveDialog(true)
-  }
-
-  function onCancelRemoveDevice(): void {
-    resolveRemoveDialog(false)
-  }
-
-  function openMessagePage(sessionId: string): void {
-    void openPluginPage(router, 'chat', '/home', { sessionId })
   }
 
   onMounted(async () => {
-    await store.ensureListeners()
-    await store.refreshDevices()
+    await store.ensureReady()
   })
 
   return {
-    activeConnections,
     connectableDevices,
-    connectedDevice,
     connectedDeviceIds,
     error,
-    isRemoveDialogOpen,
     loading,
-    manualTarget,
     onConnect,
-    onCancelRemoveDevice,
-    onConfirmRemoveDevice,
     onDisconnect,
-    onDisconnectSession,
-    onRemoveDevice,
-    onRefreshDiscovery,
-    onStartDiscovery,
-    onStopDiscovery,
-    openMessagePage,
-    scanWindowMs,
-    reconnectTasks,
-    removeDialogMessage,
-    sessionState,
-    socketPort,
-    startedAt,
-    statusLabel
+    onScanDiscovery,
+    pendingDeviceActionIds,
+    scanState
   }
 }

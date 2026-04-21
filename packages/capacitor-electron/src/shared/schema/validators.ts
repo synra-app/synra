@@ -64,7 +64,6 @@ export function isSupportedMethod(method: string): boolean {
     method === BRIDGE_METHODS.discoveryStart ||
     method === BRIDGE_METHODS.discoveryStop ||
     method === BRIDGE_METHODS.discoveryList ||
-    method === BRIDGE_METHODS.discoveryProbeConnectable ||
     method === BRIDGE_METHODS.discoveryOpenSession ||
     method === BRIDGE_METHODS.discoveryCloseSession ||
     method === BRIDGE_METHODS.discoverySendMessage ||
@@ -148,7 +147,6 @@ export function validateDiscoveryStartPayload(payload: unknown): payload is {
   concurrency?: number
   discoveryTimeoutMs?: number
   reset?: boolean
-  scanWindowMs?: number
   port?: number
   timeoutMs?: number
 } {
@@ -210,10 +208,6 @@ export function validateDiscoveryStartPayload(payload: unknown): payload is {
   }
 
   if (payload.reset !== undefined && typeof payload.reset !== 'boolean') {
-    return false
-  }
-
-  if (payload.scanWindowMs !== undefined && typeof payload.scanWindowMs !== 'number') {
     return false
   }
 

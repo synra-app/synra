@@ -4,6 +4,12 @@ import Network
 import Darwin
 
 @objc public class LanDiscoveryPlugin: NSObject {
+    private enum LogLevel {
+        case debug
+        case warning
+        case error
+    }
+
     private let appId = "synra"
     private let protocolVersion = "1.0"
     private let defaultTcpPort: UInt16 = 32100
@@ -33,6 +39,16 @@ import Darwin
 
     public override init() {
         super.init()
+    }
+
+    private func log(_ level: LogLevel, _ message: String) {
+        #if DEBUG
+        print("[SynraLanDiscovery] \(message)")
+        #else
+        if level == .warning || level == .error {
+            print("[SynraLanDiscovery] \(message)")
+        }
+        #endif
     }
 
     deinit {
@@ -320,23 +336,23 @@ import Darwin
         let info = Bundle.main.infoDictionary ?? [:]
         let localNetworkUsageDescription = info["NSLocalNetworkUsageDescription"] as? String
         if localNetworkUsageDescription?.isEmpty != false {
-            print("[SynraLanDiscovery] WARNING: NSLocalNetworkUsageDescription is missing. Local network discovery may fail.")
+            log(.warning, "WARNING: NSLocalNetworkUsageDescription is missing. Local network discovery may fail.")
         }
         let bonjourServices = info["NSBonjourServices"] as? [String] ?? []
         let expectedService = normalizeMdnsType(defaultMdnsServiceType)
         let hasExpectedService = bonjourServices.contains { normalizeMdnsType($0) == expectedService }
         if !hasExpectedService {
-            print("[SynraLanDiscovery] WARNING: NSBonjourServices does not include \(expectedService).")
+            log(.warning, "WARNING: NSBonjourServices does not include \(expectedService).")
         }
     }
 
     private func startTcpServer() {
         if tcpListener != nil {
-            print("[SynraLanDiscovery] TCP server already active.")
+            log(.debug, "TCP server already active.")
             return
         }
         guard let port = NWEndpoint.Port(rawValue: defaultTcpPort) else {
-            print("[SynraLanDiscovery] Failed to create TCP listener port: \(defaultTcpPort).")
+            log(.error, "Failed to create TCP listener port: \(defaultTcpPort).")
             return
         }
         do {
@@ -344,9 +360,9 @@ import Darwin
             listener.stateUpdateHandler = { [weak self] state in
                 switch state {
                 case .ready:
-                    print("[SynraLanDiscovery] TCP server started on port \(self?.defaultTcpPort ?? 0).")
+                    self?.log(.debug, "TCP server started on port \(self?.defaultTcpPort ?? 0).")
                 case .failed(let error):
-                    print("[SynraLanDiscovery] TCP server failed: \(error.localizedDescription)")
+                    self?.log(.error, "TCP server failed: \(error.localizedDescription)")
                     self?.onTransportError?([
                         "code": "TRANSPORT_IO_ERROR",
                         "message": error.localizedDescription,
@@ -362,7 +378,7 @@ import Darwin
             listener.start(queue: tcpServerQueue)
             tcpListener = listener
         } catch {
-            print("[SynraLanDiscovery] Failed to start TCP server: \(error.localizedDescription)")
+            log(.error, "Failed to start TCP server: \(error.localizedDescription)")
         }
     }
 
@@ -590,7 +606,7 @@ import Darwin
 
     private func startMdnsAdvertisement() {
         if advertisedService != nil {
-            print("[SynraLanDiscovery] mDNS advertisement already active.")
+            log(.debug, "mDNS advertisement already active.")
             return
         }
         let serviceName = "synra-\(UUID().uuidString.prefix(8))"
@@ -602,13 +618,13 @@ import Darwin
         )
         service.publish()
         advertisedService = service
-        print("[SynraLanDiscovery] mDNS advertisement started. type=\(defaultMdnsServiceType) port=\(defaultTcpPort)")
+        log(.debug, "mDNS advertisement started. type=\(defaultMdnsServiceType) port=\(defaultTcpPort)")
     }
 
     private func stopMdnsAdvertisement() {
         advertisedService?.stop()
         advertisedService = nil
-        print("[SynraLanDiscovery] mDNS advertisement stopped.")
+        log(.debug, "mDNS advertisement stopped.")
     }
 
     private func discoverByMdns(serviceType: String, timeoutMs: Int) -> [String] {
@@ -810,12 +826,12 @@ import Darwin
 
     private func startUdpDiscoveryResponder() {
         if udpResponderSocket >= 0 {
-            print("[SynraLanDiscovery] UDP responder already active.")
+            log(.debug, "UDP responder already active.")
             return
         }
         let socketFd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)
         guard socketFd >= 0 else {
-            print("[SynraLanDiscovery] Failed to create UDP responder socket.")
+            log(.error, "Failed to create UDP responder socket.")
             return
         }
         var reuseFlag: Int32 = 1
@@ -842,11 +858,11 @@ import Darwin
         }
         guard bindResult == 0 else {
             close(socketFd)
-            print("[SynraLanDiscovery] Failed to bind UDP responder on port \(udpDiscoveryPort).")
+            log(.error, "Failed to bind UDP responder on port \(udpDiscoveryPort).")
             return
         }
         udpResponderSocket = socketFd
-        print("[SynraLanDiscovery] UDP responder started on port \(udpDiscoveryPort).")
+        log(.debug, "UDP responder started on port \(udpDiscoveryPort).")
         let source = DispatchSource.makeReadSource(fileDescriptor: socketFd, queue: udpResponderQueue)
         source.setEventHandler { [weak self] in
             self?.handleUdpResponderRead(socketFd: socketFd)
@@ -862,7 +878,7 @@ import Darwin
         udpResponderSource?.cancel()
         udpResponderSource = nil
         udpResponderSocket = -1
-        print("[SynraLanDiscovery] UDP responder stopped.")
+        log(.debug, "UDP responder stopped.")
     }
 
     private func handleUdpResponderRead(socketFd: Int32) {

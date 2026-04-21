@@ -1,43 +1,34 @@
-import type { DiscoveredDevice } from '@synra/capacitor-lan-discovery'
-import { ref, type Ref } from 'vue'
+import type { DiscoveryState, DiscoveredDevice } from '@synra/capacitor-lan-discovery'
+import { type Ref, ref } from 'vue'
 import type {
+  RuntimeConnectedSession,
+  RuntimeOpenSessionInput,
+  RuntimeSessionState,
   SynraConnectionFilter,
   SynraConnectionMessage,
-  SynraConnectionRuntimeState,
   SynraConnectionSendInput,
-  SynraDiscoveryStartOptions,
-  SynraHookConnectedSession,
-  SynraHookEventLog,
-  SynraHookSessionState
+  SynraDiscoveryStartOptions
 } from '../types'
 import type { ConnectionRuntimeAdapter } from './adapter'
 import { registerAdapterListeners } from './adapter-listeners'
 import { ConnectedSessionsBook } from './connected-sessions-book'
 import { DesktopHandoffState } from './desktop-handoff'
 import { createDiscoveryModule } from './discovery-module'
-import { createEventLogAppender } from './event-log'
 import { createMessageListenersRegistry } from './message-listeners'
-import { createSessionOperationsModule, type ReconnectTask } from './session-operations-module'
+import { createSessionOperationsModule } from './session-operations-module'
 
-export type { ReconnectTask } from './session-operations-module'
-
-export type ConnectionRuntime = SynraConnectionRuntimeState & {
-  reconnectTasks: Readonly<Ref<ReconnectTask[]>>
+export type ConnectionRuntime = {
+  scanState: Ref<DiscoveryState>
+  devices: Ref<DiscoveredDevice[]>
+  loading: Ref<boolean>
+  error: Ref<string | null>
+  sessionState: Ref<RuntimeSessionState>
+  connectedSessions: Ref<RuntimeConnectedSession[]>
   ensureListeners(): Promise<void>
-  startDiscovery(options?: string[] | SynraDiscoveryStartOptions): Promise<void>
-  stopDiscovery(): Promise<void>
-  refreshDevices(): Promise<void>
-  probeConnectable(port?: number, timeoutMs?: number): Promise<void>
-  openSession(options: {
-    deviceId: string
-    host: string
-    port: number
-    transport?: 'tcp'
-  }): Promise<void>
+  startDiscovery(options?: SynraDiscoveryStartOptions): Promise<void>
+  openSession(options: RuntimeOpenSessionInput): Promise<void>
   closeSession(sessionId?: string): Promise<void>
-  syncSessionState(sessionId?: string): Promise<void>
   sendMessage(input: SynraConnectionSendInput): Promise<void>
-  reconnectDevice(options: { deviceId: string; host: string; port: number }): Promise<void>
   onMessage(
     handler: (message: SynraConnectionMessage) => void | Promise<void>,
     filter?: SynraConnectionFilter
@@ -53,23 +44,16 @@ export function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): Conn
     }
   ).Capacitor?.getPlatform?.()
   const isMobileRuntime = runtimePlatform === 'android' || runtimePlatform === 'ios'
-  const scanState = ref('idle')
-  const startedAt = ref<number | undefined>(undefined)
-  const scanWindowMs = ref(15_000)
+  const scanState = ref<DiscoveryState>('idle')
   const devices = ref<DiscoveredDevice[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
-  const sessionState = ref<SynraHookSessionState>({
-    state: 'idle',
-    transport: 'tcp'
+  const sessionState = ref<RuntimeSessionState>({
+    state: 'idle'
   })
-  const connectedSessions = ref<SynraHookConnectedSession[]>([])
-  const eventLogs = ref<SynraHookEventLog[]>([])
-  const reconnectTasks = ref<ReconnectTask[]>([])
-  const reconnectLocks = new Set<string>()
+  const connectedSessions = ref<RuntimeConnectedSession[]>([])
   let listenersRegistered = false
 
-  const { appendEventLog } = createEventLogAppender(eventLogs)
   const sessionsBook = new ConnectedSessionsBook(connectedSessions)
   const handoff = new DesktopHandoffState()
   const messageRegistry = createMessageListenersRegistry()
@@ -77,8 +61,6 @@ export function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): Conn
   const discoveryModule = createDiscoveryModule({
     adapter,
     scanState,
-    startedAt,
-    scanWindowMs,
     devices,
     loading,
     error
@@ -90,11 +72,8 @@ export function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): Conn
     loading,
     error,
     sessionState,
-    reconnectTasks,
-    reconnectLocks,
     handoff,
-    sessionsBook,
-    appendEventLog
+    sessionsBook
   })
 
   async function ensureListeners(): Promise<void> {
@@ -108,7 +87,6 @@ export function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): Conn
       devices,
       sessionState,
       error,
-      appendEventLog,
       sessionsBook,
       handoff,
       messageRegistry
@@ -119,25 +97,16 @@ export function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): Conn
 
   return {
     scanState,
-    startedAt,
-    scanWindowMs,
     devices,
-    reconnectTasks,
     loading,
     error,
     sessionState,
     connectedSessions,
-    eventLogs,
     ensureListeners,
     startDiscovery: discoveryModule.startDiscovery.bind(discoveryModule),
-    stopDiscovery: discoveryModule.stopDiscovery.bind(discoveryModule),
-    refreshDevices: discoveryModule.refreshDevices.bind(discoveryModule),
-    probeConnectable: discoveryModule.probeConnectable.bind(discoveryModule),
     openSession: sessionModule.openSession.bind(sessionModule),
     closeSession: sessionModule.closeSession.bind(sessionModule),
-    syncSessionState: sessionModule.syncSessionState.bind(sessionModule),
     sendMessage: sessionModule.sendMessage.bind(sessionModule),
-    reconnectDevice: sessionModule.reconnectDevice.bind(sessionModule),
     onMessage: messageRegistry.onMessage.bind(messageRegistry)
   }
 }

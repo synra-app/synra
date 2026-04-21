@@ -14,11 +14,11 @@ export function createUdpDiscoveryStrategy(): DiscoveryStrategy {
       await new Promise<void>((resolve) => {
         socket.on('message', (buffer, remote) => {
           const text = buffer.toString('utf8').trim()
-          if (!text.startsWith(UDP_DISCOVERY_MAGIC)) {
+          const envelope = parseUdpDiscoveryEnvelope(text)
+          if (!envelope) {
             return
           }
-          const payloadText = text.slice(UDP_DISCOVERY_MAGIC.length).trim()
-          const name = payloadText.startsWith('{') ? safeReadName(payloadText) : undefined
+          const name = envelope.displayName
           const normalizedIp = normalizeRemoteIp(remote.address)
           if (!normalizedIp) {
             return
@@ -41,11 +41,40 @@ export function createUdpDiscoveryStrategy(): DiscoveryStrategy {
   }
 }
 
-function safeReadName(jsonText: string): string | undefined {
+function parseUdpDiscoveryEnvelope(
+  text: string
+): { displayName?: string; appId: string; protocolVersion?: string } | undefined {
+  const payloadText = resolveUdpDiscoveryPayload(text)
+  if (!payloadText) {
+    return undefined
+  }
   try {
-    const parsed = JSON.parse(jsonText) as { displayName?: unknown }
-    return typeof parsed.displayName === 'string' ? parsed.displayName : undefined
+    const parsed = JSON.parse(payloadText) as {
+      appId?: unknown
+      protocolVersion?: unknown
+      displayName?: unknown
+    }
+    if (parsed.appId !== 'synra') {
+      return undefined
+    }
+    return {
+      appId: 'synra',
+      protocolVersion:
+        typeof parsed.protocolVersion === 'string' ? parsed.protocolVersion : undefined,
+      displayName: typeof parsed.displayName === 'string' ? parsed.displayName : undefined
+    }
   } catch {
     return undefined
   }
+}
+
+function resolveUdpDiscoveryPayload(text: string): string | undefined {
+  if (text.startsWith(UDP_DISCOVERY_MAGIC)) {
+    const payloadText = text.slice(UDP_DISCOVERY_MAGIC.length).trim()
+    return payloadText.startsWith('{') ? payloadText : undefined
+  }
+  if (text.startsWith('{')) {
+    return text
+  }
+  return undefined
 }

@@ -1,61 +1,46 @@
-import type { Ref } from 'vue'
-import type { DiscoveredDevice } from '@synra/capacitor-lan-discovery'
 import type { SynraMessageType } from '@synra/protocol'
 
-export type SynraHookDevice = {
-  deviceId: string
-  ipAddress?: string
-  port?: number
-  name?: string
-  source?: string
-  lastSeenAt?: number
-  connectable?: boolean
-  [key: string]: unknown
-}
-
-export type SynraHookSessionState = {
-  state: string
+export type RuntimeSessionState = {
+  state: 'idle' | 'connecting' | 'open' | 'closed' | 'error'
   sessionId?: string
   deviceId?: string
-  [key: string]: unknown
+  host?: string
+  port?: number
+  direction?: 'inbound' | 'outbound'
+  lastError?: string
+  openedAt?: number
+  closedAt?: number
 }
 
-export type SynraHookConnectedSession = {
+export type RuntimeConnectedSession = {
   sessionId: string
-  status?: string
+  status?: 'open' | 'closed'
   deviceId?: string
+  host?: string
+  port?: number
+  openedAt?: number
+  closedAt?: number
   lastActiveAt?: number
-  [key: string]: unknown
+  direction?: 'inbound' | 'outbound'
 }
 
-export type SynraHookEventLog = {
-  id?: string
-  type: string
-  payload: unknown
-  timestamp: number
+export type RuntimeOpenSessionInput = {
+  deviceId: string
+  host: string
+  port: number
 }
-
-export type SynraHookSendMessageInput = {
-  sessionId: string
-  messageType: SynraMessageType
-  payload: unknown
-  messageId?: string
-}
-
-export type SynraDiscoveryStartMode = 'hybrid' | 'mdns' | 'subnet' | 'manual'
 
 export type SynraDiscoveryStartOptions = {
   includeLoopback?: boolean
   manualTargets?: string[]
   enableProbeFallback?: boolean
-  discoveryMode?: SynraDiscoveryStartMode
+  discoveryMode?: 'hybrid' | 'mdns' | 'subnet' | 'manual'
   mdnsServiceType?: string
   subnetCidrs?: string[]
   maxProbeHosts?: number
   concurrency?: number
   discoveryTimeoutMs?: number
   reset?: boolean
-  scanWindowMs?: number
   port?: number
   timeoutMs?: number
 }
@@ -76,18 +61,9 @@ export type SynraConnectionFilter = {
   messageType?: SynraMessageType
 }
 
-export type SynraConnectionSendInput = SynraHookSendMessageInput & {
-  deviceId?: string
-}
-
-export type SynraConnectionRuntimeState = {
-  scanState: Ref<string>
-  startedAt: Ref<number | undefined>
-  scanWindowMs: Ref<number>
-  devices: Ref<DiscoveredDevice[]>
-  loading: Ref<boolean>
-  error: Ref<string | null>
-  sessionState: Ref<SynraHookSessionState>
-  connectedSessions: Ref<SynraHookConnectedSession[]>
-  eventLogs: Ref<SynraHookEventLog[]>
+export type SynraConnectionSendInput = {
+  sessionId: string
+  messageType: SynraMessageType
+  payload: unknown
+  messageId?: string
 }

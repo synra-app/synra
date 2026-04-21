@@ -82,8 +82,6 @@ export type {
   DiscoveryState,
   DiscoveredDevice,
   DeviceDiscoveryListResult,
-  DeviceDiscoveryProbeConnectableOptions,
-  DeviceDiscoveryProbeConnectableResult,
   DeviceSessionOpenOptions,
   DeviceSessionOpenResult,
   ConnectionTransport,

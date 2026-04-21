@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { createSocket, type Socket as UdpSocket } from 'node:dgram'
 import { createServer, type Server, type Socket } from 'node:net'
+import { networkInterfaces } from 'node:os'
 import { Bonjour, type Service as BonjourService } from 'bonjour-service'
 import type {
   DeviceDiscoveryHostEvent,
@@ -15,7 +16,7 @@ import {
   UDP_DISCOVERY_PORT
 } from '../core/constants'
 import { hashDeviceId, localDisplayName } from '../core/device-identity'
-import { normalizeRemoteIp } from '../core/network'
+import { normalizeRemoteIp, pickPrimarySourceHostIp } from '../core/network'
 import type { HostEventBus } from '../events/host-event-bus'
 import {
   LAN_APP_ID,
@@ -39,6 +40,8 @@ type InboundHostTransportOptions = {
   resolveLocalDeviceUuid: () => string
   port?: number
 }
+
+const UDP_OFFLINE_ANNOUNCEMENT_TYPE = 'offline'
 
 export interface InboundHostTransport {
   start(): Promise<void>
@@ -75,6 +78,67 @@ export function createInboundHostTransport(
   let responder: UdpSocket | undefined
   let bonjour: Bonjour | undefined
   let published: BonjourService | undefined
+
+  const collectUdpBroadcastDestinations = (): string[] => {
+    const destinations = new Set<string>(['255.255.255.255'])
+    const interfaces = networkInterfaces()
+    for (const records of Object.values(interfaces)) {
+      for (const record of records ?? []) {
+        if (record.family !== 'IPv4' || record.internal) {
+          continue
+        }
+        if (typeof record.cidr !== 'string' || record.cidr.length === 0) {
+          continue
+        }
+        const [ipText, prefixText] = record.cidr.split('/')
+        const prefix = Number(prefixText)
+        if (!ipText || !Number.isInteger(prefix) || prefix < 0 || prefix > 32) {
+          continue
+        }
+        const ipInt = ipv4ToInt(ipText)
+        if (ipInt === undefined) {
+          continue
+        }
+        const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0
+        const broadcastInt = (ipInt & mask) | (~mask >>> 0)
+        const broadcast = intToIpv4(broadcastInt >>> 0)
+        if (broadcast) {
+          destinations.add(broadcast)
+        }
+      }
+    }
+    return [...destinations]
+  }
+
+  const broadcastOfflineAnnouncement = async (): Promise<void> => {
+    const socket = createSocket('udp4')
+    socket.setBroadcast(true)
+    const sourceHostIp = pickPrimarySourceHostIp()
+    const destinations = collectUdpBroadcastDestinations()
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const payload = Buffer.from(
+        `${UDP_DISCOVERY_MAGIC} ${JSON.stringify({
+          type: UDP_OFFLINE_ANNOUNCEMENT_TYPE,
+          sourceDeviceId: options.resolveLocalDeviceUuid(),
+          sourceHostIp,
+          timestamp: Date.now()
+        })}`,
+        'utf8'
+      )
+      await Promise.all(
+        destinations.map(
+          (address) =>
+            new Promise<void>((resolve) => {
+              socket.send(payload, UDP_DISCOVERY_PORT, address, () => resolve())
+            })
+        )
+      )
+      if (attempt < 2) {
+        await new Promise<void>((resolve) => setTimeout(resolve, 120))
+      }
+    }
+    socket.close()
+  }
 
   const writeFrame = async (socket: Socket, frame: LanFrame): Promise<void> => {
     const codec = decoders.get(socket) ?? new LengthPrefixedJsonCodec()
@@ -272,16 +336,49 @@ export function createInboundHostTransport(
     responder = createSocket('udp4')
     responder.on('message', (buffer, remote) => {
       const text = buffer.toString('utf8').trim()
+      if (text.startsWith(`${UDP_DISCOVERY_MAGIC} `)) {
+        const metadataText = text.slice(`${UDP_DISCOVERY_MAGIC} `.length).trim()
+        try {
+          const metadata = JSON.parse(metadataText) as {
+            type?: string
+            sourceDeviceId?: string
+            sourceHostIp?: string
+          }
+          if (
+            metadata.type === UDP_OFFLINE_ANNOUNCEMENT_TYPE &&
+            typeof metadata.sourceDeviceId === 'string' &&
+            metadata.sourceDeviceId.length > 0 &&
+            metadata.sourceDeviceId !== options.resolveLocalDeviceUuid()
+          ) {
+            options.eventBus.publish({
+              type: 'host.member.offline',
+              remote: `${remote.address}:${String(remote.port)}`,
+              payload: {
+                sourceDeviceId: metadata.sourceDeviceId,
+                deviceId: hashDeviceId(metadata.sourceDeviceId),
+                sourceHostIp:
+                  typeof metadata.sourceHostIp === 'string' ? metadata.sourceHostIp : undefined
+              },
+              transport: 'tcp'
+            })
+          }
+        } catch {
+          // Ignore malformed UDP metadata.
+        }
+        return
+      }
       if (!text.startsWith(UDP_DISCOVERY_MAGIC)) {
         return
       }
+      // Respond with plain JSON for cross-platform compatibility.
+      // Android discovery parser expects a raw JSON object payload.
       const payload = Buffer.from(
-        `${UDP_DISCOVERY_MAGIC} ${JSON.stringify({
+        JSON.stringify({
           appId: LAN_APP_ID,
           sourceDeviceId: options.resolveLocalDeviceUuid(),
           protocolVersion: LAN_PROTOCOL_VERSION,
           displayName: localDisplayName()
-        })}`,
+        }),
         'utf8'
       )
       responder?.send(payload, remote.port, remote.address)
@@ -337,6 +434,7 @@ export function createInboundHostTransport(
       startBonjour()
     },
     async stop() {
+      await broadcastOfflineAnnouncement().catch(() => undefined)
       for (const session of sessions.values()) {
         session.socket.destroy()
       }
@@ -422,4 +520,24 @@ export function createInboundHostTransport(
       }
     }
   }
+}
+
+function ipv4ToInt(ip: string): number | undefined {
+  const parts = ip.split('.')
+  if (parts.length !== 4) {
+    return undefined
+  }
+  const nums = parts.map((part) => Number(part))
+  if (nums.some((value) => !Number.isInteger(value) || value < 0 || value > 255)) {
+    return undefined
+  }
+  return (
+    (((nums[0] ?? 0) << 24) | ((nums[1] ?? 0) << 16) | ((nums[2] ?? 0) << 8) | (nums[3] ?? 0)) >>> 0
+  )
+}
+
+function intToIpv4(value: number): string {
+  return [(value >>> 24) & 0xff, (value >>> 16) & 0xff, (value >>> 8) & 0xff, value & 0xff].join(
+    '.'
+  )
 }

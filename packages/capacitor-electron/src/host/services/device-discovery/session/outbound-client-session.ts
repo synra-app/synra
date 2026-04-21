@@ -27,6 +27,7 @@ import {
 type OutboundState = {
   sessionId?: string
   deviceId?: string
+  remoteDisplayName?: string
   host?: string
   port?: number
   state: DeviceSessionSnapshot['state']
@@ -56,7 +57,9 @@ export function createOutboundClientSession(
   let socket: Socket | undefined
   let state: OutboundState = { state: 'idle' }
   let lastHeartbeatAt = 0
-  let resolveHello: ((sessionId: string) => void) | undefined
+  let resolveHello:
+    | ((result: { sessionId: string; displayName?: string; remoteDeviceId?: string }) => void)
+    | undefined
   let rejectHello: ((reason: unknown) => void) | undefined
 
   const closeWithError = (reason?: string) => {
@@ -102,7 +105,23 @@ export function createOutboundClientSession(
 
   const handleFrame = (frame: LanFrame) => {
     if (frame.type === 'helloAck' && resolveHello && frame.sessionId) {
-      resolveHello(frame.sessionId)
+      const payload =
+        frame.payload && typeof frame.payload === 'object'
+          ? (frame.payload as Record<string, unknown>)
+          : {}
+      const displayName =
+        typeof payload.displayName === 'string' && payload.displayName.length > 0
+          ? payload.displayName
+          : undefined
+      const remoteDeviceId =
+        typeof payload.sourceDeviceId === 'string' && payload.sourceDeviceId.length > 0
+          ? payload.sourceDeviceId
+          : undefined
+      resolveHello({
+        sessionId: frame.sessionId,
+        displayName,
+        remoteDeviceId
+      })
       resolveHello = undefined
       rejectHello = undefined
       return
@@ -218,7 +237,11 @@ export function createOutboundClientSession(
       }
       attachSocketHandlers(socket)
 
-      const sessionId = await new Promise<string>((resolve, reject) => {
+      const helloAck = await new Promise<{
+        sessionId: string
+        displayName?: string
+        remoteDeviceId?: string
+      }>((resolve, reject) => {
         resolveHello = resolve
         rejectHello = reject
         const timeout = setTimeout(() => reject('SESSION_OPEN_TIMEOUT'), DEFAULT_ACK_TIMEOUT_MS)
@@ -266,25 +289,26 @@ export function createOutboundClientSession(
       state = {
         ...state,
         state: 'open',
-        sessionId,
+        sessionId: helloAck.sessionId,
+        remoteDisplayName: helloAck.displayName,
         openedAt: now
       }
       options.eventBus.publish({
         type: 'transport.session.opened',
         remote: `${openOptions.host}:${String(openOptions.port)}`,
-        sessionId,
+        sessionId: helloAck.sessionId,
         payload: {
           direction: 'outbound',
           deviceId: openOptions.deviceId,
           host: openOptions.host,
           port: openOptions.port,
-          displayName: localDisplayName()
+          displayName: helloAck.displayName
         },
         transport: 'tcp'
       })
       return {
         success: true,
-        sessionId,
+        sessionId: helloAck.sessionId,
         state: 'open',
         transport: 'tcp'
       }

@@ -8,13 +8,13 @@
 
 来源建议：
 
-- `useLanDiscoveryStore`（设备能力，消息与会话主状态）
+- `useLanDiscoveryStore`（设备能力与通信主状态，基于 `useTransport`）
 - `usePluginCatalogStore`（插件列表，后续）
 - `useAppShellStore`（壳层布局状态）
 
 关键状态分组：
 
-- 设备态：`scanState`、`devices`、`pairedDevices`、`sessionState`
+- 设备态：`scanState`、`peers`、`connectedDeviceIds`
 - 插件态：`plugins`、`keyword`、`builtinInstalled`
 - 壳层态：`sidebarCollapsed`、`activeMenu`
 - 诊断态：`error`、`eventLogs`
@@ -23,21 +23,20 @@
 
 - `home`：通常无本地业务状态，仅展示 `version`
 - `plugins`：`keyword`、局部排序/过滤状态
-- `devices`：`manualTarget`、`selectedDeviceId`、`socketPort`
+- `devices`：`selectedDeviceId`
 - `settings`：诊断复制反馈、刷新状态
-- 页面本地状态应只保留临时输入，不重复持久化全局会话数据。
+- 页面本地状态应只保留临时输入，不重复持久化全局通信状态。
 
 ## 事件来源
 
 - 主动请求：
-  - `startDiscovery`、`stopDiscovery`、`refreshDevices`
-  - `pairDevice`、`openSession`、`closeSession`
-  - `syncSessionState`
+  - `startScan`、`stopScan`、`refreshPeers`
+  - `sendToDevice`、`broadcast`
   - `searchPlugins`（首版可仅本地过滤）
 - 被动监听：
   - `deviceConnectableUpdated`
-  - `sessionOpened`、`sessionClosed`
-  - `messageReceived`、`messageAck`
+  - `sessionOpened`、`sessionClosed`（内部事件，不对业务暴露 session 语义）
+  - `messageReceived`
   - `transportError`
 
 ## 数据流规则
@@ -48,19 +47,19 @@
 4. 日志与错误态集中在 `Devices/Settings`，`Home/Plugins` 保持轻量表达。
 5. 页面层不直接消费 `hostEvent`，统一消费已归一化的 domain 事件。
 
-## 设备与会话状态规范
+## 设备与连接状态规范
 
-- 会话列表以 `connectedSessions` 为单一来源。
-- 页面不得维护额外会话缓存，避免与 store 脱节。
-- 关闭会话必须同时更新：
-  - `sessionState.state`
-  - `connectedSessions` 对应条目状态
-  - 可选日志记录
+- 设备连接状态以 `connectedDeviceIds` 为单一来源。
+- 页面不得维护额外 session 缓存，避免与 store 脱节。
+- 页面交互只基于 `deviceId`：
+  - 连接设备
+  - 断开设备
+  - 向设备发送消息
 
 ## 错误语义与用户动作
 
 - 错误提示必须可恢复：至少提供重试、重连或返回连接页。
-- 设备不可达、未配对、会话过期等错误应阻断后续动作并立即反馈。
+- 设备不可达、发送失败等错误应阻断后续动作并立即反馈。
 - 插件列表页错误（例如图标加载失败）应优先回退，不阻断整个页面渲染。
 
 ## 插件宿主状态规范
@@ -79,7 +78,7 @@
 
 - `useSidebarState`：侧栏收缩状态与动画开关。
 - `usePluginList`：插件搜索、排序、图标回退策略。
-- `useDiscoveryActions`：发现、配对、连接动作组合封装。
+- `useDiscoveryActions`：发现、连接与消息发送动作组合封装。
 - `usePluginHost`：宿主能力外观与页面生命周期组合封装。
 - `useSettingsDiagnostics`：诊断信息刷新与复制反馈。
 

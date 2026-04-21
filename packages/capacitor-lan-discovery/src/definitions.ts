@@ -30,7 +30,6 @@ export type StartDiscoveryOptions = {
   concurrency?: number
   discoveryTimeoutMs?: number
   reset?: boolean
-  scanWindowMs?: number
   port?: number
   timeoutMs?: number
 }
@@ -38,8 +37,6 @@ export type StartDiscoveryOptions = {
 export type StartDiscoveryResult = {
   requestId: string
   state: DiscoveryState
-  startedAt?: number
-  scanWindowMs: number
   devices: DiscoveredDevice[]
 }
 
@@ -59,20 +56,6 @@ export type DiscoveryCloseSessionResult = {
 
 export type ListDiscoveredDevicesResult = {
   state: DiscoveryState
-  startedAt?: number
-  scanWindowMs: number
-  devices: DiscoveredDevice[]
-}
-
-export type ProbeConnectableOptions = {
-  port?: number
-  timeoutMs?: number
-}
-
-export type ProbeConnectableResult = {
-  checkedAt: number
-  port: number
-  timeoutMs: number
   devices: DiscoveredDevice[]
 }
 
@@ -92,7 +75,6 @@ export type DiscoverySendMessageResult = {
 
 export type ScanStateChangedEvent = {
   state: DiscoveryState
-  startedAt?: number
 }
 
 export type DeviceConnectableUpdatedEvent = {
@@ -128,7 +110,6 @@ export interface LanDiscoveryPlugin {
   startDiscovery(options?: StartDiscoveryOptions): Promise<StartDiscoveryResult>
   stopDiscovery(): Promise<StopDiscoveryResult>
   getDiscoveredDevices(): Promise<ListDiscoveredDevicesResult>
-  probeConnectable(options?: ProbeConnectableOptions): Promise<ProbeConnectableResult>
   closeSession(options: DiscoveryCloseSessionOptions): Promise<DiscoveryCloseSessionResult>
   sendMessage(options: DiscoverySendMessageOptions): Promise<DiscoverySendMessageResult>
   addListener(

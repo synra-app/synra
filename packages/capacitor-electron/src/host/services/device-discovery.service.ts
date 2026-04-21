@@ -3,8 +3,6 @@ import { BRIDGE_ERROR_CODES } from '../../shared/errors/codes'
 import type {
   DeviceDiscoveryHostEvent,
   DeviceDiscoveryListResult,
-  DeviceDiscoveryProbeConnectableOptions,
-  DeviceDiscoveryProbeConnectableResult,
   DeviceDiscoveryPullHostEventsResult,
   DeviceDiscoveryStartOptions,
   DeviceDiscoveryStartResult,
@@ -37,9 +35,6 @@ export interface DeviceDiscoveryService {
   startDiscovery(options?: DeviceDiscoveryStartOptions): Promise<DeviceDiscoveryStartResult>
   stopDiscovery(): Promise<{ success: true }>
   listDevices(): Promise<DeviceDiscoveryListResult>
-  probeConnectable(
-    options?: DeviceDiscoveryProbeConnectableOptions
-  ): Promise<DeviceDiscoveryProbeConnectableResult>
   openSession(options: DeviceSessionOpenOptions): Promise<DeviceSessionOpenResult>
   closeSession(options?: DeviceSessionCloseOptions): Promise<DeviceSessionCloseResult>
   sendMessage(options: DeviceSessionSendMessageOptions): Promise<DeviceSessionSendMessageResult>
@@ -129,9 +124,6 @@ export function createDeviceDiscoveryService(
         ...snapshot,
         devices: registry.list()
       }
-    },
-    async probeConnectable(probeOptions = {}) {
-      return orchestrator.probeConnectable(probeOptions)
     },
     async openSession(openOptions) {
       await ensureHostStarted()

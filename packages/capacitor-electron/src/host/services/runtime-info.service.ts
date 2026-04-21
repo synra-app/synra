@@ -30,7 +30,6 @@ export function createRuntimeInfoService(options: RuntimeInfoServiceOptions = {}
           'discovery.start',
           'discovery.stop',
           'discovery.list',
-          'discovery.probeConnectable',
           'discovery.openSession',
           'discovery.closeSession',
           'discovery.sendMessage',

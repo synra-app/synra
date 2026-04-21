@@ -24,7 +24,6 @@ const props = defineProps<{
   devices: ChatDevice[]
   loading: boolean
   selectedDeviceId?: string
-  selectedSessionId?: string
   selectedDeviceLabel: string
 }>()
 
@@ -122,7 +121,6 @@ onUnmounted(() => {
         :devices="devices"
         :loading="loading"
         :selected-device-id="selectedDeviceId"
-        :selected-session-id="selectedSessionId"
         @select-device="onSelectDevice"
         @connect="emit('connect')"
         @disconnect="emit('disconnect')"

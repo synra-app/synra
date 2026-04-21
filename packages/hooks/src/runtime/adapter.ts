@@ -1,14 +1,15 @@
 import type {
   DeviceConnectableUpdatedEvent,
+  DiscoveryState,
   DiscoveredDevice,
   StartDiscoveryOptions
 } from '@synra/capacitor-lan-discovery'
 import type {
   GetSessionStateResult,
-  HostEvent,
   MessageAckEvent,
   MessageReceivedEvent,
   OpenSessionOptions,
+  SessionState,
   SendMessageOptions,
   SessionClosedEvent,
   SessionOpenedEvent,
@@ -19,33 +20,28 @@ export type ListenerHandle = {
   remove: () => Promise<void>
 }
 
+export type DeviceLostEvent = {
+  deviceId: string
+  ipAddress?: string
+}
+
 export interface ConnectionRuntimeAdapter {
-  getDiscoveredDevices(): Promise<{
-    state: string
-    startedAt?: number
-    scanWindowMs: number
-    devices: DiscoveredDevice[]
-  }>
   startDiscovery(options: StartDiscoveryOptions): Promise<{
-    state: string
-    startedAt?: number
-    scanWindowMs: number
+    state: DiscoveryState
     devices: DiscoveredDevice[]
   }>
-  stopDiscovery(): Promise<void>
-  probeConnectable(port: number, timeoutMs: number): Promise<{ devices: DiscoveredDevice[] }>
   openSession(options: OpenSessionOptions): Promise<{
     sessionId: string
-    state: string
+    state: SessionState
     transport: 'tcp'
   }>
   closeSession(sessionId?: string): Promise<void>
   sendMessage(options: SendMessageOptions): Promise<void>
   getSessionState(sessionId?: string): Promise<GetSessionStateResult>
-  pullHostEvents(): Promise<{ events: HostEvent[] }>
   addDeviceConnectableUpdatedListener(
     listener: (event: DeviceConnectableUpdatedEvent) => void
   ): Promise<ListenerHandle>
+  addDeviceLostListener(listener: (event: DeviceLostEvent) => void): Promise<ListenerHandle>
   addSessionOpenedListener(listener: (event: SessionOpenedEvent) => void): Promise<ListenerHandle>
   addSessionClosedListener(listener: (event: SessionClosedEvent) => void): Promise<ListenerHandle>
   addMessageReceivedListener(

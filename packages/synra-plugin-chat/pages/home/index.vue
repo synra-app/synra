@@ -10,25 +10,21 @@ import { useMessagesPage } from '../../composables/useMessagesPage'
 const drawerOpen = ref(false)
 
 const {
-  activeSessions,
   canSend,
   connectSelectedDevice,
   devices,
-  disconnectSelectedSession,
+  disconnectSelectedDevice,
   error,
   loading,
   messages,
   messageInput,
   messageType,
   onSendMessage,
-  openSession,
   reconnectSelectedDevice,
   refreshDeviceDiscovery,
   selectDevice,
   selectedDeviceLabel,
   selectedDeviceId,
-  selectedSession,
-  selectedSessionId,
   sending
 } = useMessagesPage()
 
@@ -46,9 +42,7 @@ function onSelectDevice(deviceId: string): void {
       <div class="flex items-center justify-between gap-3">
         <div class="min-w-0">
           <p class="truncate text-sm font-semibold text-slate-100">{{ selectedDeviceLabel }}</p>
-          <p class="truncate text-xs text-slate-400">
-            Session: {{ selectedSessionId || 'Not connected' }}
-          </p>
+          <p class="truncate text-xs text-slate-400">Device selected for messaging</p>
         </div>
         <button class="glass-button app-focus-ring px-3 py-2 text-sm" @click="drawerOpen = true">
           Device Menu
@@ -61,12 +55,11 @@ function onSelectDevice(deviceId: string): void {
       :devices="devices"
       :loading="loading"
       :selected-device-id="selectedDeviceId"
-      :selected-session-id="selectedSessionId"
       :selected-device-label="selectedDeviceLabel"
       @close="drawerOpen = false"
       @select-device="onSelectDevice"
       @connect="connectSelectedDevice"
-      @disconnect="disconnectSelectedSession"
+      @disconnect="disconnectSelectedDevice"
       @reconnect="reconnectSelectedDevice"
       @refresh="refreshDeviceDiscovery"
     />
@@ -75,17 +68,16 @@ function onSelectDevice(deviceId: string): void {
       <div class="hidden lg:col-span-4 lg:block">
         <PanelCard
           title="Devices"
-          description="Choose a device and manage session state."
+          description="Choose a device and manage connectivity."
           class="h-full"
         >
           <DeviceSidebar
             :devices="devices"
             :loading="loading"
             :selected-device-id="selectedDeviceId"
-            :selected-session-id="selectedSessionId"
             @select-device="onSelectDevice"
             @connect="connectSelectedDevice"
-            @disconnect="disconnectSelectedSession"
+            @disconnect="disconnectSelectedDevice"
             @reconnect="reconnectSelectedDevice"
             @refresh="refreshDeviceDiscovery"
           />
@@ -94,14 +86,7 @@ function onSelectDevice(deviceId: string): void {
 
       <div class="space-y-4 lg:col-span-8">
         <PanelCard title="Conversation">
-          <div
-            class="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-300"
-          >
-            <p><strong>Session:</strong> {{ selectedSessionId || '-' }}</p>
-            <p><strong>Status:</strong> {{ selectedSession?.status ?? 'idle' }}</p>
-            <p><strong>Remote:</strong> {{ selectedSession?.remote ?? '-' }}</p>
-            <p><strong>Direction:</strong> {{ selectedSession?.direction ?? '-' }}</p>
-          </div>
+          <p class="mb-3 text-xs text-slate-300">Sending to: {{ selectedDeviceLabel }}</p>
 
           <MessageBubbleList :messages="messages" :loading="loading" />
         </PanelCard>
@@ -109,42 +94,12 @@ function onSelectDevice(deviceId: string): void {
         <MessageComposer
           v-model:message-input="messageInput"
           v-model:message-type="messageType"
-          :disabled="!selectedSession || loading"
+          :disabled="!selectedDeviceId || loading"
           :can-send="canSend"
           :sending="sending"
           :error="error"
           @send="onSendMessage"
         />
-
-        <PanelCard v-if="activeSessions.length > 0" title="Open Sessions">
-          <ul class="space-y-2 text-sm text-slate-200">
-            <li
-              v-for="session in activeSessions"
-              :key="session.sessionId"
-              class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/12 bg-white/6 px-3 py-2"
-            >
-              <div>
-                <p class="font-medium text-slate-100">
-                  {{ session.deviceId ?? session.sessionId }}
-                </p>
-                <p class="text-xs text-slate-400">
-                  {{ session.remote ?? '-' }} | {{ session.lastActiveAt ?? '-' }}
-                </p>
-              </div>
-              <button
-                class="glass-button app-focus-ring px-2 py-1 text-xs"
-                :class="
-                  selectedSessionId === session.sessionId
-                    ? 'border-indigo-300/55 bg-indigo-500/22 text-white'
-                    : ''
-                "
-                @click="openSession(session.sessionId)"
-              >
-                {{ selectedSessionId === session.sessionId ? 'Current' : 'Switch' }}
-              </button>
-            </li>
-          </ul>
-        </PanelCard>
       </div>
     </div>
   </section>

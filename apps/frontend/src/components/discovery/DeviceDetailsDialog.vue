@@ -1,0 +1,74 @@
+<script setup lang="ts">
+import type { DiscoveredDevice } from '@synra/capacitor-lan-discovery'
+import AppButton from '../base/AppButton.vue'
+
+const props = defineProps<{
+  visible: boolean
+  device: DiscoveredDevice | null
+}>()
+
+const emit = defineEmits<{
+  close: []
+}>()
+
+function formatTimestamp(value: number | undefined): string {
+  if (typeof value !== 'number' || Number.isNaN(value)) {
+    return '-'
+  }
+  return new Date(value).toLocaleString()
+}
+
+function readOptionalField(
+  device: DiscoveredDevice | null,
+  field: 'direction' | 'platform'
+): string {
+  if (!device) {
+    return '-'
+  }
+  const value = (device as Record<string, unknown>)[field]
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return '-'
+  }
+  return value
+}
+</script>
+
+<template>
+  <div
+    v-if="visible && device"
+    class="fixed inset-0 z-[80] flex items-center justify-center bg-black/65 px-4 backdrop-blur-sm"
+  >
+    <div
+      class="w-full max-w-lg rounded-2xl border border-white/14 bg-slate-950/92 p-5 shadow-2xl shadow-black/50"
+    >
+      <div class="flex items-center justify-between gap-2">
+        <h3 class="text-lg font-semibold text-slate-100">{{ device.name }}</h3>
+        <AppButton size="icon" @click="emit('close')">
+          <span class="i-lucide-x text-sm" />
+        </AppButton>
+      </div>
+
+      <div class="mt-4 space-y-3 text-sm">
+        <div class="rounded-lg border border-white/10 bg-white/5 p-3">
+          <p class="font-medium text-muted-1">Basic</p>
+          <p class="mt-1 text-muted-2">IP: {{ device.ipAddress || '-' }}</p>
+          <p class="text-muted-2">Port: {{ device.port ?? '-' }}</p>
+        </div>
+
+        <div class="rounded-lg border border-white/10 bg-white/5 p-3">
+          <p class="font-medium text-muted-1">Identity</p>
+          <p class="mt-1 text-muted-2">Device ID: {{ device.deviceId }}</p>
+          <p class="text-muted-2">Source: {{ device.source }}</p>
+          <p class="text-muted-2">Last Seen: {{ formatTimestamp(device.lastSeenAt) }}</p>
+        </div>
+
+        <div class="rounded-lg border border-white/10 bg-white/5 p-3">
+          <p class="font-medium text-muted-1">Capability</p>
+          <p class="mt-1 text-muted-2">Connectable: {{ device.connectable ? 'Yes' : 'No' }}</p>
+          <p class="text-muted-2">Direction: {{ readOptionalField(device, 'direction') }}</p>
+          <p class="text-muted-2">Platform: {{ readOptionalField(device, 'platform') }}</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>

@@ -46,19 +46,11 @@ function createHandlers() {
       startDiscovery: vi.fn(async () => ({
         requestId: 'discovery-1',
         state: 'scanning' as const,
-        scanWindowMs: 10_000,
         devices: []
       })),
       stopDiscovery: vi.fn(async () => ({ success: true as const })),
       listDevices: vi.fn(async () => ({
         state: 'idle' as const,
-        scanWindowMs: 10_000,
-        devices: []
-      })),
-      probeConnectable: vi.fn(async () => ({
-        checkedAt: Date.now(),
-        port: 32100,
-        timeoutMs: 1500,
         devices: []
       })),
       openSession: vi.fn(async () => ({
@@ -190,19 +182,11 @@ describe('bridge/main/dispatch', () => {
         startDiscovery: vi.fn(async () => ({
           requestId: 'discovery-2',
           state: 'scanning' as const,
-          scanWindowMs: 10_000,
           devices: []
         })),
         stopDiscovery: vi.fn(async () => ({ success: true as const })),
         listDevices: vi.fn(async () => ({
           state: 'idle' as const,
-          scanWindowMs: 10_000,
-          devices: []
-        })),
-        probeConnectable: vi.fn(async () => ({
-          checkedAt: Date.now(),
-          port: 32100,
-          timeoutMs: 1500,
           devices: []
         })),
         openSession: vi.fn(async () => ({

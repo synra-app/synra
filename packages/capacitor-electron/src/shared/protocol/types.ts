@@ -134,7 +134,6 @@ export type DeviceDiscoveryStartOptions = {
   concurrency?: number
   discoveryTimeoutMs?: number
   reset?: boolean
-  scanWindowMs?: number
   port?: number
   timeoutMs?: number
 }
@@ -142,27 +141,11 @@ export type DeviceDiscoveryStartOptions = {
 export type DeviceDiscoveryStartResult = {
   requestId: string
   state: DiscoveryState
-  startedAt?: number
-  scanWindowMs: number
   devices: DiscoveredDevice[]
 }
 
 export type DeviceDiscoveryListResult = {
   state: DiscoveryState
-  startedAt?: number
-  scanWindowMs: number
-  devices: DiscoveredDevice[]
-}
-
-export type DeviceDiscoveryProbeConnectableOptions = {
-  port?: number
-  timeoutMs?: number
-}
-
-export type DeviceDiscoveryProbeConnectableResult = {
-  checkedAt: number
-  port: number
-  timeoutMs: number
   devices: DiscoveredDevice[]
 }
 
@@ -263,7 +246,6 @@ export type MethodPayloadMap = {
   'discovery.start': DeviceDiscoveryStartOptions
   'discovery.stop': Record<string, never>
   'discovery.list': Record<string, never>
-  'discovery.probeConnectable': DeviceDiscoveryProbeConnectableOptions
   'discovery.openSession': DeviceSessionOpenOptions
   'discovery.closeSession': DeviceSessionCloseOptions
   'discovery.sendMessage': DeviceSessionSendMessageOptions
@@ -289,7 +271,6 @@ export type MethodResultMap = {
   'discovery.start': DeviceDiscoveryStartResult
   'discovery.stop': OperationResult
   'discovery.list': DeviceDiscoveryListResult
-  'discovery.probeConnectable': DeviceDiscoveryProbeConnectableResult
   'discovery.openSession': DeviceSessionOpenResult
   'discovery.closeSession': DeviceSessionCloseResult
   'discovery.sendMessage': DeviceSessionSendMessageResult

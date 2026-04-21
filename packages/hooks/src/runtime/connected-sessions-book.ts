@@ -1,18 +1,18 @@
 import { type Ref } from 'vue'
-import type { SynraHookConnectedSession } from '../types'
+import type { RuntimeConnectedSession } from '../types'
 import { CONNECTED_SESSIONS_REBUILD_DEBOUNCE_MS, MAX_CLOSED_CONNECTED_SESSIONS } from './constants'
 
 export class ConnectedSessionsBook {
-  private readonly connectedSessionMap = new Map<string, SynraHookConnectedSession>()
+  private readonly connectedSessionMap = new Map<string, RuntimeConnectedSession>()
   private connectedSessionsRebuildTimer: ReturnType<typeof setTimeout> | undefined
 
-  constructor(private readonly connectedSessions: Ref<SynraHookConnectedSession[]>) {}
+  constructor(private readonly connectedSessions: Ref<RuntimeConnectedSession[]>) {}
 
-  private sessionSortValue(session: SynraHookConnectedSession): number {
+  private sessionSortValue(session: RuntimeConnectedSession): number {
     return Number(session.lastActiveAt ?? session.closedAt ?? session.openedAt ?? 0)
   }
 
-  private pruneClosedSessions(entries: SynraHookConnectedSession[]): SynraHookConnectedSession[] {
+  private pruneClosedSessions(entries: RuntimeConnectedSession[]): RuntimeConnectedSession[] {
     if (entries.length <= MAX_CLOSED_CONNECTED_SESSIONS) {
       return entries
     }
@@ -20,8 +20,8 @@ export class ConnectedSessionsBook {
   }
 
   rebuildConnectedSessionsView(): void {
-    const openSessions: SynraHookConnectedSession[] = []
-    const closedSessions: SynraHookConnectedSession[] = []
+    const openSessions: RuntimeConnectedSession[] = []
+    const closedSessions: RuntimeConnectedSession[] = []
 
     for (const item of this.connectedSessionMap.values()) {
       if (item.status === 'open') {
@@ -67,7 +67,7 @@ export class ConnectedSessionsBook {
   }
 
   upsertConnectedSession(
-    next: SynraHookConnectedSession,
+    next: RuntimeConnectedSession,
     options: { immediate?: boolean } = {}
   ): void {
     const current = this.connectedSessionMap.get(next.sessionId)

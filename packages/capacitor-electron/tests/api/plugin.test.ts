@@ -110,7 +110,6 @@ describe('api/plugin', () => {
         return {
           requestId: 'discovery-1',
           state: 'scanning',
-          scanWindowMs: 10_000,
           devices: []
         } as unknown as MethodResultMap[typeof method]
       }
@@ -118,7 +117,6 @@ describe('api/plugin', () => {
       expect(method).toBe(BRIDGE_METHODS.discoveryList)
       return {
         state: 'scanning',
-        scanWindowMs: 10_000,
         devices: []
       } as unknown as MethodResultMap[typeof method]
     }

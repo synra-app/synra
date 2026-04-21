@@ -39,7 +39,6 @@ describe('shared/schema/validators', () => {
     expect(isSupportedProtocolVersion('9.9')).toBe(false)
     expect(isSupportedMethod(BRIDGE_METHODS.fileRead)).toBe(true)
     expect(isSupportedMethod(BRIDGE_METHODS.discoveryStart)).toBe(true)
-    expect(isSupportedMethod(BRIDGE_METHODS.discoveryProbeConnectable)).toBe(true)
     expect(isSupportedMethod(BRIDGE_METHODS.discoveryOpenSession)).toBe(true)
     expect(isSupportedMethod(BRIDGE_METHODS.discoverySendMessage)).toBe(true)
     expect(isSupportedMethod(BRIDGE_METHODS.discoveryPullHostEvents)).toBe(true)
@@ -90,8 +89,7 @@ describe('shared/schema/validators', () => {
         maxProbeHosts: 64,
         concurrency: 16,
         discoveryTimeoutMs: 2000,
-        reset: false,
-        scanWindowMs: 3000
+        reset: false
       })
     ).toBe(true)
     expect(validateDiscoveryStartPayload({ manualTargets: [1] })).toBe(false)

@@ -1,73 +1,45 @@
-# 会话与传输契约
+# 传输契约（V2 Full Break）
 
 ## 目标
 
-定义统一的 TCP 会话与消息传输规则，保障跨端行为一致与故障可恢复。
+通信栈只保留三件事能力，并在所有端保持同一语义：
 
-## 协议头最小字段
+1. `sendToDevice(deviceId, payload)`
+2. `broadcast(payload)`
+3. `onMessage(handler)`
 
-- `messageId`：全局唯一消息 ID。
-- `sessionId`：会话 ID。
-- `term`：当前任期。
-- `epoch`：主机配置版本。
-- `fromNodeId`：发送方节点。
-- `toNodeId`：接收方节点。
-- `type`：消息类型。
-- `timestamp`：发送时间戳。
-- `payload`：业务载荷。
+## 分层职责
 
-## 消息类型分组
+- `LanDiscovery`（UDP）：设备发现、上下线广播（含 `deviceLost`）。
+- `DeviceConnection`（TCP）：点对点消息传输与实时双向收发。
+- 前端/插件层不得直接依赖底层 `sessionId`、`ack`、`reconnect` 等旧模型。
 
-- 会话类：`session.open`、`session.close`、`session.keepalive`
-- 路由类：`relay.request`、`relay.ack`、`relay.result`
-- 主机类：`host.announce`、`host.retire`、`host.member.offline`
-- 选举类：`election.vote.request`、`election.vote.response`、`election.win`
-- 同步类：`plugin.catalog.*`、`plugin.bundle.*`、`plugin.rules.*`
-- 错误类：`transport.error`
+## 标准消息信封
 
-## 状态机
+- `messageId`：消息唯一 ID（建议 UUID）。
+- `fromDeviceId`：发送端设备 ID。
+- `toDeviceId`：目标设备 ID（广播可省略）。
+- `channel`：业务通道（如 `chat.message`）。
+- `body`：业务载荷。
+- `timestamp`：发送时间（毫秒）。
 
-```mermaid
-flowchart LR
-  idle[Idle] --> connecting[Connecting]
-  connecting --> open[Open]
-  connecting --> failed[Failed]
-  open --> keepalive[Keepalive]
-  keepalive --> open
-  open --> reconnecting[Reconnecting]
-  reconnecting --> open
-  reconnecting --> closed[Closed]
-```
+> 说明：`sessionId` 属于底层传输细节，不再作为对外契约字段。
 
-## 可靠性约束
+## 运行约束
 
-- `messageId` 幂等：重复消息只处理一次，重复包仅返回历史 ACK。
-- ACK 超时重试：仅重试可幂等请求。
-- 写入背压：发送队列在高水位触发限流。
-- 帧大小上限：超限消息直接拒绝并返回 `FRAME_TOO_LARGE`。
-- 成员主动下线时必须先发送 `session.close` 给主机。
-- 主机收到成员下线后必须广播 `host.member.offline` 给其他成员。
-- 主机主动下线时优先发送 `host.retire`，成员收到后立即进入重选流程。
+- 幂等：同一 `messageId` 的重复包只能交付一次。
+- 可达性：`sendToDevice` 仅在设备可达时尝试建立/复用连接并发送。
+- 广播语义：`broadcast` 以当前可见 peer 集合为目标，逐个发送。
+- 故障处理：发送失败返回错误，由上层决定重试策略。
 
-## 重连策略
+## 可观测事件（推荐）
 
-- 指数退避重连，设置最大退避上限。
-- 重连成功后优先同步主机公告与路由上下文。
-- 重连窗口内缓存待发幂等请求，超时后失败回执。
+- `transport.peer.discovered`
+- `transport.peer.lost`
+- `transport.message.received`
+- `transport.message.send.failed`
 
-## 错误码
+## 弃用项（仅针对业务层）
 
-- `SESSION_NOT_FOUND`
-- `SESSION_EXPIRED`
-- `TARGET_UNREACHABLE`
-- `TERM_OUTDATED`
-- `HOST_UNAVAILABLE`
-- `FRAME_TOO_LARGE`
-- `ACK_TIMEOUT`
-- `PROTOCOL_INCOMPATIBLE`
-
-## 安全约束
-
-- 会话建立必须经过身份校验与随机挑战。
-- 消息需附带完整性校验字段。
-- 节点不得接受来源未知的主机公告。
+- `useDiscovery` / `useConnectionState` / `useSessionMessages`
+- 面向业务层直接暴露 `sessionId` 的通信 API

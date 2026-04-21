@@ -1,6 +1,7 @@
 import { DeviceConnection } from '@synra/capacitor-device-connection'
 import { LanDiscovery } from '@synra/capacitor-lan-discovery'
 import type { ConnectionRuntimeAdapter } from '../adapter'
+import { normalizeHostKey } from '../host-normalization'
 
 type ListenerHandle = {
   remove: () => Promise<void>
@@ -27,7 +28,14 @@ export function createCapacitorRuntimeAdapter(): ConnectionRuntimeAdapter {
       deviceId: string
       host: string
       port: number
-      transport: 'tcp'
+    }
+  >()
+  const pendingOutboundMetaByRemote = new Map<
+    string,
+    {
+      deviceId: string
+      host: string
+      port: number
     }
   >()
 
@@ -41,20 +49,17 @@ export function createCapacitorRuntimeAdapter(): ConnectionRuntimeAdapter {
   const shouldPreferPcHost = runtimePlatform === 'android' || runtimePlatform === 'ios'
 
   return {
-    getDiscoveredDevices: () => LanDiscovery.getDiscoveredDevices(),
     startDiscovery: (options) => LanDiscovery.startDiscovery(options),
-    stopDiscovery: async () => {
-      await LanDiscovery.stopDiscovery()
-    },
-    probeConnectable: (port, timeoutMs) => LanDiscovery.probeConnectable({ port, timeoutMs }),
     openSession: async (options) => {
-      const result = await DeviceConnection.openSession(options)
-      outboundSessionMetaById.set(result.sessionId, {
+      const pendingMeta = {
         deviceId: options.deviceId,
         host: options.host,
-        port: options.port,
-        transport: 'tcp'
-      })
+        port: options.port
+      }
+      const pendingKey = normalizeHostKey(options.host, options.port)
+      pendingOutboundMetaByRemote.set(pendingKey, pendingMeta)
+      const result = await DeviceConnection.openSession(options)
+      outboundSessionMetaById.set(result.sessionId, pendingMeta)
       return result
     },
     closeSession: async (sessionId) => {
@@ -89,20 +94,47 @@ export function createCapacitorRuntimeAdapter(): ConnectionRuntimeAdapter {
       }
     },
     getSessionState: (sessionId) => DeviceConnection.getSessionState({ sessionId }),
-    pullHostEvents: () => DeviceConnection.pullHostEvents(),
-    addDeviceConnectableUpdatedListener: (listener) =>
-      LanDiscovery.addListener('deviceConnectableUpdated', listener),
+    addDeviceConnectableUpdatedListener: async (listener) => {
+      const forward = (event: { device: Parameters<typeof listener>[0]['device'] }) => {
+        listener({ device: event.device })
+      }
+      const connectableHandle = await LanDiscovery.addListener('deviceConnectableUpdated', forward)
+      const foundHandle = await LanDiscovery.addListener('deviceFound', forward)
+      const updatedHandle = await LanDiscovery.addListener('deviceUpdated', forward)
+      return combineListenerHandles(connectableHandle, foundHandle, updatedHandle)
+    },
+    addDeviceLostListener: async (listener) =>
+      LanDiscovery.addListener('deviceLost', (event) => {
+        const lostPayload = event as { deviceId: string; ipAddress?: unknown }
+        listener({
+          deviceId: lostPayload.deviceId,
+          ipAddress: typeof lostPayload.ipAddress === 'string' ? lostPayload.ipAddress : undefined
+        })
+      }),
     addSessionOpenedListener: async (listener) => {
       const connectionHandle = await DeviceConnection.addListener('sessionOpened', (event) => {
-        const meta = event.sessionId ? outboundSessionMetaById.get(event.sessionId) : undefined
+        const metaBySessionId = event.sessionId
+          ? outboundSessionMetaById.get(event.sessionId)
+          : undefined
+        const remoteKey =
+          typeof event.host === 'string' && typeof event.port === 'number'
+            ? normalizeHostKey(event.host, event.port)
+            : undefined
+        const pendingMeta = remoteKey ? pendingOutboundMetaByRemote.get(remoteKey) : undefined
+        const meta = metaBySessionId ?? pendingMeta
         const normalizedDirection: 'inbound' | 'outbound' =
           event.direction === 'inbound' ? 'inbound' : 'outbound'
+        if (event.sessionId && meta) {
+          outboundSessionMetaById.set(event.sessionId, meta)
+        }
+        if (remoteKey && pendingMeta) {
+          pendingOutboundMetaByRemote.delete(remoteKey)
+        }
         const normalized = {
           ...event,
-          deviceId:
-            typeof event.deviceId === 'string' && event.deviceId.length > 0
-              ? event.deviceId
-              : meta?.deviceId,
+          // Prefer the requested target deviceId from openSession metadata.
+          // Native payload may expose a different raw identifier format.
+          deviceId: meta?.deviceId ?? event.deviceId,
           direction: normalizedDirection,
           transport: event.transport ?? 'tcp',
           host: typeof event.host === 'string' && event.host.length > 0 ? event.host : meta?.host,
@@ -155,8 +187,7 @@ export function createCapacitorRuntimeAdapter(): ConnectionRuntimeAdapter {
             outboundSessionMetaById.set(result.sessionId, {
               deviceId: reverseDeviceId,
               host: reverseHost,
-              port: reverseConnectPort,
-              transport: 'tcp'
+              port: reverseConnectPort
             })
             await LanDiscovery.closeSession({ sessionId: event.sessionId })
           })

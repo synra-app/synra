@@ -10,11 +10,6 @@ import type {
   DeviceSessionSnapshot
 } from '../../shared/protocol/types'
 import type { DeviceDiscoveryService } from './device-discovery.service'
-import {
-  createConnectionAdapterRegistry,
-  type ConnectionAdapter,
-  type ConnectionAdapterRegistry
-} from './connection-adapter.registry'
 
 export interface ConnectionService {
   openSession(options: DeviceSessionOpenOptions): Promise<DeviceSessionOpenResult>
@@ -24,52 +19,42 @@ export interface ConnectionService {
   pullHostEvents(): Promise<DeviceDiscoveryPullHostEventsResult>
 }
 
-function createTcpConnectionAdapter(discoveryService: DeviceDiscoveryService): ConnectionAdapter {
+function assertTcpTransport(transport: string): void {
+  if (transport !== 'tcp') {
+    throw new Error(`Unsupported connection transport: ${transport}`)
+  }
+}
+
+export function createConnectionService(
+  discoveryService: DeviceDiscoveryService
+): ConnectionService {
   return {
-    transport: 'tcp',
     async openSession(options) {
+      const transport = options.transport ?? 'tcp'
+      assertTcpTransport(transport)
       const result = await discoveryService.openSession(options)
       return { ...result, transport: 'tcp' }
     },
-    async closeSession(options) {
+    async closeSession(options = {}) {
+      const transport = options.transport ?? 'tcp'
+      assertTcpTransport(transport)
       const result = await discoveryService.closeSession(options)
       return { ...result, transport: 'tcp' }
     },
     async sendMessage(options) {
+      const transport = options.transport ?? 'tcp'
+      assertTcpTransport(transport)
       const result = await discoveryService.sendMessage(options)
       return { ...result, transport: 'tcp' }
     },
-    async getSessionState(options) {
+    async getSessionState(options = {}) {
+      const transport = options.transport ?? 'tcp'
+      assertTcpTransport(transport)
       const result = await discoveryService.getSessionState(options)
       return { ...result, transport: 'tcp' }
     },
     async pullHostEvents() {
       return discoveryService.pullHostEvents()
-    }
-  }
-}
-
-export function createConnectionService(
-  discoveryService: DeviceDiscoveryService,
-  registry: ConnectionAdapterRegistry = createConnectionAdapterRegistry([
-    createTcpConnectionAdapter(discoveryService)
-  ])
-): ConnectionService {
-  return {
-    async openSession(options) {
-      return registry.resolve(options.transport).openSession(options)
-    },
-    async closeSession(options = {}) {
-      return registry.resolve(options.transport).closeSession(options)
-    },
-    async sendMessage(options) {
-      return registry.resolve(options.transport).sendMessage(options)
-    },
-    async getSessionState(options = {}) {
-      return registry.resolve(options.transport).getSessionState(options)
-    },
-    async pullHostEvents() {
-      return registry.resolve('tcp').pullHostEvents()
     }
   }
 }

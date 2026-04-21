@@ -2,22 +2,13 @@ import type { ConnectionRuntimeAdapter } from '../adapter'
 
 function unsupportedError(): Error {
   return new Error(
-    'useConnection is running in Electron main process without a runtime bridge. Configure a custom adapter via configureHooksRuntime(...) before using connection hooks in main.'
+    'useTransport is running in Electron main process without a runtime bridge. Configure a custom adapter via configureHooksRuntime(...) before using transport hooks in main.'
   )
 }
 
 export function createUnsupportedMainAdapter(): ConnectionRuntimeAdapter {
   return {
-    async getDiscoveredDevices() {
-      throw unsupportedError()
-    },
     async startDiscovery() {
-      throw unsupportedError()
-    },
-    async stopDiscovery() {
-      throw unsupportedError()
-    },
-    async probeConnectable() {
       throw unsupportedError()
     },
     async openSession() {
@@ -32,10 +23,10 @@ export function createUnsupportedMainAdapter(): ConnectionRuntimeAdapter {
     async getSessionState() {
       throw unsupportedError()
     },
-    async pullHostEvents() {
+    async addDeviceConnectableUpdatedListener() {
       throw unsupportedError()
     },
-    async addDeviceConnectableUpdatedListener() {
+    async addDeviceLostListener() {
       throw unsupportedError()
     },
     async addSessionOpenedListener() {

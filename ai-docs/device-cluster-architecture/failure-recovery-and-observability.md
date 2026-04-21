@@ -2,61 +2,55 @@
 
 ## 目标
 
-定义主机故障、会话中断、同步异常下的恢复策略与可观测事件，支持快速定位问题。
+定义 V2 点对点通信下的故障恢复与可观测策略，支持快速定位问题。
 
 ## 故障分类
 
-- 主机故障：主机下线、主机脑裂、主机不可达。
-- 网络故障：链路抖动、连接超时、ACK 超时。
-- 状态故障：成员 `term` 过期、路由表脏数据、规则版本漂移。
+- 发现故障：`LanDiscovery` UDP 广播丢包、局域网隔离、设备信息过期。
+- 连接故障：`DeviceConnection` TCP 建连失败、链路中断、目标不可达。
+- 消息故障：消息发送失败、载荷解析失败、重复包。
 - 执行故障：插件不存在、动作超时、执行器异常。
 
 ## 恢复流程
 
-## 主机失效恢复
+## 设备下线恢复
 
-1. 主机主动下线时先广播 `host.retire`；异常下线时由成员被动检测失联。
-2. 启动选举并确认新主机。
-3. 成员切换主机并重建会话。
-4. 新主机恢复路由与权威同步。
-5. 挂起请求执行补偿或失败回执。
+1. 设备主动退出前广播下线通知。
+2. 其他设备收到 `deviceLost` 后移除 peer。
+3. 对该 peer 的新发送请求快速失败。
+4. 若后续重新发现设备，则自动恢复到可连接状态。
 
-## 会话恢复
+## 消息发送恢复
 
-- 优先恢复主机会话，后恢复成员间业务通道。
-- 恢复期间暂停新业务写入，防止状态漂移。
-- 恢复完成后触发增量同步并解除写保护。
-- 成员主动下线时，先通知主机；主机再广播成员下线事件，成员侧同步更新路由可达性。
+- `sendToDevice` 失败时返回错误，不做强制全局重试。
+- 业务层可按场景进行幂等重试（基于 `messageId`）。
+- `broadcast` 对单个目标失败不应阻塞其他目标发送。
 
 ## 可观测事件
 
-- 连接事件：`session.opened`、`session.closed`、`session.reconnect.start`、`session.reconnect.success`
-- 主机事件：`host.retire`、`host.heartbeat.timeout`、`host.election.start`、`host.election.win`、`host.failover.complete`
-- 成员状态事件：`host.member.offline`
-- 路由事件：`relay.request.in`、`relay.forwarded`、`relay.result.out`
-- 同步事件：`plugin.sync.start`、`plugin.sync.success`、`plugin.sync.failed`
+- 发现事件：`transport.peer.discovered`、`transport.peer.lost`
+- 连接事件：`transport.session.opened`、`transport.session.closed`
+- 消息事件：`transport.message.received`、`transport.message.send.failed`
 - 错误事件：`transport.error`、`runtime.error`
 
 ## 指标建议
 
-- 主机切换耗时（P50/P95/P99）
-- 选举成功率
-- 会话重连成功率
-- 消息重试率与最终失败率
-- 同步一致性失败率（插件/规则）
+- 设备发现耗时（P50/P95/P99）
+- 设备在线率（基于最近发现窗口）
+- 单播成功率与失败率
+- 广播覆盖率（成功目标数 / 可见目标数）
+- 消息重复率（按 `messageId` 去重统计）
 
 ## 排障最小信息集
 
 - `clusterId`
 - `nodeId`
-- `sessionId`
+- `deviceId`
 - `messageId`
-- `term`
-- `epoch`
 - `errorCode`
 
 ## 告警建议
 
-- 连续选举失败超过阈值触发高优先级告警。
-- 主机切换耗时超阈值触发性能告警。
-- 同步一致性异常持续升高触发配置风险告警。
+- 单播失败率连续超阈值触发高优先级告警。
+- 广播覆盖率持续偏低触发网络质量告警。
+- `deviceLost` 异常突增触发稳定性告警。

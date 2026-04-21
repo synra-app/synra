@@ -65,7 +65,6 @@ public class LanDiscoveryPluginPlugin: CAPPlugin, CAPBridgedPlugin {
         result["devices"] = probeResult["devices"]
         notifyListeners("scanStateChanged", data: [
             "state": result["state"] as? String ?? "scanning",
-            "startedAt": result["startedAt"] as Any,
         ])
         if let devices = result["devices"] as? [[String: Any]] {
             for device in devices {

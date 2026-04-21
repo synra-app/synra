@@ -1,7 +1,5 @@
 import { randomUUID } from 'node:crypto'
 import type {
-  DeviceDiscoveryProbeConnectableOptions,
-  DeviceDiscoveryProbeConnectableResult,
   DeviceDiscoveryStartOptions,
   DeviceDiscoveryStartResult
 } from '../../../../shared/protocol/types'
@@ -9,7 +7,6 @@ import {
   DEFAULT_DISCOVERY_TIMEOUT_MS,
   DEFAULT_PROBE_CONCURRENCY,
   DEFAULT_PROBE_TIMEOUT_MS,
-  DEFAULT_SCAN_WINDOW_MS,
   DEFAULT_TCP_PORT
 } from '../core/constants'
 import { collectLocalIpSet } from '../core/network'
@@ -22,10 +19,7 @@ type DiscoveryState = 'idle' | 'scanning'
 export interface DiscoveryOrchestrator {
   start(options?: DeviceDiscoveryStartOptions): Promise<DeviceDiscoveryStartResult>
   stop(): Promise<{ success: true }>
-  list(): Promise<{ state: DiscoveryState; startedAt?: number; scanWindowMs: number }>
-  probeConnectable(
-    options: DeviceDiscoveryProbeConnectableOptions | undefined
-  ): Promise<DeviceDiscoveryProbeConnectableResult>
+  list(): Promise<{ state: DiscoveryState }>
 }
 
 type DiscoveryOrchestratorOptions = {
@@ -38,8 +32,6 @@ export function createDiscoveryOrchestrator(
   options: DiscoveryOrchestratorOptions
 ): DiscoveryOrchestrator {
   let state: DiscoveryState = 'idle'
-  let startedAt: number | undefined
-  let scanWindowMs = DEFAULT_SCAN_WINDOW_MS
   let localIpSetCache = collectLocalIpSet(false)
 
   const refreshLocalIpSet = (includeLoopback: boolean) => {
@@ -53,9 +45,7 @@ export function createDiscoveryOrchestrator(
       if (startOptions.reset !== false) {
         options.registry.reset()
       }
-      startedAt = Date.now()
       state = 'scanning'
-      scanWindowMs = startOptions.scanWindowMs ?? DEFAULT_SCAN_WINDOW_MS
       const timeoutMs =
         startOptions.discoveryTimeoutMs && startOptions.discoveryTimeoutMs > 0
           ? startOptions.discoveryTimeoutMs
@@ -96,8 +86,6 @@ export function createDiscoveryOrchestrator(
       return {
         requestId: randomUUID(),
         state,
-        startedAt,
-        scanWindowMs,
         devices: options.registry.list()
       }
     },
@@ -108,29 +96,7 @@ export function createDiscoveryOrchestrator(
     async list() {
       refreshLocalIpSet(false)
       return {
-        state,
-        startedAt,
-        scanWindowMs
-      }
-    },
-    async probeConnectable(probeOptions) {
-      const port = probeOptions?.port ?? DEFAULT_TCP_PORT
-      const timeoutMs = probeOptions?.timeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS
-      const checkedAt = Date.now()
-      const probed = await probeDevices(options.registry.list(), {
-        localDeviceId: options.resolveLocalDeviceUuid(),
-        port,
-        timeoutMs,
-        concurrency: DEFAULT_PROBE_CONCURRENCY
-      })
-      options.registry.reset()
-      options.registry.merge(probed)
-      refreshLocalIpSet(false)
-      return {
-        checkedAt,
-        port,
-        timeoutMs,
-        devices: options.registry.list()
+        state
       }
     }
   }

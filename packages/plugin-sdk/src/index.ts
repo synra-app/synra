@@ -1,9 +1,4 @@
-import type {
-  SynraActionReceipt,
-  SynraActionRequest,
-  SynraCrossDeviceMessage,
-  SynraMessageType
-} from '@synra/protocol'
+import type { SynraActionReceipt, SynraActionRequest } from '@synra/protocol'
 
 export type ShareInputType = 'text' | 'url' | 'file'
 
@@ -26,7 +21,6 @@ export type PluginAction = SynraActionRequest & {
 
 export type ExecuteContext = {
   deviceId: string
-  sessionId: string
   traceId: string
 }
 
@@ -93,28 +87,6 @@ function normalizeManifestIcon(icon: string | undefined): string | undefined {
 export abstract class SynraPlugin {
   onPluginEnter(): void | Promise<void> {}
   onPluginExit(): void | Promise<void> {}
-}
-
-export type HostCapabilityPort = {
-  sendCrossDeviceMessage<TType extends SynraMessageType>(
-    message: SynraCrossDeviceMessage<TType>
-  ): Promise<void>
-  subscribeCrossDeviceMessage<TType extends SynraMessageType>(
-    type: TType,
-    handler: (message: SynraCrossDeviceMessage<TType>) => void | Promise<void>
-  ): () => void | Promise<void>
-}
-
-export function toActionSelectedMessage(
-  input: Omit<SynraCrossDeviceMessage<'action.selected'>, 'type' | 'payload'> & {
-    payload: PluginAction
-  }
-): SynraCrossDeviceMessage<'action.selected'> {
-  return {
-    ...input,
-    type: 'action.selected',
-    payload: input.payload
-  }
 }
 
 export function parsePluginIdFromPackageName(packageName: string): string | null {

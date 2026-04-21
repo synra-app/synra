@@ -10,14 +10,12 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./connection": "./src/connection/index.ts",
     "./package.json": "./package.json"
   },
   "publishConfig": {
     "access": "public",
     "exports": {
       ".": "./dist/index.mjs",
-      "./connection": "./dist/connection/index.mjs",
       "./package.json": "./package.json"
     }
   },
