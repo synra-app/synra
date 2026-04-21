@@ -1081,6 +1081,7 @@ export function createDeviceDiscoveryService(
     port: number,
     timeoutMs: number
   ): Promise<DiscoveredDevice> {
+    const localDeviceUuid = getLocalDeviceUuid()
     return new Promise<DiscoveredDevice>((resolve) => {
       const socket = new Socket()
       const decoder = new FrameDecoder()
@@ -1129,6 +1130,10 @@ export function createDeviceDiscoveryService(
                   ? helloAckPayload.displayName.trim()
                   : ''
               if (remoteId.length > 0) {
+                if (remoteId === localDeviceUuid) {
+                  finish(false, 'SELF_DEVICE')
+                  continue
+                }
                 const friendlyName =
                   remoteDisplay.length > 0
                     ? remoteDisplay
@@ -1219,6 +1224,7 @@ export function createDeviceDiscoveryService(
         options.discoveryTimeoutMs && options.discoveryTimeoutMs > 0
           ? options.discoveryTimeoutMs
           : DEFAULT_DISCOVERY_TIMEOUT_MS
+      const localIpSet = collectLocalIpSet(Boolean(options.includeLoopback))
 
       const reset = options.reset !== false
       if (reset) {
@@ -1238,8 +1244,12 @@ export function createDeviceDiscoveryService(
           }))
         )
       }
-      if (autoDiscoveredDevices.length === 0 && shouldIncludeUdpFallback) {
-        autoDiscoveredDevices.push(...(await discoverViaUdp(discoveryTimeoutMs)))
+      const mdnsNonSelfCount = autoDiscoveredDevices.filter(
+        (device) => !localIpSet.has(device.ipAddress)
+      ).length
+      if (shouldIncludeUdpFallback && mdnsNonSelfCount === 0) {
+        const udpDiscovered = await discoverViaUdp(discoveryTimeoutMs)
+        autoDiscoveredDevices.push(...udpDiscovered)
       }
       mergeDevices(state.devices, autoDiscoveredDevices)
 
@@ -1258,14 +1268,15 @@ export function createDeviceDiscoveryService(
       for (const device of probeResult) {
         upsertDiscoveredDeviceAfterProbe(state.devices, device)
       }
-      pruneSelfDevices(state.devices, collectLocalIpSet(Boolean(options.includeLoopback)))
+      pruneSelfDevices(state.devices, localIpSet)
+      const finalDevices = [...state.devices.values()]
 
       return {
         requestId: randomUUID(),
         state: state.state,
         startedAt: state.startedAt,
         scanWindowMs: state.scanWindowMs,
-        devices: [...state.devices.values()]
+        devices: finalDevices
       }
     },
     async stopDiscovery(): Promise<{ success: true }> {
