@@ -1,5 +1,18 @@
 @import '@unocss/reset/tailwind-compat.css';
 
+// App-like touch: no double-tap zoom gesture; stable text sizing on WebKit.
+html {
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+}
+
+// iOS avoids auto-zoom on focus when control font is at least 16px.
+input,
+textarea,
+select {
+  font-size: max(16px, 1em);
+}
+
 :root {
   color-scheme: dark;
   --app-bg-start: #060913;

@@ -19,7 +19,9 @@ export default defineConfig({
     trailingComma: 'none'
   },
   staged: {
-    'apps/**/src/**/*.{ts,vue,scss}': ['vp fmt', 'vp lint --fix', 'vp check --fix'],
+    // vp lint only targets JS/TS/Vue; SCSS would yield "No files found" and fail the hook.
+    'apps/**/src/**/*.{ts,vue}': ['vp fmt', 'vp lint --fix', 'vp check --fix'],
+    'apps/**/src/**/*.scss': ['vp fmt', 'vp check --fix'],
     'packages/**/*.{ts,vue}': ['vp fmt', 'vp lint --fix', 'vp check --fix']
   },
   run: {
