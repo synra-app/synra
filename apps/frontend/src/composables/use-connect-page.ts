@@ -42,8 +42,13 @@ export function useConnectPage() {
   const statusLabel = computed(() => (scanState.value === 'scanning' ? 'Scanning' : 'Idle'))
   const connectableDevices = computed(() =>
     [...devices.value]
-      .filter((device) => typeof device.ipAddress === 'string' && device.ipAddress.length > 0)
-      .sort((left, right) => Number(Boolean(right.connectable)) - Number(Boolean(left.connectable)))
+      .filter(
+        (device) =>
+          typeof device.ipAddress === 'string' &&
+          device.ipAddress.length > 0 &&
+          Boolean(device.connectable)
+      )
+      .sort((left, right) => right.lastSeenAt - left.lastSeenAt)
   )
   const connectedDevice = computed(() => {
     if (sessionState.value.state !== 'open' || !sessionState.value.deviceId) {

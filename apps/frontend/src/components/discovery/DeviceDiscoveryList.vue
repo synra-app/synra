@@ -30,19 +30,11 @@ const emit = defineEmits<{
             <p class="text-muted-4">
               Source: {{ device.source }} | Last Seen: {{ device.lastSeenAt }}
             </p>
-            <p class="text-xs" :class="device.connectable ? 'text-success-4' : 'text-warning-4'">
-              Connectable:
-              {{
-                device.connectable
-                  ? 'yes'
-                  : `no${device.connectCheckError ? ` (${device.connectCheckError})` : ''}`
-              }}
-            </p>
           </div>
           <AppButton
             v-if="!connectedDeviceIds.includes(device.deviceId)"
             variant="solid"
-            :disabled="loading || !device.connectable"
+            :disabled="loading"
             @click="emit('connect', device.deviceId)"
           >
             Connect
