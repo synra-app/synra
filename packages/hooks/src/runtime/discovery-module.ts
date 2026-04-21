@@ -31,6 +31,15 @@ export function createDiscoveryModule(options: {
       error.value = null
     } catch (unknownError) {
       error.value = unknownToErrorMessage(unknownError, 'Failed to load devices.')
+      return
+    }
+
+    try {
+      const probeResult = await adapter.probeConnectable(32100, 1500)
+      devices.value = sortDevices(probeResult.devices)
+      error.value = null
+    } catch (unknownError) {
+      error.value = unknownToErrorMessage(unknownError, 'Failed to probe device connectability.')
     }
   }
 
@@ -64,7 +73,6 @@ export function createDiscoveryModule(options: {
       startedAt.value = result.startedAt
       scanWindowMs.value = result.scanWindowMs
       devices.value = sortDevices(result.devices)
-      await probeConnectable()
       error.value = null
     } catch (unknownError) {
       error.value = unknownToErrorMessage(unknownError, 'Failed to start discovery.')

@@ -48,6 +48,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @CapacitorPlugin(name = "LanDiscovery")
 public class LanDiscoveryPluginPlugin extends Plugin {
@@ -69,6 +70,7 @@ public class LanDiscoveryPluginPlugin extends Plugin {
 
     private final LanDiscoveryPlugin implementation = new LanDiscoveryPlugin();
     private DatagramSocket udpResponderSocket;
+    private final AtomicBoolean udpResponderScheduled = new AtomicBoolean(false);
     private ExecutorService discoveryExecutor;
     private ExecutorService tcpServerExecutor;
     private ExecutorService tcpClientExecutor;
@@ -84,13 +86,14 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         this.discoveryExecutor = Executors.newSingleThreadExecutor();
         this.tcpServerExecutor = Executors.newSingleThreadExecutor();
         this.tcpClientExecutor = Executors.newCachedThreadPool();
-        startUdpDiscoveryResponder();
-        registerMdnsService();
-        startTcpServer();
     }
 
     @PluginMethod
     public void startDiscovery(PluginCall call) {
+        startUdpDiscoveryResponder();
+        registerMdnsService();
+        startTcpServer();
+
         boolean includeLoopback = call.getBoolean("includeLoopback", false);
         boolean enableProbeFallback = call.getBoolean("enableProbeFallback", true);
         String discoveryMode = call.getString("discoveryMode", "hybrid");
@@ -250,6 +253,9 @@ public class LanDiscoveryPluginPlugin extends Plugin {
     @PluginMethod
     public void stopDiscovery(PluginCall call) {
         JSObject result = implementation.stopDiscovery();
+        unregisterMdnsService();
+        stopUdpDiscoveryResponder();
+        stopTcpServer();
         JSObject payload = new JSObject();
         payload.put("state", "idle");
         notifyListeners("scanStateChanged", payload);
@@ -459,6 +465,9 @@ public class LanDiscoveryPluginPlugin extends Plugin {
     }
 
     private void startUdpDiscoveryResponder() {
+        if (!udpResponderScheduled.compareAndSet(false, true)) {
+            return;
+        }
         ExecutorService responderExecutor = discoveryExecutor;
         if (responderExecutor == null) {
             responderExecutor = Executors.newSingleThreadExecutor();
@@ -493,6 +502,7 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                 }
             } catch (Exception ignored) {
                 Log.w(TAG, "Failed to start UDP discovery responder: " + ignored.getMessage());
+                udpResponderScheduled.set(false);
             }
         });
     }
@@ -503,10 +513,15 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             Log.i(TAG, "UDP discovery responder stopped.");
         }
         udpResponderSocket = null;
+        udpResponderScheduled.set(false);
     }
 
     @SuppressLint("MissingPermission")
     private void registerMdnsService() {
+        if (mdnsRegistrationListener != null) {
+            Log.i(TAG, "mDNS registration already active.");
+            return;
+        }
         Context context = getContext();
         if (context == null) {
             return;
@@ -864,6 +879,10 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                 ackPayload == null ? null : ackPayload.optString("sourceDeviceId", null);
             if (remote != null && remote.isBlank()) {
                 remote = null;
+            }
+            String localUuid = getOrCreateLocalDeviceUuid();
+            if (remote != null && remote.equals(localUuid)) {
+                return new ProbeOutcome(false, "SELF_DEVICE", null);
             }
             return new ProbeOutcome(true, null, remote);
         } catch (Exception error) {

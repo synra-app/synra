@@ -33,7 +33,6 @@ import Darwin
 
     public override init() {
         super.init()
-        startBackgroundDiscoveryServices()
     }
 
     deinit {
@@ -56,6 +55,8 @@ import Darwin
             devices.removeAll()
         }
 
+        startBackgroundDiscoveryServices()
+
         state = "scanning"
         startedAt = now()
         self.scanWindowMs = scanWindowMs?.intValue ?? defaultScanWindowMs
@@ -68,8 +69,6 @@ import Darwin
         _ = enableProbeFallback
         _ = subnetCidrs
         _ = maxProbeHosts
-
-        let interfaceDevices = collectInterfaceDevices(includeLoopback: includeLoopback)
 
         var discoveredTargets: [String] = []
         if includeMdns {
@@ -87,7 +86,7 @@ import Darwin
         if includeManual {
             mergeDevices(collectManualDevices(manualTargets))
         }
-        pruneSelfDevices(interfaceDevices)
+        pruneSelfDevices(scanIncludeLoopback: includeLoopback)
 
         var result = listDevices()
         result["requestId"] = UUID().uuidString
@@ -95,6 +94,7 @@ import Darwin
     }
 
     @objc public func stopDiscovery() -> [String: Any] {
+        stopBackgroundDiscoveryServices()
         state = "idle"
         return ["success": true]
     }
@@ -212,8 +212,8 @@ import Darwin
         }
     }
 
-    private func pruneSelfDevices(_ interfaceDevices: [DeviceRecord]) {
-        let localIps = Set(interfaceDevices.map(\.ipAddress))
+    private func pruneSelfDevices(scanIncludeLoopback: Bool) {
+        let localIps = Set(collectInterfaceDevices(includeLoopback: scanIncludeLoopback).map(\.ipAddress))
         guard !localIps.isEmpty else {
             return
         }
@@ -993,11 +993,17 @@ import Darwin
                         if let frame, frame["type"] as? String == "helloAck", frame["appId"] as? String == "synra" {
                             let payload = frame["payload"] as? [String: Any]
                             let remote = payload?["sourceDeviceId"] as? String
-                            outcome = ProbeOutcome(
-                                connectable: true,
-                                error: nil,
-                                remoteDeviceId: (remote?.isEmpty == false) ? remote : nil
-                            )
+                            let trimmedRemote = remote?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                            let localId = self.localDeviceUuid()
+                            if !trimmedRemote.isEmpty, trimmedRemote == localId {
+                                outcome = ProbeOutcome(connectable: false, error: "SELF_DEVICE", remoteDeviceId: nil)
+                            } else {
+                                outcome = ProbeOutcome(
+                                    connectable: true,
+                                    error: nil,
+                                    remoteDeviceId: trimmedRemote.isEmpty ? nil : trimmedRemote
+                                )
+                            }
                         } else {
                             outcome = ProbeOutcome(connectable: false, error: "HELLO_ACK_INVALID", remoteDeviceId: nil)
                         }
