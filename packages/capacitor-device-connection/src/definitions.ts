@@ -19,6 +19,7 @@ export type SessionSnapshot = {
   host?: string
   port?: number
   state: SessionState
+  direction?: 'inbound' | 'outbound'
   transport: ConnectionTransport
   lastError?: string
   openedAt?: number

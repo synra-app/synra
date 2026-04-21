@@ -182,6 +182,7 @@ export type DeviceSessionSnapshot = {
   host?: string
   port?: number
   state: DeviceSessionState
+  direction?: 'inbound' | 'outbound'
   transport?: ConnectionTransport
   lastError?: string
   openedAt?: number
