@@ -2,6 +2,7 @@ package com.synra.plugins.landiscovery;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.net.nsd.NsdManager;
 import android.net.nsd.NsdServiceInfo;
@@ -28,6 +29,7 @@ import java.net.DatagramSocket;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.InterfaceAddress;
 import java.net.NetworkInterface;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -49,6 +51,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 @CapacitorPlugin(name = "LanDiscovery")
 public class LanDiscoveryPluginPlugin extends Plugin {
@@ -79,6 +83,7 @@ public class LanDiscoveryPluginPlugin extends Plugin {
     private final Set<Socket> inboundTcpSockets = Collections.synchronizedSet(new HashSet<>());
     private final Map<String, Socket> inboundSessionSockets = new ConcurrentHashMap<>();
     private NsdManager.RegistrationListener mdnsRegistrationListener;
+    private volatile String registeredMdnsServiceName;
 
     @Override
     public void load() {
@@ -106,32 +111,43 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         Integer maxProbeHosts = call.getInt("maxProbeHosts", null);
         List<String> manualTargets = toStringList(call.getArray("manualTargets", new JSArray()));
         List<String> subnetCidrs = toStringList(call.getArray("subnetCidrs", new JSArray()));
-        List<String> discoveryTargets = collectAutoDiscoveryTargets(
-            discoveryMode,
-            mdnsServiceType,
-            discoveryTimeoutMs
+        Log.i(
+            TAG,
+            "startDiscovery called. mode=" + discoveryMode
+                + ", includeLoopback=" + includeLoopback
+                + ", reset=" + reset
+                + ", timeoutMs=" + timeoutMs
+                + ", discoveryTimeoutMs=" + discoveryTimeoutMs
+                + ", mdnsType=" + mdnsServiceType
+                + ", manualTargets=" + summarizeList(manualTargets)
         );
-        Set<String> localAddresses = collectLocalIpv4Addresses(includeLoopback);
-        List<String> combinedTargets = new ArrayList<>(manualTargets);
-        for (String target : discoveryTargets) {
-            if (localAddresses.contains(target)) {
-                continue;
-            }
-            if (!combinedTargets.contains(target)) {
-                combinedTargets.add(target);
-            }
-        }
-        String mode = discoveryMode == null ? "hybrid" : discoveryMode;
-        if (combinedTargets.isEmpty() && "hybrid".equals(mode)) {
-            List<String> udpFallbackTargets = discoverByUdp(discoveryTimeoutMs);
-            for (String target : udpFallbackTargets) {
+        WifiManager.MulticastLock discoveryMulticastLock = acquireDiscoveryMulticastLock();
+        List<String> combinedTargets;
+        try {
+            List<String> discoveryTargets = collectAutoDiscoveryTargets(
+                discoveryMode,
+                mdnsServiceType,
+                discoveryTimeoutMs
+            );
+            Set<String> localAddresses = collectLocalIpv4Addresses(includeLoopback);
+            Log.i(TAG, "local IPv4 addresses=" + summarizeCollection(localAddresses));
+            combinedTargets = new ArrayList<>(manualTargets);
+            for (String target : discoveryTargets) {
                 if (localAddresses.contains(target)) {
+                    Log.v(TAG, "drop discovered self IP target=" + target);
                     continue;
                 }
                 if (!combinedTargets.contains(target)) {
                     combinedTargets.add(target);
                 }
             }
+            Log.i(
+                TAG,
+                "discoveryTargets=" + summarizeList(discoveryTargets)
+                    + ", combinedTargets(after-local-filter)=" + summarizeList(combinedTargets)
+            );
+        } finally {
+            releaseDiscoveryMulticastLock(discoveryMulticastLock);
         }
 
         JSObject result = implementation.startDiscovery(
@@ -143,6 +159,13 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             maxProbeHosts,
             reset,
             scanWindowMs
+        );
+        JSONArray listedBeforeProbe = result.optJSONArray("devices");
+        Log.i(
+            TAG,
+            "implementation.startDiscovery returned "
+                + (listedBeforeProbe == null ? 0 : listedBeforeProbe.length())
+                + " devices before probe."
         );
         applyProbeToDevices(result, port, timeoutMs);
 
@@ -302,68 +325,115 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         boolean shouldRunMdns = "hybrid".equals(mode) || "mdns".equals(mode);
         boolean shouldRunUdpFallback = "hybrid".equals(mode);
         Set<String> discovered = new LinkedHashSet<>();
+        Log.i(
+            TAG,
+            "collectAutoDiscoveryTargets start. mode=" + mode
+                + ", shouldRunMdns=" + shouldRunMdns
+                + ", shouldRunUdp=" + shouldRunUdpFallback
+        );
         if (shouldRunMdns) {
-            discovered.addAll(discoverByMdns(mdnsServiceType, timeoutMs));
+            List<String> mdnsTargets = discoverByMdns(mdnsServiceType, timeoutMs);
+            discovered.addAll(mdnsTargets);
+            Log.i(TAG, "mDNS discovered " + mdnsTargets.size() + " targets: " + summarizeList(mdnsTargets));
         }
-        if (discovered.isEmpty() && shouldRunUdpFallback) {
-            discovered.addAll(discoverByUdp(timeoutMs));
+        if (shouldRunUdpFallback) {
+            List<String> udpTargets = discoverByUdp(timeoutMs);
+            discovered.addAll(udpTargets);
+            Log.i(TAG, "UDP discovered " + udpTargets.size() + " targets: " + summarizeList(udpTargets));
         }
-        return new ArrayList<>(discovered);
+        List<String> merged = new ArrayList<>(discovered);
+        Log.i(TAG, "collectAutoDiscoveryTargets merged targets: " + summarizeList(merged));
+        return merged;
     }
 
     @SuppressLint("MissingPermission")
     private List<String> discoverByMdns(String serviceType, int timeoutMs) {
         Context context = getContext();
         if (context == null) {
+            Log.w(TAG, "discoverByMdns skipped: context is null.");
             return List.of();
         }
         Object service = context.getSystemService(Context.NSD_SERVICE);
         if (!(service instanceof NsdManager nsdManager)) {
+            Log.w(TAG, "discoverByMdns skipped: NSD manager unavailable.");
             return List.of();
         }
         String resolvedType = normalizeMdnsType(serviceType);
+        Log.i(TAG, "discoverByMdns start. serviceType=" + resolvedType + ", timeoutMs=" + timeoutMs);
         Set<String> discovered = new LinkedHashSet<>();
         CountDownLatch latch = new CountDownLatch(1);
+        AtomicInteger pendingResolves = new AtomicInteger(0);
+        AtomicLong lastResolveAt = new AtomicLong(System.currentTimeMillis());
         NsdManager.DiscoveryListener listener = new NsdManager.DiscoveryListener() {
             @Override
             public void onStartDiscoveryFailed(String serviceType, int errorCode) {
+                Log.w(TAG, "mDNS onStartDiscoveryFailed. serviceType=" + serviceType + ", errorCode=" + errorCode);
                 latch.countDown();
             }
 
             @Override
             public void onStopDiscoveryFailed(String serviceType, int errorCode) {
+                Log.w(TAG, "mDNS onStopDiscoveryFailed. serviceType=" + serviceType + ", errorCode=" + errorCode);
                 latch.countDown();
             }
 
             @Override
             public void onDiscoveryStarted(String serviceType) {
-                // noop
+                Log.i(TAG, "mDNS discovery started. serviceType=" + serviceType);
             }
 
             @Override
             public void onDiscoveryStopped(String serviceType) {
+                Log.i(TAG, "mDNS discovery stopped callback. serviceType=" + serviceType);
                 latch.countDown();
             }
 
             @Override
             public void onServiceFound(NsdServiceInfo serviceInfo) {
+                if (registeredMdnsServiceName != null
+                    && registeredMdnsServiceName.equals(serviceInfo.getServiceName())) {
+                    Log.v(TAG, "mDNS skip self service: " + serviceInfo.getServiceName());
+                    return;
+                }
+                Log.v(
+                    TAG,
+                    "mDNS service found. name=" + serviceInfo.getServiceName()
+                        + ", type=" + serviceInfo.getServiceType()
+                );
+                pendingResolves.incrementAndGet();
                 nsdManager.resolveService(serviceInfo, new NsdManager.ResolveListener() {
                     @Override
                     public void onResolveFailed(NsdServiceInfo serviceInfo, int errorCode) {
-                        // noop
+                        pendingResolves.decrementAndGet();
+                        lastResolveAt.set(System.currentTimeMillis());
+                        Log.v(
+                            TAG,
+                            "mDNS resolve failed. name=" + serviceInfo.getServiceName()
+                                + ", errorCode=" + errorCode
+                        );
                     }
 
                     @Override
                     public void onServiceResolved(NsdServiceInfo serviceInfo) {
-                        InetAddress host = serviceInfo.getHost();
-                        if (host == null) {
-                            return;
-                        }
-                        String address = host.getHostAddress();
-                        if (address != null && !address.isBlank() && !address.contains(":")) {
-                            synchronized (discovered) {
-                                discovered.add(address);
+                        try {
+                            InetAddress host = serviceInfo.getHost();
+                            if (host == null) {
+                                return;
                             }
+                            String address = host.getHostAddress();
+                            if (address != null && !address.isBlank() && !address.contains(":")) {
+                                synchronized (discovered) {
+                                    discovered.add(address);
+                                }
+                                Log.v(
+                                    TAG,
+                                    "mDNS resolved IPv4. name=" + serviceInfo.getServiceName()
+                                        + ", host=" + address
+                                );
+                            }
+                        } finally {
+                            pendingResolves.decrementAndGet();
+                            lastResolveAt.set(System.currentTimeMillis());
                         }
                     }
                 });
@@ -377,17 +447,35 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         try {
             nsdManager.discoverServices(resolvedType, NsdManager.PROTOCOL_DNS_SD, listener);
             latch.await(Math.max(timeoutMs, 200), TimeUnit.MILLISECONDS);
+            long resolveGraceMs = Math.max(500L, Math.min(2500L, timeoutMs + 500L));
+            long settleDeadline = System.currentTimeMillis() + resolveGraceMs;
+            while (System.currentTimeMillis() < settleDeadline) {
+                if (pendingResolves.get() <= 0) {
+                    break;
+                }
+                if (System.currentTimeMillis() - lastResolveAt.get() > 350L) {
+                    break;
+                }
+                Thread.sleep(50L);
+            }
+            Log.i(
+                TAG,
+                "discoverByMdns settle finished. pendingResolves=" + pendingResolves.get()
+                    + ", resolveGraceMs=" + resolveGraceMs
+            );
         } catch (Exception ignored) {
-            // noop
+            Log.w(TAG, "discoverByMdns failed: " + ignored.getMessage());
         } finally {
             try {
                 nsdManager.stopServiceDiscovery(listener);
             } catch (Exception ignored) {
-                // noop
+                Log.v(TAG, "discoverByMdns stopServiceDiscovery ignored: " + ignored.getMessage());
             }
         }
         synchronized (discovered) {
-            return new ArrayList<>(discovered);
+            List<String> result = new ArrayList<>(discovered);
+            Log.i(TAG, "discoverByMdns done. targets=" + summarizeList(result));
+            return result;
         }
     }
 
@@ -431,37 +519,127 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             socket.setBroadcast(true);
             socket.setSoTimeout(200);
             byte[] request = UDP_DISCOVERY_MAGIC.getBytes(StandardCharsets.UTF_8);
-            DatagramPacket packet = new DatagramPacket(
-                request,
-                request.length,
-                InetAddress.getByName("255.255.255.255"),
-                UDP_DISCOVERY_PORT
+            List<InetAddress> destinations = collectUdpBroadcastDestinations();
+            Log.i(
+                TAG,
+                "discoverByUdp start. timeoutMs=" + timeoutMs
+                    + ", destinations=" + summarizeInetAddresses(destinations)
             );
-            socket.send(packet);
+            for (InetAddress destination : destinations) {
+                DatagramPacket packet = new DatagramPacket(
+                    request,
+                    request.length,
+                    destination,
+                    UDP_DISCOVERY_PORT
+                );
+                socket.send(packet);
+            }
 
             long deadline = System.currentTimeMillis() + Math.max(timeoutMs, 200);
             byte[] buffer = new byte[512];
+            int rawReceiveCount = 0;
             while (System.currentTimeMillis() < deadline) {
                 DatagramPacket response = new DatagramPacket(buffer, buffer.length);
                 try {
                     socket.receive(response);
+                    rawReceiveCount += 1;
                     String payloadRaw = new String(response.getData(), 0, response.getLength(), StandardCharsets.UTF_8);
                     JSONObject payload = new JSONObject(payloadRaw);
                     if (!APP_ID.equals(payload.optString("appId"))) {
                         continue;
                     }
                     String address = response.getAddress().getHostAddress();
-                    if (address != null && !address.isBlank()) {
+                    if (address != null && !address.isBlank() && !address.contains(":")) {
                         discovered.add(address);
                     }
                 } catch (Exception ignored) {
                     // timeout or malformed payload
                 }
             }
+            Log.i(
+                TAG,
+                "discoverByUdp done. rawReceiveCount=" + rawReceiveCount
+                    + ", discovered=" + summarizeCollection(discovered)
+            );
+        } catch (Exception ignored) {
+            Log.w(TAG, "discoverByUdp failed: " + ignored.getMessage());
+        }
+        return new ArrayList<>(discovered);
+    }
+
+    private List<InetAddress> collectUdpBroadcastDestinations() {
+        LinkedHashSet<InetAddress> destinations = new LinkedHashSet<>();
+        try {
+            destinations.add(InetAddress.getByName("255.255.255.255"));
         } catch (Exception ignored) {
             // noop
         }
-        return new ArrayList<>(discovered);
+        try {
+            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+            if (interfaces == null) {
+                return new ArrayList<>(destinations);
+            }
+            for (NetworkInterface networkInterface : Collections.list(interfaces)) {
+                try {
+                    if (!networkInterface.isUp() || networkInterface.isLoopback()) {
+                        continue;
+                    }
+                } catch (Exception ignored) {
+                    continue;
+                }
+                for (InterfaceAddress interfaceAddress : networkInterface.getInterfaceAddresses()) {
+                    if (interfaceAddress == null) {
+                        continue;
+                    }
+                    InetAddress broadcast = interfaceAddress.getBroadcast();
+                    if (!(broadcast instanceof Inet4Address)) {
+                        continue;
+                    }
+                    String hostAddress = broadcast.getHostAddress();
+                    if (hostAddress == null || hostAddress.isBlank() || hostAddress.startsWith("127.")) {
+                        continue;
+                    }
+                    destinations.add(broadcast);
+                }
+            }
+        } catch (Exception ignored) {
+            // noop
+        }
+        return new ArrayList<>(destinations);
+    }
+
+    private static String summarizeList(List<String> values) {
+        if (values == null || values.isEmpty()) {
+            return "[]";
+        }
+        int size = values.size();
+        if (size <= 8) {
+            return values.toString();
+        }
+        return values.subList(0, 8) + " ... (total=" + size + ")";
+    }
+
+    private static String summarizeCollection(Set<String> values) {
+        if (values == null || values.isEmpty()) {
+            return "[]";
+        }
+        List<String> sorted = new ArrayList<>(values);
+        Collections.sort(sorted);
+        return summarizeList(sorted);
+    }
+
+    private static String summarizeInetAddresses(List<InetAddress> addresses) {
+        if (addresses == null || addresses.isEmpty()) {
+            return "[]";
+        }
+        List<String> values = new ArrayList<>();
+        for (InetAddress address : addresses) {
+            if (address == null) {
+                continue;
+            }
+            values.add(address.getHostAddress());
+        }
+        return summarizeList(values);
     }
 
     private void startUdpDiscoveryResponder() {
@@ -534,6 +712,7 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         info.setServiceName("synra-" + UUID.randomUUID().toString().substring(0, 8));
         info.setServiceType(DEFAULT_MDNS_SERVICE_TYPE);
         info.setPort(DEFAULT_TCP_PORT);
+        registeredMdnsServiceName = info.getServiceName();
         this.mdnsRegistrationListener = new NsdManager.RegistrationListener() {
             @Override
             public void onServiceRegistered(NsdServiceInfo NsdServiceInfo) {
@@ -564,6 +743,7 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             );
         } catch (Exception ignored) {
             this.mdnsRegistrationListener = null;
+            registeredMdnsServiceName = null;
             Log.w(TAG, "mDNS registration failed: " + ignored.getMessage());
         }
     }
@@ -585,6 +765,44 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             Log.w(TAG, "mDNS unregistration failed: " + ignored.getMessage());
         } finally {
             mdnsRegistrationListener = null;
+            registeredMdnsServiceName = null;
+        }
+    }
+
+    private WifiManager.MulticastLock acquireDiscoveryMulticastLock() {
+        Context context = getContext();
+        if (context == null) {
+            Log.w(TAG, "MulticastLock skipped: context is null.");
+            return null;
+        }
+        Object service = context.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+        if (!(service instanceof WifiManager wifiManager)) {
+            Log.w(TAG, "MulticastLock skipped: WIFI_SERVICE unavailable.");
+            return null;
+        }
+        try {
+            WifiManager.MulticastLock lock = wifiManager.createMulticastLock("synra-lan-discovery");
+            lock.setReferenceCounted(false);
+            lock.acquire();
+            Log.i(TAG, "MulticastLock acquired for discovery.");
+            return lock;
+        } catch (Exception error) {
+            Log.w(TAG, "Failed to acquire MulticastLock: " + error.getMessage());
+            return null;
+        }
+    }
+
+    private void releaseDiscoveryMulticastLock(WifiManager.MulticastLock lock) {
+        if (lock == null) {
+            return;
+        }
+        try {
+            if (lock.isHeld()) {
+                lock.release();
+            }
+            Log.i(TAG, "MulticastLock released after discovery.");
+        } catch (Exception error) {
+            Log.w(TAG, "Failed to release MulticastLock: " + error.getMessage());
         }
     }
 

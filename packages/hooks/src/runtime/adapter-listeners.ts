@@ -14,6 +14,10 @@ type SessionOpenedLike = {
   displayName?: string
 }
 
+function normalizeHost(value: string): string {
+  return value.trim().toLowerCase()
+}
+
 function upsertDiscoveredPeerFromSession(
   devices: Ref<DiscoveredDevice[]>,
   event: SessionOpenedLike
@@ -24,6 +28,10 @@ function upsertDiscoveredPeerFromSession(
   if (typeof event.host !== 'string' || event.host.length === 0) {
     return
   }
+  const host = normalizeHost(event.host)
+  if (host.length === 0) {
+    return
+  }
   const now = Date.now()
   const display =
     typeof event.displayName === 'string' && event.displayName.trim().length > 0
@@ -32,14 +40,19 @@ function upsertDiscoveredPeerFromSession(
   const peer: DiscoveredDevice = {
     deviceId: event.deviceId,
     name: display,
-    ipAddress: event.host,
+    ipAddress: host,
     source: 'session',
     connectable: true,
     connectCheckAt: now,
     discoveredAt: now,
     lastSeenAt: now
   }
-  const others = devices.value.filter((device) => device.deviceId !== peer.deviceId)
+  const others = devices.value.filter((device) => {
+    if (device.deviceId === peer.deviceId) {
+      return false
+    }
+    return normalizeHost(device.ipAddress) !== host
+  })
   devices.value = sortDevices([...others, peer])
 }
 
