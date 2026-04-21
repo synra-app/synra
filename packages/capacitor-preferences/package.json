@@ -1,0 +1,74 @@
+{
+  "name": "@synra/capacitor-preferences",
+  "version": "0.0.1",
+  "description": "Lightweight Capacitor key-value preferences (get/set/remove) with Electron support.",
+  "keywords": [
+    "capacitor",
+    "plugin",
+    "preferences"
+  ],
+  "bugs": {
+    "url": "https://github.com/imba97/synra/issues"
+  },
+  "license": "MIT",
+  "author": "imba97",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/imba97/synra.git"
+  },
+  "files": [
+    "android/src/main/",
+    "android/build.gradle",
+    "android/src/test/",
+    "android/src/androidTest/",
+    "dist/",
+    "ios/Sources",
+    "ios/Tests",
+    "Package.swift",
+    "SynraCapacitorPreferences.podspec"
+  ],
+  "type": "module",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": "./dist/index.mjs",
+      "./package.json": "./package.json"
+    }
+  },
+  "scripts": {
+    "clean": "node -e \"require('fs').rmSync('./dist', { recursive: true, force: true, maxRetries: process.platform === 'win32' ? 10 : 0 })\"",
+    "build": "vp pack",
+    "dev": "vp pack --watch",
+    "test": "vp test",
+    "check": "vp check",
+    "prepublishOnly": "vp run build"
+  },
+  "devDependencies": {
+    "@capacitor/android": "catalog:capacitor",
+    "@capacitor/core": "catalog:capacitor",
+    "@capacitor/docgen": "catalog:capacitor",
+    "@capacitor/ios": "catalog:capacitor",
+    "@types/node": "catalog:types",
+    "@typescript/native-preview": "catalog:types",
+    "bumpp": "catalog:release",
+    "esbuild": "catalog:build",
+    "typescript": "catalog:types",
+    "vite-plus": "catalog:vite"
+  },
+  "peerDependencies": {
+    "@capacitor/core": ">=8.0.0"
+  },
+  "capacitor": {
+    "ios": {
+      "src": "ios"
+    },
+    "android": {
+      "src": "android"
+    }
+  }
+}
