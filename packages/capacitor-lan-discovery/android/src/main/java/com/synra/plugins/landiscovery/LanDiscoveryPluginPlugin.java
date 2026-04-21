@@ -6,7 +6,6 @@ import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.net.nsd.NsdManager;
 import android.net.nsd.NsdServiceInfo;
-import android.util.Log;
 import androidx.annotation.NonNull;
 
 import com.getcapacitor.JSArray;
@@ -56,7 +55,6 @@ import java.util.concurrent.atomic.AtomicLong;
 
 @CapacitorPlugin(name = "LanDiscovery")
 public class LanDiscoveryPluginPlugin extends Plugin {
-    private static final String TAG = "SynraLanDiscovery";
     private static final int DEFAULT_TCP_PORT = 32100;
     private static final int DEFAULT_TIMEOUT_MS = 1500;
     private static final int DEFAULT_DISCOVERY_TIMEOUT_MS = 1500;
@@ -91,13 +89,12 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         this.discoveryExecutor = Executors.newSingleThreadExecutor();
         this.tcpServerExecutor = Executors.newSingleThreadExecutor();
         this.tcpClientExecutor = Executors.newCachedThreadPool();
+        ensureDiscoveryTransportsStarted("plugin-load");
     }
 
     @PluginMethod
     public void startDiscovery(PluginCall call) {
-        startUdpDiscoveryResponder();
-        registerMdnsService();
-        startTcpServer();
+        ensureDiscoveryTransportsStarted("startDiscovery");
 
         boolean includeLoopback = call.getBoolean("includeLoopback", false);
         boolean enableProbeFallback = call.getBoolean("enableProbeFallback", true);
@@ -111,16 +108,6 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         Integer maxProbeHosts = call.getInt("maxProbeHosts", null);
         List<String> manualTargets = toStringList(call.getArray("manualTargets", new JSArray()));
         List<String> subnetCidrs = toStringList(call.getArray("subnetCidrs", new JSArray()));
-        Log.i(
-            TAG,
-            "startDiscovery called. mode=" + discoveryMode
-                + ", includeLoopback=" + includeLoopback
-                + ", reset=" + reset
-                + ", timeoutMs=" + timeoutMs
-                + ", discoveryTimeoutMs=" + discoveryTimeoutMs
-                + ", mdnsType=" + mdnsServiceType
-                + ", manualTargets=" + summarizeList(manualTargets)
-        );
         WifiManager.MulticastLock discoveryMulticastLock = acquireDiscoveryMulticastLock();
         List<String> combinedTargets;
         try {
@@ -130,22 +117,15 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                 discoveryTimeoutMs
             );
             Set<String> localAddresses = collectLocalIpv4Addresses(includeLoopback);
-            Log.i(TAG, "local IPv4 addresses=" + summarizeCollection(localAddresses));
             combinedTargets = new ArrayList<>(manualTargets);
             for (String target : discoveryTargets) {
                 if (localAddresses.contains(target)) {
-                    Log.v(TAG, "drop discovered self IP target=" + target);
                     continue;
                 }
                 if (!combinedTargets.contains(target)) {
                     combinedTargets.add(target);
                 }
             }
-            Log.i(
-                TAG,
-                "discoveryTargets=" + summarizeList(discoveryTargets)
-                    + ", combinedTargets(after-local-filter)=" + summarizeList(combinedTargets)
-            );
         } finally {
             releaseDiscoveryMulticastLock(discoveryMulticastLock);
         }
@@ -159,13 +139,6 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             maxProbeHosts,
             reset,
             scanWindowMs
-        );
-        JSONArray listedBeforeProbe = result.optJSONArray("devices");
-        Log.i(
-            TAG,
-            "implementation.startDiscovery returned "
-                + (listedBeforeProbe == null ? 0 : listedBeforeProbe.length())
-                + " devices before probe."
         );
         applyProbeToDevices(result, port, timeoutMs);
 
@@ -190,6 +163,12 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         }
 
         call.resolve(result);
+    }
+
+    private void ensureDiscoveryTransportsStarted(String reason) {
+        startUdpDiscoveryResponder();
+        registerMdnsService();
+        startTcpServer();
     }
 
     @PluginMethod
@@ -325,41 +304,28 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         boolean shouldRunMdns = "hybrid".equals(mode) || "mdns".equals(mode);
         boolean shouldRunUdpFallback = "hybrid".equals(mode);
         Set<String> discovered = new LinkedHashSet<>();
-        Log.i(
-            TAG,
-            "collectAutoDiscoveryTargets start. mode=" + mode
-                + ", shouldRunMdns=" + shouldRunMdns
-                + ", shouldRunUdp=" + shouldRunUdpFallback
-        );
         if (shouldRunMdns) {
             List<String> mdnsTargets = discoverByMdns(mdnsServiceType, timeoutMs);
             discovered.addAll(mdnsTargets);
-            Log.i(TAG, "mDNS discovered " + mdnsTargets.size() + " targets: " + summarizeList(mdnsTargets));
         }
         if (shouldRunUdpFallback) {
             List<String> udpTargets = discoverByUdp(timeoutMs);
             discovered.addAll(udpTargets);
-            Log.i(TAG, "UDP discovered " + udpTargets.size() + " targets: " + summarizeList(udpTargets));
         }
-        List<String> merged = new ArrayList<>(discovered);
-        Log.i(TAG, "collectAutoDiscoveryTargets merged targets: " + summarizeList(merged));
-        return merged;
+        return new ArrayList<>(discovered);
     }
 
     @SuppressLint("MissingPermission")
     private List<String> discoverByMdns(String serviceType, int timeoutMs) {
         Context context = getContext();
         if (context == null) {
-            Log.w(TAG, "discoverByMdns skipped: context is null.");
             return List.of();
         }
         Object service = context.getSystemService(Context.NSD_SERVICE);
         if (!(service instanceof NsdManager nsdManager)) {
-            Log.w(TAG, "discoverByMdns skipped: NSD manager unavailable.");
             return List.of();
         }
         String resolvedType = normalizeMdnsType(serviceType);
-        Log.i(TAG, "discoverByMdns start. serviceType=" + resolvedType + ", timeoutMs=" + timeoutMs);
         Set<String> discovered = new LinkedHashSet<>();
         CountDownLatch latch = new CountDownLatch(1);
         AtomicInteger pendingResolves = new AtomicInteger(0);
@@ -367,24 +333,20 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         NsdManager.DiscoveryListener listener = new NsdManager.DiscoveryListener() {
             @Override
             public void onStartDiscoveryFailed(String serviceType, int errorCode) {
-                Log.w(TAG, "mDNS onStartDiscoveryFailed. serviceType=" + serviceType + ", errorCode=" + errorCode);
                 latch.countDown();
             }
 
             @Override
             public void onStopDiscoveryFailed(String serviceType, int errorCode) {
-                Log.w(TAG, "mDNS onStopDiscoveryFailed. serviceType=" + serviceType + ", errorCode=" + errorCode);
                 latch.countDown();
             }
 
             @Override
             public void onDiscoveryStarted(String serviceType) {
-                Log.i(TAG, "mDNS discovery started. serviceType=" + serviceType);
             }
 
             @Override
             public void onDiscoveryStopped(String serviceType) {
-                Log.i(TAG, "mDNS discovery stopped callback. serviceType=" + serviceType);
                 latch.countDown();
             }
 
@@ -392,25 +354,14 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             public void onServiceFound(NsdServiceInfo serviceInfo) {
                 if (registeredMdnsServiceName != null
                     && registeredMdnsServiceName.equals(serviceInfo.getServiceName())) {
-                    Log.v(TAG, "mDNS skip self service: " + serviceInfo.getServiceName());
                     return;
                 }
-                Log.v(
-                    TAG,
-                    "mDNS service found. name=" + serviceInfo.getServiceName()
-                        + ", type=" + serviceInfo.getServiceType()
-                );
                 pendingResolves.incrementAndGet();
                 nsdManager.resolveService(serviceInfo, new NsdManager.ResolveListener() {
                     @Override
                     public void onResolveFailed(NsdServiceInfo serviceInfo, int errorCode) {
                         pendingResolves.decrementAndGet();
                         lastResolveAt.set(System.currentTimeMillis());
-                        Log.v(
-                            TAG,
-                            "mDNS resolve failed. name=" + serviceInfo.getServiceName()
-                                + ", errorCode=" + errorCode
-                        );
                     }
 
                     @Override
@@ -425,11 +376,6 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                                 synchronized (discovered) {
                                     discovered.add(address);
                                 }
-                                Log.v(
-                                    TAG,
-                                    "mDNS resolved IPv4. name=" + serviceInfo.getServiceName()
-                                        + ", host=" + address
-                                );
                             }
                         } finally {
                             pendingResolves.decrementAndGet();
@@ -458,24 +404,15 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                 }
                 Thread.sleep(50L);
             }
-            Log.i(
-                TAG,
-                "discoverByMdns settle finished. pendingResolves=" + pendingResolves.get()
-                    + ", resolveGraceMs=" + resolveGraceMs
-            );
         } catch (Exception ignored) {
-            Log.w(TAG, "discoverByMdns failed: " + ignored.getMessage());
         } finally {
             try {
                 nsdManager.stopServiceDiscovery(listener);
             } catch (Exception ignored) {
-                Log.v(TAG, "discoverByMdns stopServiceDiscovery ignored: " + ignored.getMessage());
             }
         }
         synchronized (discovered) {
-            List<String> result = new ArrayList<>(discovered);
-            Log.i(TAG, "discoverByMdns done. targets=" + summarizeList(result));
-            return result;
+            return new ArrayList<>(discovered);
         }
     }
 
@@ -520,11 +457,6 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             socket.setSoTimeout(200);
             byte[] request = UDP_DISCOVERY_MAGIC.getBytes(StandardCharsets.UTF_8);
             List<InetAddress> destinations = collectUdpBroadcastDestinations();
-            Log.i(
-                TAG,
-                "discoverByUdp start. timeoutMs=" + timeoutMs
-                    + ", destinations=" + summarizeInetAddresses(destinations)
-            );
             for (InetAddress destination : destinations) {
                 DatagramPacket packet = new DatagramPacket(
                     request,
@@ -537,12 +469,10 @@ public class LanDiscoveryPluginPlugin extends Plugin {
 
             long deadline = System.currentTimeMillis() + Math.max(timeoutMs, 200);
             byte[] buffer = new byte[512];
-            int rawReceiveCount = 0;
             while (System.currentTimeMillis() < deadline) {
                 DatagramPacket response = new DatagramPacket(buffer, buffer.length);
                 try {
                     socket.receive(response);
-                    rawReceiveCount += 1;
                     String payloadRaw = new String(response.getData(), 0, response.getLength(), StandardCharsets.UTF_8);
                     JSONObject payload = new JSONObject(payloadRaw);
                     if (!APP_ID.equals(payload.optString("appId"))) {
@@ -556,13 +486,7 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                     // timeout or malformed payload
                 }
             }
-            Log.i(
-                TAG,
-                "discoverByUdp done. rawReceiveCount=" + rawReceiveCount
-                    + ", discovered=" + summarizeCollection(discovered)
-            );
         } catch (Exception ignored) {
-            Log.w(TAG, "discoverByUdp failed: " + ignored.getMessage());
         }
         return new ArrayList<>(discovered);
     }
@@ -608,40 +532,6 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         return new ArrayList<>(destinations);
     }
 
-    private static String summarizeList(List<String> values) {
-        if (values == null || values.isEmpty()) {
-            return "[]";
-        }
-        int size = values.size();
-        if (size <= 8) {
-            return values.toString();
-        }
-        return values.subList(0, 8) + " ... (total=" + size + ")";
-    }
-
-    private static String summarizeCollection(Set<String> values) {
-        if (values == null || values.isEmpty()) {
-            return "[]";
-        }
-        List<String> sorted = new ArrayList<>(values);
-        Collections.sort(sorted);
-        return summarizeList(sorted);
-    }
-
-    private static String summarizeInetAddresses(List<InetAddress> addresses) {
-        if (addresses == null || addresses.isEmpty()) {
-            return "[]";
-        }
-        List<String> values = new ArrayList<>();
-        for (InetAddress address : addresses) {
-            if (address == null) {
-                continue;
-            }
-            values.add(address.getHostAddress());
-        }
-        return summarizeList(values);
-    }
-
     private void startUdpDiscoveryResponder() {
         if (!udpResponderScheduled.compareAndSet(false, true)) {
             return;
@@ -656,7 +546,6 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                 DatagramSocket socket = new DatagramSocket(UDP_DISCOVERY_PORT);
                 socket.setBroadcast(true);
                 this.udpResponderSocket = socket;
-                Log.i(TAG, "UDP discovery responder started on port " + UDP_DISCOVERY_PORT + ".");
                 byte[] buffer = new byte[256];
                 while (!socket.isClosed()) {
                     DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
@@ -679,7 +568,6 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                     socket.send(responsePacket);
                 }
             } catch (Exception ignored) {
-                Log.w(TAG, "Failed to start UDP discovery responder: " + ignored.getMessage());
                 udpResponderScheduled.set(false);
             }
         });
@@ -688,7 +576,6 @@ public class LanDiscoveryPluginPlugin extends Plugin {
     private void stopUdpDiscoveryResponder() {
         if (udpResponderSocket != null && !udpResponderSocket.isClosed()) {
             udpResponderSocket.close();
-            Log.i(TAG, "UDP discovery responder stopped.");
         }
         udpResponderSocket = null;
         udpResponderScheduled.set(false);
@@ -697,7 +584,6 @@ public class LanDiscoveryPluginPlugin extends Plugin {
     @SuppressLint("MissingPermission")
     private void registerMdnsService() {
         if (mdnsRegistrationListener != null) {
-            Log.i(TAG, "mDNS registration already active.");
             return;
         }
         Context context = getContext();
@@ -736,15 +622,9 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         };
         try {
             nsdManager.registerService(info, NsdManager.PROTOCOL_DNS_SD, mdnsRegistrationListener);
-            Log.i(
-                TAG,
-                "mDNS service registration requested. serviceType=" + DEFAULT_MDNS_SERVICE_TYPE +
-                    ", port=" + DEFAULT_TCP_PORT
-            );
         } catch (Exception ignored) {
             this.mdnsRegistrationListener = null;
             registeredMdnsServiceName = null;
-            Log.w(TAG, "mDNS registration failed: " + ignored.getMessage());
         }
     }
 
@@ -760,9 +640,7 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         }
         try {
             nsdManager.unregisterService(mdnsRegistrationListener);
-            Log.i(TAG, "mDNS service unregistered.");
         } catch (Exception ignored) {
-            Log.w(TAG, "mDNS unregistration failed: " + ignored.getMessage());
         } finally {
             mdnsRegistrationListener = null;
             registeredMdnsServiceName = null;
@@ -772,22 +650,18 @@ public class LanDiscoveryPluginPlugin extends Plugin {
     private WifiManager.MulticastLock acquireDiscoveryMulticastLock() {
         Context context = getContext();
         if (context == null) {
-            Log.w(TAG, "MulticastLock skipped: context is null.");
             return null;
         }
         Object service = context.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
         if (!(service instanceof WifiManager wifiManager)) {
-            Log.w(TAG, "MulticastLock skipped: WIFI_SERVICE unavailable.");
             return null;
         }
         try {
             WifiManager.MulticastLock lock = wifiManager.createMulticastLock("synra-lan-discovery");
             lock.setReferenceCounted(false);
             lock.acquire();
-            Log.i(TAG, "MulticastLock acquired for discovery.");
             return lock;
         } catch (Exception error) {
-            Log.w(TAG, "Failed to acquire MulticastLock: " + error.getMessage());
             return null;
         }
     }
@@ -800,20 +674,16 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             if (lock.isHeld()) {
                 lock.release();
             }
-            Log.i(TAG, "MulticastLock released after discovery.");
         } catch (Exception error) {
-            Log.w(TAG, "Failed to release MulticastLock: " + error.getMessage());
         }
     }
 
     private void startTcpServer() {
         ExecutorService serverExecutor = tcpServerExecutor;
         if (serverExecutor == null) {
-            Log.w(TAG, "TCP server executor is unavailable.");
             return;
         }
         if (tcpServerRunning) {
-            Log.i(TAG, "TCP server already running.");
             return;
         }
         tcpServerRunning = true;
@@ -824,26 +694,20 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                 serverSocket.bind(new InetSocketAddress("0.0.0.0", DEFAULT_TCP_PORT));
                 serverSocket.setSoTimeout(1000);
                 tcpServerSocket = serverSocket;
-                Log.i(TAG, "TCP server started on port " + DEFAULT_TCP_PORT + ".");
                 while (tcpServerRunning && !serverSocket.isClosed()) {
                     try {
                         Socket socket = serverSocket.accept();
-                        Log.i(
-                            TAG,
-                            "TCP client connected: " + describeRemote(socket)
-                        );
                         inboundTcpSockets.add(socket);
                         handleInboundTcpSocket(socket);
                     } catch (SocketTimeoutException ignored) {
                         // continue accepting
                     } catch (IOException error) {
-                        if (tcpServerRunning) {
-                            Log.w(TAG, "TCP accept failed: " + error.getMessage());
+                        if (!tcpServerRunning) {
+                            break;
                         }
                     }
                 }
             } catch (IOException error) {
-                Log.w(TAG, "Failed to start TCP server: " + error.getMessage());
             } finally {
                 tcpServerRunning = false;
                 ServerSocket current = tcpServerSocket;
@@ -855,7 +719,6 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                         // noop
                     }
                 }
-                Log.i(TAG, "TCP server stopped.");
             }
         });
     }
@@ -997,7 +860,6 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                     }
                 }
             } catch (IOException error) {
-                Log.w(TAG, "TCP client closed with error: " + error.getMessage());
             } finally {
                 if (activeSessionId != null) {
                     inboundSessionSockets.remove(activeSessionId);
@@ -1020,15 +882,6 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             tcpClientExecutor = Executors.newCachedThreadPool();
         }
         return tcpClientExecutor;
-    }
-
-    private String describeRemote(Socket socket) {
-        if (socket == null) {
-            return "unknown";
-        }
-        InetAddress address = socket.getInetAddress();
-        String host = address != null ? address.getHostAddress() : "unknown";
-        return host + ":" + socket.getPort();
     }
 
     private String localSynraDisplayName() {
