@@ -80,7 +80,18 @@ function createMockAdapter(): ConnectionRuntimeAdapter {
     async probeConnectable(_port: number, _timeoutMs: number) {
       return { devices }
     },
-    async openSession(_options: OpenSessionOptions) {
+    async openSession(options: OpenSessionOptions) {
+      const event: SessionOpenedEvent = {
+        sessionId: 'session-open',
+        deviceId: options.deviceId,
+        host: options.host,
+        port: options.port,
+        transport: 'tcp',
+        direction: 'inbound'
+      }
+      for (const listener of listeners.sessionOpened) {
+        listener(event)
+      }
       return {
         sessionId: 'session-open',
         state: 'open',
@@ -182,6 +193,7 @@ test('useDevice should return null for unknown deviceId', async () => {
 test('useConnectionState activeSessions should react to status updates', async () => {
   setupMockRuntime()
   const connection = useConnectionState()
+  await connection.ensureListeners()
   await connection.openSession({
     deviceId: 'device-1',
     host: '127.0.0.1',

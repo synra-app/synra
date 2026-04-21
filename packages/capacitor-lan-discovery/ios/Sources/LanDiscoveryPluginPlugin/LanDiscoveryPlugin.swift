@@ -341,7 +341,7 @@ import Darwin
         }
     }
 
-    private func stopTcpServer() {
+    private func stopTcpServer() {  
         tcpListener?.cancel()
         tcpListener = nil
         let connectionIds = Array(inboundConnections.keys)

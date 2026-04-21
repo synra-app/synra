@@ -1,6 +1,8 @@
 import { storeToRefs } from 'pinia'
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { buildActiveConnections } from './build-active-connections'
+import { useConfirmDialog } from './use-confirm-dialog'
 import { openPluginPage } from '../plugins/host'
 import { useLanDiscoveryStore } from '../stores/lan-discovery'
 
@@ -26,12 +28,16 @@ export function useConnectPage() {
     reconnectTasks
   } = storeToRefs(store)
 
+  const {
+    dialogMessage: removeDialogMessage,
+    isDialogOpen: isRemoveDialogOpen,
+    askConfirmation: askRemoveConfirmation,
+    resolveDialog: resolveRemoveDialog
+  } = useConfirmDialog()
+
   const manualTarget = ref('')
   const socketPort = ref(32100)
   const connectInFlight = ref(false)
-  const removeDialogOpen = ref(false)
-  const removeDialogMessage = ref('')
-  const removeDialogResolver = ref<((confirmed: boolean) => void) | null>(null)
 
   const statusLabel = computed(() => (scanState.value === 'scanning' ? 'Scanning' : 'Idle'))
   const connectableDevices = computed(() =>
@@ -47,91 +53,15 @@ export function useConnectPage() {
     return devices.value.find((device) => device.deviceId === sessionState.value.deviceId) ?? null
   })
 
-  const activeConnections = computed(() => {
-    const openSessions = connectedSessions.value.filter((session) => session.status === 'open')
-    const byDeviceKey = new Map<string, (typeof openSessions)[number]>()
+  const activeConnections = computed(() =>
+    buildActiveConnections(devices.value, connectedSessions.value)
+  )
 
-    for (const session of openSessions) {
-      const host = typeof session.host === 'string' ? session.host : undefined
-      const port = typeof session.port === 'number' ? session.port : undefined
-      const hasEndpoint = Boolean(host && Number.isFinite(port))
-      const declaredDeviceId =
-        typeof session.deviceId === 'string' && session.deviceId.length > 0
-          ? session.deviceId
-          : undefined
-      const matchedDevice = host
-        ? devices.value.find((device) => device.ipAddress === host)
-        : undefined
-      // 优先使用发现列表中的 deviceId，避免同一设备出现“临时ID + UUID”双重标识。
-      const resolvedDeviceId = matchedDevice?.deviceId ?? declaredDeviceId
-
-      // Connect Devices 面板只展示可识别对端设备，过滤掉探测/握手产生的临时会话。
-      if (!resolvedDeviceId || !hasEndpoint) {
-        continue
-      }
-
-      const normalizedSession = {
-        ...session,
-        deviceId: resolvedDeviceId
-      }
-      // 同一 host 视为同一设备，防止 inbound/outbound 因 deviceId 不一致而重复展示。
-      const key = host ?? resolvedDeviceId
-      const existing = byDeviceKey.get(key)
-      if (!existing) {
-        byDeviceKey.set(key, normalizedSession)
-        continue
-      }
-
-      const existingActiveAt = typeof existing.lastActiveAt === 'number' ? existing.lastActiveAt : 0
-      const nextActiveAt =
-        typeof normalizedSession.lastActiveAt === 'number' ? normalizedSession.lastActiveAt : 0
-      const existingDirection =
-        (existing as { direction?: unknown }).direction === 'outbound' ? 'outbound' : 'inbound'
-      const nextDirection =
-        (normalizedSession as { direction?: unknown }).direction === 'outbound'
-          ? 'outbound'
-          : 'inbound'
-
-      // 同设备存在多条会话时，保留最近活跃且优先 outbound 的稳定链路。
-      const existingOutbound = existingDirection === 'outbound'
-      const nextOutbound = nextDirection === 'outbound'
-      if (nextOutbound && !existingOutbound) {
-        byDeviceKey.set(key, normalizedSession)
-        continue
-      }
-      if (nextActiveAt >= existingActiveAt) {
-        byDeviceKey.set(key, normalizedSession)
-      }
-    }
-
-    return [...byDeviceKey.values()].sort((left, right) => {
-      const leftActiveAt = typeof left.lastActiveAt === 'number' ? left.lastActiveAt : 0
-      const rightActiveAt = typeof right.lastActiveAt === 'number' ? right.lastActiveAt : 0
-      return rightActiveAt - leftActiveAt
-    })
-  })
   const connectedDeviceIds = computed(() =>
     activeConnections.value
       .map((session) => session.deviceId)
       .filter((deviceId): deviceId is string => typeof deviceId === 'string' && deviceId.length > 0)
   )
-  const isRemoveDialogOpen = computed(() => removeDialogOpen.value)
-
-  function askRemoveConfirmation(message: string): Promise<boolean> {
-    removeDialogMessage.value = message
-    removeDialogOpen.value = true
-    return new Promise<boolean>((resolve) => {
-      removeDialogResolver.value = resolve
-    })
-  }
-
-  function resolveRemoveDialog(confirmed: boolean): void {
-    const resolve = removeDialogResolver.value
-    removeDialogResolver.value = null
-    removeDialogOpen.value = false
-    removeDialogMessage.value = ''
-    resolve?.(confirmed)
-  }
 
   async function onStartDiscovery(): Promise<void> {
     // Avoid iOS keyboard (TUI*) constraint noise when inputs still have focus.
