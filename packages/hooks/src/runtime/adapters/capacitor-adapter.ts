@@ -123,7 +123,11 @@ export function createCapacitorRuntimeAdapter(): ConnectionRuntimeAdapter {
           direction: 'inbound',
           transport: 'tcp',
           host: event.host,
-          port: event.port
+          port: event.port,
+          displayName:
+            typeof event.displayName === 'string' && event.displayName.length > 0
+              ? event.displayName
+              : undefined
         })
         if (!shouldPreferPcHost || !event.host) {
           return

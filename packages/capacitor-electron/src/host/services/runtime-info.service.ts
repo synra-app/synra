@@ -40,7 +40,10 @@ export function createRuntimeInfoService(options: RuntimeInfoServiceOptions = {}
           'connection.closeSession',
           'connection.sendMessage',
           'connection.getSessionState',
-          'connection.pullHostEvents'
+          'connection.pullHostEvents',
+          'preferences.get',
+          'preferences.set',
+          'preferences.remove'
         ]
       }
     }

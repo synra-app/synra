@@ -1,21 +1,18 @@
 import { execSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { dirname, resolve as pathResolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import UnoCSS from '@unocss/vite'
 import Vue from '@vitejs/plugin-vue'
 import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
-import { resolve } from 'url'
 import { defineConfig, type UserConfig } from 'vite-plus'
 import VueRouter from 'vue-router/vite'
+import { loadAppConfig } from '../../scripts/config/app-config'
 
-const r = (p: string) => resolve(fileURLToPath(import.meta.url), p)
-const projectRoot = fileURLToPath(new URL('.', import.meta.url))
-const packageJsonPath = resolve(projectRoot, 'package.json')
-const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as {
-  name?: string
-  version?: string
-}
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const r = (p: string) => pathResolve(__dirname, p)
+const projectRoot = __dirname
+const appConfig = loadAppConfig(import.meta.url)
 
 function getGitSha(): string {
   try {
@@ -31,8 +28,8 @@ function getGitSha(): string {
 }
 
 const buildMeta = {
-  appName: packageJson.name ?? 'frontend',
-  appVersion: packageJson.version ?? '0.0.0',
+  appName: appConfig.appName,
+  appVersion: appConfig.appVersion,
   buildTime: new Date().toISOString(),
   gitSha: getGitSha()
 }

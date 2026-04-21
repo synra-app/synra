@@ -11,8 +11,11 @@ import { createGitHubOpenPlugin } from '../../host/plugins/github-open.plugin'
 import { createPluginCatalogService } from '../../host/services/plugin-catalog.service'
 import { createPluginRuntimeService } from '../../host/services/plugin-runtime.service'
 import { createRuntimeInfoService } from '../../host/services/runtime-info.service'
+import { createPreferencesService } from '../../host/services/preferences.service'
 import type { DeviceDiscoveryHostEvent } from '../../shared/protocol/types'
 import type { BridgeLogger } from '../../shared/observability/logger'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { createMainDispatcher } from './dispatch'
 import { createBridgeHandlers } from './handlers'
 import { registerBridgeHandlers, type IpcMainLike } from './register'
@@ -25,6 +28,8 @@ export type BridgeRuntimeOptions = {
   capacitorVersion?: string
   electronVersion?: string
   onDiscoveryHostEvent?: (event: DeviceDiscoveryHostEvent) => void
+  /** JSON KV store path for SynraPreferences bridge (defaults to ~/.synra/synra-preferences-store.json). */
+  preferencesStorePath?: string
 }
 
 export type BridgeMainRuntime = {
@@ -47,8 +52,13 @@ export function setupBridgeMainRuntime(
   const fileService = createFileService(fileSystemAdapter, {
     allowedRoots: options.allowedFileRoots
   })
+  const preferencesStorePath =
+    options.preferencesStorePath ?? join(homedir(), '.synra', 'synra-preferences-store.json')
+  const preferencesService = createPreferencesService({ storePath: preferencesStorePath })
+
   const deviceDiscoveryService = createDeviceDiscoveryService({
-    onHostEvent: options.onDiscoveryHostEvent
+    onHostEvent: options.onDiscoveryHostEvent,
+    resolveLocalDeviceUuid: () => preferencesService.ensureDeviceInstanceUuid()
   })
   const connectionService = createConnectionService(deviceDiscoveryService)
   const pluginRuntimeService = createPluginRuntimeService()
@@ -62,7 +72,8 @@ export function setupBridgeMainRuntime(
     pluginRuntimeService,
     pluginCatalogService,
     deviceDiscoveryService,
-    connectionService
+    connectionService,
+    preferencesService
   })
 
   const dispatch = createMainDispatcher(handlers, { logger: options.logger })

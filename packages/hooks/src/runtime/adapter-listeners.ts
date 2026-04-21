@@ -8,6 +8,41 @@ import { sortDevices } from './device-sort'
 import { resolveMessageEventId } from './message-event-id'
 import type { MessageListenersRegistry } from './message-listeners'
 
+type SessionOpenedLike = {
+  deviceId?: string
+  host?: string
+  displayName?: string
+}
+
+function upsertDiscoveredPeerFromSession(
+  devices: Ref<DiscoveredDevice[]>,
+  event: SessionOpenedLike
+): void {
+  if (typeof event.deviceId !== 'string' || event.deviceId.length === 0) {
+    return
+  }
+  if (typeof event.host !== 'string' || event.host.length === 0) {
+    return
+  }
+  const now = Date.now()
+  const display =
+    typeof event.displayName === 'string' && event.displayName.trim().length > 0
+      ? event.displayName.trim()
+      : `Peer ${event.deviceId.slice(0, 8)}`
+  const peer: DiscoveredDevice = {
+    deviceId: event.deviceId,
+    name: display,
+    ipAddress: event.host,
+    source: 'session',
+    connectable: true,
+    connectCheckAt: now,
+    discoveredAt: now,
+    lastSeenAt: now
+  }
+  const others = devices.value.filter((device) => device.deviceId !== peer.deviceId)
+  devices.value = sortDevices([...others, peer])
+}
+
 export async function registerAdapterListeners(options: {
   adapter: ConnectionRuntimeAdapter
   isMobileRuntime: boolean
@@ -49,6 +84,8 @@ export async function registerAdapterListeners(options: {
     const inferredDirection =
       explicitDirection ??
       (typeof event.deviceId === 'string' && event.deviceId.length > 0 ? 'outbound' : 'inbound')
+
+    upsertDiscoveredPeerFromSession(devices, event)
 
     if (!isMobileRuntime && inferredDirection === 'outbound' && event.host) {
       if (handoff.pendingHandoffHosts.has(event.host)) {

@@ -1,8 +1,17 @@
 import { Capacitor } from '@capacitor/core'
+import { ensureDeviceInstanceUuid } from '../lib/device-instance-uuid'
 
-type AboutInfoItem = {
+export type AboutTabId = 'device' | 'build' | 'environment' | 'display'
+
+export type AboutInfoItem = {
   label: string
   value: string
+}
+
+export type AboutTab = {
+  id: AboutTabId
+  label: string
+  items: AboutInfoItem[]
 }
 
 function toText(value: unknown): string {
@@ -14,6 +23,9 @@ export function useAboutInfo() {
   const copyStatus = ref<'idle' | 'success' | 'error'>('idle')
   const copyMessage = ref('')
   let clearMessageTimer: ReturnType<typeof setTimeout> | undefined
+
+  const deviceInstanceUuid = ref<string | null>(null)
+  const uuidLoadError = ref<string | null>(null)
 
   const platform = Capacitor.getPlatform()
   const isNative = Capacitor.isNativePlatform()
@@ -33,27 +45,80 @@ export function useAboutInfo() {
   const screenSize = `${window.screen.width} x ${window.screen.height}`
   const viewportSize = `${window.innerWidth} x ${window.innerHeight}`
 
-  const aboutInfo = computed<AboutInfoItem[]>(() => [
-    { label: 'Current Time', value: now.value.toISOString() },
-    { label: 'Capacitor Platform', value: platform },
-    { label: 'Native Platform', value: isNative ? 'yes' : 'no' },
-    { label: 'Electron Bridge', value: hasElectronBridge ? 'available' : 'unavailable' },
-    { label: 'Build Mode', value: buildMode },
-    { label: 'Is Dev', value: toText(isDev) },
-    { label: 'Base URL', value: baseUrl },
-    { label: 'App Name', value: appName },
-    { label: 'App Version', value: appVersion },
-    { label: 'Build Time', value: buildTime },
-    { label: 'Git SHA', value: gitSha },
-    { label: 'Locale', value: locale },
-    { label: 'Timezone', value: timezone },
-    { label: 'Screen Size', value: screenSize },
-    { label: 'Viewport Size', value: viewportSize },
-    { label: 'User Agent', value: userAgent }
-  ])
-  const diagnosticsPayload = computed<Record<string, string>>(() =>
-    Object.fromEntries(aboutInfo.value.map((item) => [item.label, item.value]))
-  )
+  onMounted(() => {
+    void ensureDeviceInstanceUuid()
+      .then((id) => {
+        deviceInstanceUuid.value = id
+        uuidLoadError.value = null
+      })
+      .catch((error: unknown) => {
+        uuidLoadError.value = error instanceof Error ? error.message : 'Failed to load UUID'
+        deviceInstanceUuid.value = null
+      })
+  })
+
+  const aboutTabs = computed<AboutTab[]>(() => {
+    const uuidDisplay =
+      uuidLoadError.value !== null
+        ? `Error: ${uuidLoadError.value}`
+        : deviceInstanceUuid.value !== null
+          ? deviceInstanceUuid.value
+          : 'Loading…'
+
+    return [
+      {
+        id: 'device',
+        label: 'Device',
+        items: [
+          { label: 'Device Instance UUID', value: uuidDisplay },
+          { label: 'Capacitor Platform', value: platform },
+          { label: 'Native Platform', value: isNative ? 'yes' : 'no' },
+          { label: 'Electron Bridge', value: hasElectronBridge ? 'available' : 'unavailable' }
+        ]
+      },
+      {
+        id: 'build',
+        label: 'Build',
+        items: [
+          { label: 'App Name', value: appName },
+          { label: 'App Version', value: appVersion },
+          { label: 'Build Time', value: buildTime },
+          { label: 'Git SHA', value: gitSha },
+          { label: 'Build Mode', value: buildMode },
+          { label: 'Is Dev', value: toText(isDev) },
+          { label: 'Base URL', value: baseUrl }
+        ]
+      },
+      {
+        id: 'environment',
+        label: 'Environment',
+        items: [
+          { label: 'Current Time', value: now.value.toISOString() },
+          { label: 'Locale', value: locale },
+          { label: 'Timezone', value: timezone },
+          { label: 'User Agent', value: userAgent }
+        ]
+      },
+      {
+        id: 'display',
+        label: 'Display',
+        items: [
+          { label: 'Screen Size', value: screenSize },
+          { label: 'Viewport Size', value: viewportSize }
+        ]
+      }
+    ]
+  })
+
+  const diagnosticsPayload = computed<Record<string, string>>(() => {
+    const out: Record<string, string> = {}
+    for (const tab of aboutTabs.value) {
+      for (const item of tab.items) {
+        out[`${tab.label} / ${item.label}`] = item.value
+      }
+    }
+    return out
+  })
 
   function refreshNow(): void {
     now.value = new Date()
@@ -82,7 +147,7 @@ export function useAboutInfo() {
   }
 
   return {
-    aboutInfo,
+    aboutTabs,
     copyDiagnostics,
     copyMessage,
     copyStatus,

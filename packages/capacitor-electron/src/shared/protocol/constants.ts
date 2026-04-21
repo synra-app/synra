@@ -27,7 +27,10 @@ export const BRIDGE_METHODS = {
   connectionCloseSession: 'connection.closeSession',
   connectionSendMessage: 'connection.sendMessage',
   connectionGetSessionState: 'connection.getSessionState',
-  connectionPullHostEvents: 'connection.pullHostEvents'
+  connectionPullHostEvents: 'connection.pullHostEvents',
+  preferencesGet: 'preferences.get',
+  preferencesSet: 'preferences.set',
+  preferencesRemove: 'preferences.remove'
 } as const
 
 export type BridgeMethod = (typeof BRIDGE_METHODS)[keyof typeof BRIDGE_METHODS]

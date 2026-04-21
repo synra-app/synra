@@ -2,6 +2,7 @@ package com.synra.plugins.landiscovery;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.os.Build;
 import android.net.nsd.NsdManager;
 import android.net.nsd.NsdServiceInfo;
 import android.util.Log;
@@ -24,6 +25,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
+import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
@@ -58,8 +60,12 @@ public class LanDiscoveryPluginPlugin extends Plugin {
     private static final String DEFAULT_MDNS_SERVICE_TYPE = "_synra._tcp.";
     private static final String APP_ID = "synra";
     private static final String PROTOCOL_VERSION = "1.0";
-    private static final String PREFS_NAME = "synra_lan_discovery";
-    private static final String PREFS_DEVICE_UUID_KEY = "device_uuid";
+    private static final String INSTANCE_PREFS_NAME = "synra_preferences_store";
+    private static final String INSTANCE_UUID_KEY = "synra.preferences.synra.device.instance-uuid";
+    private static final String LEGACY_LAN_PREFS = "synra_lan_discovery";
+    private static final String LEGACY_LAN_KEY = "device_uuid";
+    private static final String LEGACY_DC_PREFS = "synra_device_connection";
+    private static final String LEGACY_DC_KEY = "device_uuid";
 
     private final LanDiscoveryPlugin implementation = new LanDiscoveryPlugin();
     private DatagramSocket udpResponderSocket;
@@ -667,6 +673,14 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                         String sourceDeviceId =
                             helloPayload == null ? null : helloPayload.optString("sourceDeviceId", null);
                         boolean isProbe = helloPayload != null && helloPayload.optBoolean("probe", false);
+                        String peerDisplay =
+                            helloPayload == null ? null : helloPayload.optString("displayName", null);
+                        if (peerDisplay != null) {
+                            peerDisplay = peerDisplay.trim();
+                            if (peerDisplay.isEmpty()) {
+                                peerDisplay = null;
+                            }
+                        }
                         if (sourceDeviceId == null || sourceDeviceId.isBlank()) {
                             writeFrame(output, frame("error", sessionId, null, "SOURCE_DEVICE_ID_REQUIRED"));
                             sessionClosedNotified = true;
@@ -674,7 +688,24 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                         }
                         JSObject helloAckPayload = new JSObject();
                         helloAckPayload.put("sourceDeviceId", getOrCreateLocalDeviceUuid());
+                        helloAckPayload.put("displayName", localSynraDisplayName());
+                        String selfIp = primarySourceHostIp();
+                        if (selfIp != null && !selfIp.isBlank()) {
+                            helloAckPayload.put("sourceHostIp", selfIp);
+                        }
+                        InetAddress peerAddr = socket.getInetAddress();
+                        if (peerAddr != null) {
+                            String observed = peerAddr.getHostAddress();
+                            if (observed != null && !observed.isBlank()) {
+                                helloAckPayload.put("observedPeerIp", observed);
+                            }
+                        }
                         writeFrame(output, frame("helloAck", sessionId, null, helloAckPayload));
+                        try {
+                            output.flush();
+                        } catch (IOException ignored) {
+                            // ignore flush errors on close path
+                        }
                         if (isProbe) {
                             sessionClosedNotified = true;
                             break;
@@ -688,6 +719,9 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                         opened.put("direction", "inbound");
                         opened.put("host", socket.getInetAddress().getHostAddress());
                         opened.put("port", DEFAULT_TCP_PORT);
+                        if (peerDisplay != null) {
+                            opened.put("displayName", peerDisplay);
+                        }
                         notifyListeners("sessionOpened", opened);
                         continue;
                     }
@@ -764,6 +798,40 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         return host + ":" + socket.getPort();
     }
 
+    private String localSynraDisplayName() {
+        if (Build.MODEL != null && !Build.MODEL.isBlank()) {
+            return Build.MODEL.trim();
+        }
+        return "Synra";
+    }
+
+    private String primarySourceHostIp() {
+        try {
+            List<String> candidates = new ArrayList<>();
+            Enumeration<NetworkInterface> nis = NetworkInterface.getNetworkInterfaces();
+            while (nis.hasMoreElements()) {
+                NetworkInterface ni = nis.nextElement();
+                if (!ni.isUp() || ni.isLoopback()) {
+                    continue;
+                }
+                Enumeration<InetAddress> addrs = ni.getInetAddresses();
+                while (addrs.hasMoreElements()) {
+                    InetAddress a = addrs.nextElement();
+                    if (a instanceof Inet4Address && !a.isLoopbackAddress()) {
+                        String ip = a.getHostAddress();
+                        if (ip != null && !ip.isBlank() && !ip.startsWith("169.254.")) {
+                            candidates.add(ip);
+                        }
+                    }
+                }
+            }
+            Collections.sort(candidates);
+            return candidates.isEmpty() ? null : candidates.get(0);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     private ProbeOutcome probeDevice(String host, int port, int timeoutMs) {
         Socket socket = new Socket();
         try {
@@ -774,17 +842,32 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             JSObject probePayload = new JSObject();
             probePayload.put("sourceDeviceId", getOrCreateLocalDeviceUuid());
             probePayload.put("probe", true);
+            probePayload.put("displayName", localSynraDisplayName());
+            String probeSelfIp = primarySourceHostIp();
+            if (probeSelfIp != null && !probeSelfIp.isBlank()) {
+                probePayload.put("sourceHostIp", probeSelfIp);
+            }
             writeFrame(output, frame("hello", UUID.randomUUID().toString(), null, probePayload));
+            try {
+                output.flush();
+            } catch (IOException ignored) {
+            }
             JSONObject response = readFrame(input);
             if (!"helloAck".equals(response.optString("type"))) {
-                return new ProbeOutcome(false, "MISSING_HELLO_ACK");
+                return new ProbeOutcome(false, "MISSING_HELLO_ACK", null);
             }
             if (!APP_ID.equals(response.optString("appId"))) {
-                return new ProbeOutcome(false, "APP_ID_MISMATCH");
+                return new ProbeOutcome(false, "APP_ID_MISMATCH", null);
             }
-            return new ProbeOutcome(true, null);
+            JSONObject ackPayload = response.optJSONObject("payload");
+            String remote =
+                ackPayload == null ? null : ackPayload.optString("sourceDeviceId", null);
+            if (remote != null && remote.isBlank()) {
+                remote = null;
+            }
+            return new ProbeOutcome(true, null, remote);
         } catch (Exception error) {
-            return new ProbeOutcome(false, error.getMessage());
+            return new ProbeOutcome(false, error.getMessage(), null);
         } finally {
             closeQuietly(socket);
         }
@@ -806,11 +889,23 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             String deviceId = device.optString("deviceId");
             String host = device.optString("ipAddress");
             ProbeOutcome outcome = probeDevice(host, port, timeoutMs);
-            LanDiscoveryPlugin.DeviceRecord updated = implementation.updateDeviceConnectable(
-                deviceId,
-                outcome.connectable,
-                outcome.error
-            );
+            LanDiscoveryPlugin.DeviceRecord updated;
+            if (outcome.remoteDeviceId != null
+                && !outcome.remoteDeviceId.isBlank()
+                && !outcome.remoteDeviceId.equals(deviceId)) {
+                updated = implementation.rekeyDeviceAfterProbe(
+                    deviceId,
+                    outcome.remoteDeviceId,
+                    outcome.connectable,
+                    outcome.error
+                );
+            } else {
+                updated = implementation.updateDeviceConnectable(
+                    deviceId,
+                    outcome.connectable,
+                    outcome.error
+                );
+            }
             if (updated != null) {
                 JSObject payload = new JSObject();
                 payload.put("device", updated.toJSObject());
@@ -877,28 +972,42 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         if (context == null) {
             return UUID.randomUUID().toString();
         }
-        String existing = context
-            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .getString(PREFS_DEVICE_UUID_KEY, null);
+        android.content.SharedPreferences unified =
+            context.getSharedPreferences(INSTANCE_PREFS_NAME, Context.MODE_PRIVATE);
+        String existing = unified.getString(INSTANCE_UUID_KEY, null);
         if (existing != null && !existing.isBlank()) {
             return existing;
         }
+        android.content.SharedPreferences legacyLan =
+            context.getSharedPreferences(LEGACY_LAN_PREFS, Context.MODE_PRIVATE);
+        String lan = legacyLan.getString(LEGACY_LAN_KEY, null);
+        if (lan != null && !lan.isBlank()) {
+            unified.edit().putString(INSTANCE_UUID_KEY, lan).apply();
+            legacyLan.edit().remove(LEGACY_LAN_KEY).apply();
+            return lan;
+        }
+        android.content.SharedPreferences legacyDc =
+            context.getSharedPreferences(LEGACY_DC_PREFS, Context.MODE_PRIVATE);
+        String dc = legacyDc.getString(LEGACY_DC_KEY, null);
+        if (dc != null && !dc.isBlank()) {
+            unified.edit().putString(INSTANCE_UUID_KEY, dc).apply();
+            legacyDc.edit().remove(LEGACY_DC_KEY).apply();
+            return dc;
+        }
         String created = UUID.randomUUID().toString();
-        context
-            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .putString(PREFS_DEVICE_UUID_KEY, created)
-            .apply();
+        unified.edit().putString(INSTANCE_UUID_KEY, created).apply();
         return created;
     }
 
     private static final class ProbeOutcome {
         private final boolean connectable;
         private final String error;
+        private final String remoteDeviceId;
 
-        private ProbeOutcome(boolean connectable, String error) {
+        private ProbeOutcome(boolean connectable, String error, String remoteDeviceId) {
             this.connectable = connectable;
             this.error = error;
+            this.remoteDeviceId = remoteDeviceId;
         }
     }
 

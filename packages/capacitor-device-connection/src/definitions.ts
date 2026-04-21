@@ -97,6 +97,8 @@ export type SessionOpenedEvent = {
   direction?: 'inbound' | 'outbound'
   host?: string
   port?: number
+  /** Optional display name from hello / helloAck handshake metadata. */
+  displayName?: string
 }
 
 export type SessionClosedEvent = {

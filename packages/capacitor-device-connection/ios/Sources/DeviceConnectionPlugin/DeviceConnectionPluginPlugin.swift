@@ -63,6 +63,9 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
         opened["deviceId"] = deviceId
         opened["host"] = host
         opened["port"] = port
+        if let display = result["displayName"] as? String, !display.isEmpty {
+            opened["displayName"] = display
+        }
         notifyListeners("sessionOpened", data: opened)
         call.resolve(result)
     }

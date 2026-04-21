@@ -6,7 +6,8 @@ public final class DeviceConnectionPluginCore: NSObject {
     private let appId = "synra"
     private let protocolVersion = "1.0"
     private let sessionAckTimeoutMs = 3000
-    private let deviceUuidStorageKey = "synra.device-connection.device-uuid"
+    private let unifiedDeviceUuidDefaultsKey = "synra.preferences.synra.device.instance-uuid"
+    private let legacyDeviceUuidStorageKey = "synra.device-connection.device-uuid"
 
     private var sessionState = SessionState()
     private var connection: NWConnection?
@@ -48,6 +49,7 @@ public final class DeviceConnectionPluginCore: NSObject {
             var payload: [String: Any] = [
                 "sourceDeviceId": localDeviceUuid(),
                 "probe": false,
+                "displayName": localSynraDisplayName(),
             ]
             if let token {
                 payload["token"] = token
@@ -91,6 +93,10 @@ public final class DeviceConnectionPluginCore: NSObject {
                         semaphore.signal()
                         return
                     }
+                    let ackDisplay = (helloAckPayload?["displayName"] as? String)?
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    self.sessionState.peerDisplayName =
+                        (ackDisplay?.isEmpty == false) ? ackDisplay : nil
                     self.sessionState.state = "open"
                     self.sessionState.deviceId = remoteDeviceId
                     self.sessionState.sessionId = (response["sessionId"] as? String) ?? generatedSessionId
@@ -114,12 +120,16 @@ public final class DeviceConnectionPluginCore: NSObject {
         }
 
         if opened {
-            return [
+            var payload: [String: Any] = [
                 "success": true,
                 "sessionId": sessionState.sessionId ?? generatedSessionId,
                 "state": sessionState.state,
                 "transport": "tcp",
             ]
+            if let name = sessionState.peerDisplayName, !name.isEmpty {
+                payload["displayName"] = name
+            }
+            return payload
         }
 
         sessionState.state = "error"
@@ -198,13 +208,23 @@ public final class DeviceConnectionPluginCore: NSObject {
         Int(Date().timeIntervalSince1970 * 1000)
     }
 
+    private func localSynraDisplayName() -> String {
+        let name = ProcessInfo.processInfo.hostName
+        return name.isEmpty ? "Synra" : name
+    }
+
     private func localDeviceUuid() -> String {
         let defaults = UserDefaults.standard
-        if let existing = defaults.string(forKey: deviceUuidStorageKey), !existing.isEmpty {
+        if let existing = defaults.string(forKey: unifiedDeviceUuidDefaultsKey), !existing.isEmpty {
             return existing
         }
+        if let legacy = defaults.string(forKey: legacyDeviceUuidStorageKey), !legacy.isEmpty {
+            defaults.set(legacy, forKey: unifiedDeviceUuidDefaultsKey)
+            defaults.removeObject(forKey: legacyDeviceUuidStorageKey)
+            return legacy
+        }
         let created = UUID().uuidString
-        defaults.set(created, forKey: deviceUuidStorageKey)
+        defaults.set(created, forKey: unifiedDeviceUuidDefaultsKey)
         return created
     }
 
@@ -329,6 +349,7 @@ private struct SessionState {
     var lastError: String?
     var openedAt: Int?
     var closedAt: Int?
+    var peerDisplayName: String?
 
     func toDictionary() -> [String: Any] {
         [
@@ -340,6 +361,7 @@ private struct SessionState {
             "lastError": lastError as Any,
             "openedAt": openedAt as Any,
             "closedAt": closedAt as Any,
+            "displayName": peerDisplayName as Any,
         ]
     }
 }

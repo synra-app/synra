@@ -112,13 +112,31 @@ export function createElectronMainRuntimeAdapter(): ConnectionRuntimeAdapter {
     addSessionOpenedListener: async (listener: (event: SessionOpenedEvent) => void) =>
       addHostListener((event) => {
         if (event.type === 'transport.session.opened' && event.sessionId) {
-          const [host, portText] = (event.remote ?? '').split(':')
-          const parsedPort = Number.parseInt(portText ?? '', 10)
+          const pl =
+            event.payload && typeof event.payload === 'object'
+              ? (event.payload as Record<string, unknown>)
+              : {}
+          const hostFromPayload = typeof pl.host === 'string' ? pl.host : undefined
+          const portFromPayload = typeof pl.port === 'number' ? pl.port : undefined
+          const deviceId = typeof pl.deviceId === 'string' ? pl.deviceId : undefined
+          const direction =
+            pl.direction === 'inbound' || pl.direction === 'outbound' ? pl.direction : undefined
+          const displayName = typeof pl.displayName === 'string' ? pl.displayName : undefined
+          const fallbackRemote = typeof event.remote === 'string' ? event.remote : ''
+          const [hostPart, portText] = fallbackRemote.split(':')
+          const parsedRemotePort = Number.parseInt(portText ?? '', 10)
           listener({
             sessionId: event.sessionId,
-            host: host || undefined,
-            port: Number.isFinite(parsedPort) ? parsedPort : undefined,
-            transport: event.transport
+            deviceId,
+            direction,
+            host: hostFromPayload ?? (hostPart.length > 0 ? hostPart : undefined),
+            port: Number.isFinite(portFromPayload)
+              ? portFromPayload
+              : Number.isFinite(parsedRemotePort)
+                ? parsedRemotePort
+                : undefined,
+            displayName: displayName && displayName.length > 0 ? displayName : undefined,
+            transport: event.transport ?? 'tcp'
           })
         }
       }),

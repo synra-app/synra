@@ -112,6 +112,12 @@ describe('bridge/main runtime e2e flow', () => {
           transport: 'tcp' as const
         })),
         pullHostEvents: vi.fn(async () => ({ events: [] }))
+      },
+      preferencesService: {
+        get: vi.fn(() => null),
+        set: vi.fn(),
+        remove: vi.fn(),
+        ensureDeviceInstanceUuid: vi.fn(() => '00000000-0000-4000-8000-000000000001')
       }
     })
     const dispatch = createMainDispatcher(handlers)
@@ -246,6 +252,12 @@ describe('bridge/main runtime e2e flow', () => {
           transport: 'tcp' as const
         })),
         pullHostEvents: vi.fn(async () => ({ events: [] }))
+      },
+      preferencesService: {
+        get: vi.fn(() => null),
+        set: vi.fn(),
+        remove: vi.fn(),
+        ensureDeviceInstanceUuid: vi.fn(() => '00000000-0000-4000-8000-000000000001')
       }
     })
     const dispatch = createMainDispatcher(handlers)

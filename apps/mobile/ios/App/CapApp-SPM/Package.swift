@@ -13,7 +13,8 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/ionic-team/capacitor-swift-pm.git", exact: "8.3.1"),
         .package(name: "SynraCapacitorDeviceConnection", path: "../../../../../packages/capacitor-device-connection"),
-        .package(name: "SynraCapacitorLanDiscovery", path: "../../../../../packages/capacitor-lan-discovery")
+        .package(name: "SynraCapacitorLanDiscovery", path: "../../../../../packages/capacitor-lan-discovery"),
+        .package(name: "SynraCapacitorPreferences", path: "../../../../../packages/capacitor-preferences")
     ],
     targets: [
         .target(
@@ -22,7 +23,8 @@ let package = Package(
                 .product(name: "Capacitor", package: "capacitor-swift-pm"),
                 .product(name: "Cordova", package: "capacitor-swift-pm"),
                 .product(name: "SynraCapacitorDeviceConnection", package: "SynraCapacitorDeviceConnection"),
-                .product(name: "SynraCapacitorLanDiscovery", package: "SynraCapacitorLanDiscovery")
+                .product(name: "SynraCapacitorLanDiscovery", package: "SynraCapacitorLanDiscovery"),
+                .product(name: "SynraCapacitorPreferences", package: "SynraCapacitorPreferences")
             ]
         )
     ]

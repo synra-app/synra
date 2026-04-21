@@ -105,7 +105,7 @@ export type PluginCatalogResult = {
   generatedAt: number
 }
 
-export type DiscoverySource = 'mdns' | 'probe' | 'manual'
+export type DiscoverySource = 'mdns' | 'probe' | 'manual' | 'session'
 export type DiscoveryMode = 'hybrid' | 'mdns' | 'subnet' | 'manual'
 
 export type DiscoveryState = 'idle' | 'scanning'
@@ -272,6 +272,9 @@ export type MethodPayloadMap = {
   'connection.sendMessage': DeviceSessionSendMessageOptions
   'connection.getSessionState': DeviceSessionGetStateOptions
   'connection.pullHostEvents': Record<string, never>
+  'preferences.get': { key: string }
+  'preferences.set': { key: string; value: string }
+  'preferences.remove': { key: string }
 }
 
 export type MethodResultMap = {
@@ -295,4 +298,7 @@ export type MethodResultMap = {
   'connection.sendMessage': DeviceSessionSendMessageResult
   'connection.getSessionState': DeviceSessionSnapshot
   'connection.pullHostEvents': DeviceDiscoveryPullHostEventsResult
+  'preferences.get': { value: string | null }
+  'preferences.set': OperationResult
+  'preferences.remove': OperationResult
 }

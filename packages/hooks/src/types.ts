@@ -1,4 +1,5 @@
 import type { Ref } from 'vue'
+import type { DiscoveredDevice } from '@synra/capacitor-lan-discovery'
 import type { SynraMessageType } from '@synra/protocol'
 
 export type SynraHookDevice = {
@@ -82,7 +83,7 @@ export type SynraConnectionRuntimeState = {
   scanState: Ref<string>
   startedAt: Ref<number | undefined>
   scanWindowMs: Ref<number>
-  devices: Ref<SynraHookDevice[]>
+  devices: Ref<DiscoveredDevice[]>
   loading: Ref<boolean>
   error: Ref<string | null>
   sessionState: Ref<SynraHookSessionState>

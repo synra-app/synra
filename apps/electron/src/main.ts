@@ -161,6 +161,7 @@ function registerCapacitorElectronBridge(): void {
       }
     },
     allowedFileRoots: [app.getAppPath()],
+    preferencesStorePath: join(app.getPath('userData'), 'synra-preferences-store.json'),
     capacitorVersion: '8.x',
     electronVersion: process.versions.electron,
     onDiscoveryHostEvent(event) {

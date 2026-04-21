@@ -41,6 +41,7 @@
   },
   "dependencies": {
     "@synra-plugin/chat": "workspace:*",
+    "@synra/capacitor-preferences": "workspace:*",
     "@synra/plugin-sdk": "workspace:*",
     "@synra/protocol": "workspace:*",
     "bonjour-service": "catalog:"

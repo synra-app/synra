@@ -94,6 +94,26 @@ public class LanDiscoveryPlugin {
         return updated;
     }
 
+    public synchronized DeviceRecord rekeyDeviceAfterProbe(
+        String oldDeviceId,
+        String newDeviceId,
+        boolean connectable,
+        String connectCheckError
+    ) {
+        DeviceRecord selected = this.devices.remove(oldDeviceId);
+        if (selected == null) {
+            return null;
+        }
+        DeviceRecord probed = selected.withConnectable(connectable, connectCheckError);
+        String nextName =
+            probed.name.startsWith("Manual") || probed.name.startsWith("Synra Device")
+                ? ("Synra " + newDeviceId.substring(0, Math.min(8, newDeviceId.length())))
+                : probed.name;
+        DeviceRecord moved = probed.withDeviceId(newDeviceId, nextName);
+        this.devices.put(newDeviceId, moved);
+        return moved;
+    }
+
     private JSArray toDeviceArray() {
         JSArray array = new JSArray();
         for (DeviceRecord device : this.devices.values()) {
@@ -300,6 +320,20 @@ public class LanDiscoveryPlugin {
                 connectCheckError,
                 this.discoveredAt,
                 System.currentTimeMillis()
+            );
+        }
+
+        DeviceRecord withDeviceId(String newDeviceId, String newName) {
+            return new DeviceRecord(
+                newDeviceId,
+                newName,
+                this.ipAddress,
+                this.source,
+                this.connectable,
+                this.connectCheckAt,
+                this.connectCheckError,
+                this.discoveredAt,
+                this.lastSeenAt
             );
         }
 

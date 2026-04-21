@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { createSocket } from 'node:dgram'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createServer, Socket } from 'node:net'
-import { homedir, networkInterfaces } from 'node:os'
+import { homedir, hostname, networkInterfaces } from 'node:os'
 import { join } from 'node:path'
 import { Bonjour } from 'bonjour-service'
 import { BridgeError } from '../../shared/errors/bridge-error'
@@ -54,6 +54,8 @@ type DeviceDiscoveryState = DeviceDiscoveryListResult['state']
 type DeviceDiscoveryMap = Map<string, DiscoveredDevice>
 type DeviceDiscoveryServiceOptions = {
   onHostEvent?: (event: DeviceDiscoveryHostEvent) => void
+  /** When set, used for hello/sourceDeviceId instead of ~/.synra/device-uuid file. */
+  resolveLocalDeviceUuid?: () => string
 }
 
 export interface DeviceDiscoveryService {
@@ -117,6 +119,7 @@ type InboundSessionState = {
   socket: Socket
   openedAt: number
   lastActiveAt: number
+  peerDisplayName?: string
 }
 
 class FrameDecoder {
@@ -192,6 +195,19 @@ function getOrCreateLocalDeviceUuid(): string {
   }
 }
 
+function normalizeSocketRemoteIp(socket: Socket): string | undefined {
+  const raw = socket.remoteAddress
+  if (!raw || typeof raw !== 'string') {
+    return undefined
+  }
+  return raw.replace(/^::ffff:/i, '')
+}
+
+function localSynraDisplayName(): string {
+  const name = hostname()
+  return name.length > 0 ? name : 'Synra'
+}
+
 function toDevice(
   key: string,
   name: string,
@@ -234,6 +250,20 @@ function collectInterfaceSeeds(includeLoopback: boolean): NetworkSeed[] {
 
 function collectLocalIpSet(includeLoopback: boolean): Set<string> {
   return new Set(collectInterfaceSeeds(includeLoopback).map((seed) => seed.address))
+}
+
+/** Best-effort primary LAN IPv4 for optional hello / helloAck `sourceHostIp` metadata. */
+function pickPrimarySourceHostIp(): string | undefined {
+  const seeds = collectInterfaceSeeds(false)
+  const preferred = seeds
+    .map((s) => s.address)
+    .filter((ip) => !ip.startsWith('169.254.'))
+    .sort((a, b) => a.localeCompare(b))
+  if (preferred.length > 0) {
+    return preferred[0]
+  }
+  const fallback = seeds.map((s) => s.address).sort((a, b) => a.localeCompare(b))
+  return fallback[0]
 }
 
 function collectManualDevices(manualTargets: string[]): DiscoveredDevice[] {
@@ -286,6 +316,26 @@ function mergeDevices(target: DeviceDiscoveryMap, devices: DiscoveredDevice[]): 
   }
 }
 
+/** After probe rekeys `deviceId` (e.g. hash → peer UUID), remove stale map entries for the same IP. */
+function upsertDiscoveredDeviceAfterProbe(
+  target: DeviceDiscoveryMap,
+  device: DiscoveredDevice
+): void {
+  const ip = device.ipAddress.trim()
+  if (ip.length > 0) {
+    const staleIds: string[] = []
+    for (const [id, existing] of target.entries()) {
+      if (existing.ipAddress === ip && id !== device.deviceId) {
+        staleIds.push(id)
+      }
+    }
+    for (const id of staleIds) {
+      target.delete(id)
+    }
+  }
+  target.set(device.deviceId, device)
+}
+
 function pruneSelfDevices(target: DeviceDiscoveryMap, localIps: Set<string>): void {
   for (const [deviceId, device] of target.entries()) {
     if (device.source === 'manual') {
@@ -310,7 +360,9 @@ function toErrorMessage(reason: unknown, fallback: string): string {
 export function createDeviceDiscoveryService(
   options: DeviceDiscoveryServiceOptions = {}
 ): DeviceDiscoveryService {
-  const localDeviceUuid = getOrCreateLocalDeviceUuid()
+  function getLocalDeviceUuid(): string {
+    return options.resolveLocalDeviceUuid?.() ?? getOrCreateLocalDeviceUuid()
+  }
   const state: InternalDiscoveryState = {
     state: 'idle',
     devices: new Map(),
@@ -415,13 +467,22 @@ export function createDeviceDiscoveryService(
         if (frame.type === 'hello') {
           const helloPayload =
             frame.payload && typeof frame.payload === 'object'
-              ? (frame.payload as { sourceDeviceId?: unknown; probe?: unknown })
+              ? (frame.payload as {
+                  sourceDeviceId?: unknown
+                  probe?: unknown
+                  displayName?: unknown
+                })
               : undefined
           const sourceDeviceId =
             typeof helloPayload?.sourceDeviceId === 'string'
               ? helloPayload.sourceDeviceId
               : undefined
           const isProbe = helloPayload?.probe === true
+          const peerDisplayName =
+            typeof helloPayload?.displayName === 'string' &&
+            helloPayload.displayName.trim().length > 0
+              ? helloPayload.displayName.trim()
+              : undefined
           if (!sourceDeviceId) {
             void enqueueSocketFrame(socket, {
               version: SYNRA_PROTOCOL_VERSION,
@@ -435,7 +496,19 @@ export function createDeviceDiscoveryService(
             continue
           }
           if (frame.sessionId && !isProbe) {
-            bindInboundSession(frame.sessionId, sourceDeviceId, socket, remote)
+            bindInboundSession(frame.sessionId, sourceDeviceId, socket, remote, peerDisplayName)
+          }
+          const observedPeerIp = normalizeSocketRemoteIp(socket)
+          const ackPayload: Record<string, unknown> = {
+            sourceDeviceId: getLocalDeviceUuid(),
+            displayName: localSynraDisplayName()
+          }
+          const selfSourceIp = pickPrimarySourceHostIp()
+          if (selfSourceIp) {
+            ackPayload.sourceHostIp = selfSourceIp
+          }
+          if (observedPeerIp) {
+            ackPayload.observedPeerIp = observedPeerIp
           }
           const response: LanFrame = {
             version: SYNRA_PROTOCOL_VERSION,
@@ -445,9 +518,7 @@ export function createDeviceDiscoveryService(
             appId: SYNRA_APP_ID,
             protocolVersion: SYNRA_PROTOCOL_VERSION,
             capabilities: ['message'],
-            payload: {
-              sourceDeviceId: localDeviceUuid
-            }
+            payload: ackPayload
           }
           if (isProbe) {
             void enqueueSocketFrame(socket, response)
@@ -626,7 +697,7 @@ export function createDeviceDiscoveryService(
     port: DEFAULT_TCP_PORT,
     txt: {
       appId: SYNRA_APP_ID,
-      deviceId: localDeviceUuid
+      deviceId: getLocalDeviceUuid()
     }
   })
   mdnsPublishedService?.start?.()
@@ -641,7 +712,7 @@ export function createDeviceDiscoveryService(
         appId: SYNRA_APP_ID,
         protocolVersion: SYNRA_PROTOCOL_VERSION,
         port: DEFAULT_TCP_PORT,
-        deviceId: localDeviceUuid
+        deviceId: getLocalDeviceUuid()
       }),
       'utf8'
     )
@@ -830,7 +901,8 @@ export function createDeviceDiscoveryService(
     sessionId: string,
     remoteDeviceId: string,
     socket: Socket,
-    remote: string
+    remote: string,
+    peerDisplayName?: string
   ): void {
     inboundSessions.set(sessionId, {
       sessionId,
@@ -838,7 +910,8 @@ export function createDeviceDiscoveryService(
       remote,
       socket,
       openedAt: Date.now(),
-      lastActiveAt: Date.now()
+      lastActiveAt: Date.now(),
+      peerDisplayName
     })
     lastHeartbeatByInboundSessionId.set(sessionId, Date.now())
     let ids = socketSessionIds.get(socket)
@@ -857,14 +930,18 @@ export function createDeviceDiscoveryService(
         return
       }
       emittedInboundSessionOpenIds.add(sessionId)
+      const peerHost =
+        normalizeSocketRemoteIp(inbound.socket) ?? inbound.socket.remoteAddress ?? undefined
       pushHostEvent('transport.session.opened', {
         remote: inbound.remote,
         sessionId: inbound.sessionId,
+        transport: 'tcp',
         payload: {
           deviceId: inbound.remoteDeviceId,
           direction: 'inbound',
-          host: inbound.socket.remoteAddress,
-          port: inbound.socket.remotePort
+          host: peerHost,
+          port: inbound.socket.remotePort,
+          displayName: inbound.peerDisplayName
         }
       })
     }, INBOUND_SESSION_STABLE_MS)
@@ -914,7 +991,7 @@ export function createDeviceDiscoveryService(
           }
           const helloAckPayload =
             frame.payload && typeof frame.payload === 'object'
-              ? (frame.payload as { sourceDeviceId?: unknown })
+              ? (frame.payload as { sourceDeviceId?: unknown; displayName?: unknown })
               : undefined
           const remoteDeviceId =
             typeof helloAckPayload?.sourceDeviceId === 'string'
@@ -932,6 +1009,22 @@ export function createDeviceDiscoveryService(
           session.deviceId = remoteDeviceId
           session.openedAt = Date.now()
           lastHostHeartbeatAt = Date.now()
+          const remoteDisplay =
+            typeof helloAckPayload?.displayName === 'string'
+              ? helloAckPayload.displayName.trim()
+              : undefined
+          pushHostEvent('transport.session.opened', {
+            remote: hostRemote(),
+            sessionId: session.sessionId,
+            transport: 'tcp',
+            payload: {
+              deviceId: remoteDeviceId,
+              direction: 'outbound',
+              host: session.host,
+              port: session.port,
+              displayName: remoteDisplay
+            }
+          })
           pendingHelloResolve?.(session.sessionId ?? randomUUID())
           pendingHelloResolve = undefined
           pendingHelloReject = undefined
@@ -994,7 +1087,11 @@ export function createDeviceDiscoveryService(
       const checkedAt = Date.now()
       let settled = false
 
-      const finish = (connectable: boolean, errorMessage?: string): void => {
+      const finish = (
+        connectable: boolean,
+        errorMessage?: string,
+        overrides?: Partial<Pick<DiscoveredDevice, 'deviceId' | 'name'>>
+      ): void => {
         if (settled) {
           return
         }
@@ -1002,6 +1099,7 @@ export function createDeviceDiscoveryService(
         socket.destroy()
         resolve({
           ...device,
+          ...overrides,
           connectable,
           connectCheckAt: checkedAt,
           connectCheckError: connectable ? undefined : (errorMessage ?? 'NOT_CONNECTABLE'),
@@ -1018,7 +1116,32 @@ export function createDeviceDiscoveryService(
         for (const frame of frames) {
           if (frame.type === 'helloAck') {
             if (frame.appId === SYNRA_APP_ID && frame.protocolVersion) {
-              finish(true)
+              const helloAckPayload =
+                frame.payload && typeof frame.payload === 'object'
+                  ? (frame.payload as { sourceDeviceId?: unknown; displayName?: unknown })
+                  : undefined
+              const remoteId =
+                typeof helloAckPayload?.sourceDeviceId === 'string'
+                  ? helloAckPayload.sourceDeviceId.trim()
+                  : ''
+              const remoteDisplay =
+                typeof helloAckPayload?.displayName === 'string'
+                  ? helloAckPayload.displayName.trim()
+                  : ''
+              if (remoteId.length > 0) {
+                const friendlyName =
+                  remoteDisplay.length > 0
+                    ? remoteDisplay
+                    : device.name.startsWith('Synra Device') || device.name.startsWith('Manual')
+                      ? `Synra ${remoteId.slice(0, 8)}`
+                      : device.name
+                finish(true, undefined, {
+                  deviceId: remoteId,
+                  name: friendlyName
+                })
+              } else {
+                finish(true)
+              }
             } else {
               finish(false, 'HELLO_ACK_APP_ID_MISMATCH')
             }
@@ -1027,6 +1150,15 @@ export function createDeviceDiscoveryService(
       })
 
       socket.connect(port, device.ipAddress, () => {
+        const helloPayload: Record<string, unknown> = {
+          sourceDeviceId: getLocalDeviceUuid(),
+          probe: true,
+          displayName: localSynraDisplayName()
+        }
+        const outboundIp = pickPrimarySourceHostIp()
+        if (outboundIp) {
+          helloPayload.sourceHostIp = outboundIp
+        }
         const hello: LanFrame = {
           version: SYNRA_PROTOCOL_VERSION,
           type: 'hello',
@@ -1035,10 +1167,7 @@ export function createDeviceDiscoveryService(
           appId: SYNRA_APP_ID,
           protocolVersion: SYNRA_PROTOCOL_VERSION,
           capabilities: ['message'],
-          payload: {
-            sourceDeviceId: localDeviceUuid,
-            probe: true
-          }
+          payload: helloPayload
         }
         void enqueueSocketFrame(socket, hello).catch(() => undefined)
       })
@@ -1127,7 +1256,7 @@ export function createDeviceDiscoveryService(
       })
 
       for (const device of probeResult) {
-        state.devices.set(device.deviceId, device)
+        upsertDiscoveredDeviceAfterProbe(state.devices, device)
       }
       pruneSelfDevices(state.devices, collectLocalIpSet(Boolean(options.includeLoopback)))
 
@@ -1166,7 +1295,7 @@ export function createDeviceDiscoveryService(
       })
 
       for (const device of nextDevices) {
-        state.devices.set(device.deviceId, device)
+        upsertDiscoveredDeviceAfterProbe(state.devices, device)
       }
       pruneSelfDevices(state.devices, collectLocalIpSet(false))
 
@@ -1208,6 +1337,16 @@ export function createDeviceDiscoveryService(
             reject('SESSION_SOCKET_REPLACED')
             return
           }
+          const openHelloPayload: Record<string, unknown> = {
+            token: options.token,
+            sourceDeviceId: getLocalDeviceUuid(),
+            probe: false,
+            displayName: localSynraDisplayName()
+          }
+          const openOutboundIp = pickPrimarySourceHostIp()
+          if (openOutboundIp) {
+            openHelloPayload.sourceHostIp = openOutboundIp
+          }
           void enqueueSocketFrame(socket, {
             version: SYNRA_PROTOCOL_VERSION,
             type: 'hello',
@@ -1216,11 +1355,7 @@ export function createDeviceDiscoveryService(
             appId: SYNRA_APP_ID,
             protocolVersion: SYNRA_PROTOCOL_VERSION,
             capabilities: ['message'],
-            payload: {
-              token: options.token,
-              sourceDeviceId: localDeviceUuid,
-              probe: false
-            }
+            payload: openHelloPayload
           }).catch((error: unknown) => reject(toErrorMessage(error, 'SESSION_OPEN_FAILED')))
         })
       }).catch((reason: unknown) => {

@@ -52,7 +52,7 @@ describe('host/services/plugin-catalog.service', () => {
           status: 'installed',
           builtin: true,
           defaultPage: 'home',
-          icon: 'i-lucide-message-circle',
+          icon: 'material-symbols:chat-bubble-outline',
           packageName: '@synra-plugin/chat'
         },
         {

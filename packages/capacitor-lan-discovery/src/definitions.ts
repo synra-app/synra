@@ -1,7 +1,7 @@
 import type { PluginListenerHandle } from '@capacitor/core'
 import type { SynraMessageType } from '@synra/protocol'
 
-export type DiscoverySource = 'mdns' | 'probe' | 'manual'
+export type DiscoverySource = 'mdns' | 'probe' | 'manual' | 'session'
 export type DiscoveryMode = 'hybrid' | 'mdns' | 'subnet' | 'manual'
 
 export type DiscoveryState = 'idle' | 'scanning'
@@ -105,6 +105,7 @@ export type DiscoverySessionOpenedEvent = {
   direction?: 'inbound' | 'outbound'
   host?: string
   port?: number
+  displayName?: string
 }
 
 export type DiscoverySessionClosedEvent = {

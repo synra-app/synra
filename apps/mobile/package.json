@@ -17,7 +17,8 @@
     "@capacitor/core": "catalog:capacitor",
     "@capacitor/ios": "catalog:capacitor",
     "@synra/capacitor-device-connection": "workspace:*",
-    "@synra/capacitor-lan-discovery": "workspace:*"
+    "@synra/capacitor-lan-discovery": "workspace:*",
+    "@synra/capacitor-preferences": "workspace:*"
   },
   "devDependencies": {
     "@capacitor/cli": "catalog:capacitor",

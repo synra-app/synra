@@ -6,6 +6,7 @@ import type { ConnectionService } from '../../host/services/connection.service'
 import type { DeviceDiscoveryService } from '../../host/services/device-discovery.service'
 import type { PluginCatalogService } from '../../host/services/plugin-catalog.service'
 import type { PluginRuntimeService } from '../../host/services/plugin-runtime.service'
+import type { PreferencesService } from '../../host/services/preferences.service'
 
 type RuntimeInfoService = ReturnType<
   typeof import('../../host/services/runtime-info.service').createRuntimeInfoService
@@ -19,6 +20,7 @@ export type BridgeHandlerDependencies = {
   pluginCatalogService: PluginCatalogService
   deviceDiscoveryService: DeviceDiscoveryService
   connectionService: ConnectionService
+  preferencesService: PreferencesService
 }
 
 export type BridgeHandlerMap = {
@@ -71,6 +73,17 @@ export function createBridgeHandlers(deps: BridgeHandlerDependencies): BridgeHan
       deps.connectionService.sendMessage(request.payload),
     [BRIDGE_METHODS.connectionGetSessionState]: async (request) =>
       deps.connectionService.getSessionState(request.payload),
-    [BRIDGE_METHODS.connectionPullHostEvents]: async () => deps.connectionService.pullHostEvents()
+    [BRIDGE_METHODS.connectionPullHostEvents]: async () => deps.connectionService.pullHostEvents(),
+    [BRIDGE_METHODS.preferencesGet]: async (request) => ({
+      value: deps.preferencesService.get(request.payload.key)
+    }),
+    [BRIDGE_METHODS.preferencesSet]: async (request) => {
+      deps.preferencesService.set(request.payload.key, request.payload.value)
+      return { success: true as const }
+    },
+    [BRIDGE_METHODS.preferencesRemove]: async (request) => {
+      deps.preferencesService.remove(request.payload.key)
+      return { success: true as const }
+    }
   }
 }

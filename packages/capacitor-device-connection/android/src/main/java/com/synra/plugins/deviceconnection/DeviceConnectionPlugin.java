@@ -6,6 +6,7 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import android.content.Context;
+import android.os.Build;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -29,8 +30,10 @@ public class DeviceConnectionPlugin extends Plugin {
     private static final int SESSION_ACK_TIMEOUT_MS = 3000;
     private static final String APP_ID = "synra";
     private static final String PROTOCOL_VERSION = "1.0";
-  private static final String PREFS_NAME = "synra_device_connection";
-  private static final String PREFS_DEVICE_UUID_KEY = "device_uuid";
+  private static final String INSTANCE_PREFS_NAME = "synra_preferences_store";
+  private static final String INSTANCE_UUID_KEY = "synra.preferences.synra.device.instance-uuid";
+  private static final String LEGACY_PREFS_NAME = "synra_device_connection";
+  private static final String LEGACY_PREFS_DEVICE_UUID_KEY = "device_uuid";
 
     private final ExecutorService ioExecutor = Executors.newSingleThreadExecutor();
     private final ExecutorService readerExecutor = Executors.newSingleThreadExecutor();
@@ -68,6 +71,7 @@ public class DeviceConnectionPlugin extends Plugin {
                 JSObject helloPayload = new JSObject();
                 helloPayload.put("sourceDeviceId", getOrCreateLocalDeviceUuid());
                 helloPayload.put("probe", false);
+                helloPayload.put("displayName", localSynraDisplayName());
                 writeFrame(output, frame("hello", sessionId, null, helloPayload));
                 JSONObject helloAck = readFrame(input);
                 if (!"helloAck".equals(helloAck.optString("type"))) {
@@ -111,6 +115,11 @@ public class DeviceConnectionPlugin extends Plugin {
                 result.put("port", this.currentPort);
                 result.put("state", "open");
                 result.put("transport", "tcp");
+                String remoteDisplay =
+                    helloAckPayload == null ? null : helloAckPayload.optString("displayName", null);
+                if (remoteDisplay != null && !remoteDisplay.isBlank()) {
+                    result.put("displayName", remoteDisplay.trim());
+                }
                 notifyListeners("sessionOpened", result);
                 call.resolve(result);
             } catch (Exception error) {
@@ -340,23 +349,34 @@ public class DeviceConnectionPlugin extends Plugin {
         }
     }
 
+    private String localSynraDisplayName() {
+        if (Build.MODEL != null && !Build.MODEL.isBlank()) {
+            return Build.MODEL.trim();
+        }
+        return "Synra";
+    }
+
     private String getOrCreateLocalDeviceUuid() {
         Context context = getContext();
         if (context == null) {
             return UUID.randomUUID().toString();
         }
-        String existing = context
-            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .getString(PREFS_DEVICE_UUID_KEY, null);
+        android.content.SharedPreferences unified =
+            context.getSharedPreferences(INSTANCE_PREFS_NAME, Context.MODE_PRIVATE);
+        String existing = unified.getString(INSTANCE_UUID_KEY, null);
         if (existing != null && !existing.isBlank()) {
             return existing;
         }
+        android.content.SharedPreferences legacy =
+            context.getSharedPreferences(LEGACY_PREFS_NAME, Context.MODE_PRIVATE);
+        String migrated = legacy.getString(LEGACY_PREFS_DEVICE_UUID_KEY, null);
+        if (migrated != null && !migrated.isBlank()) {
+            unified.edit().putString(INSTANCE_UUID_KEY, migrated).apply();
+            legacy.edit().remove(LEGACY_PREFS_DEVICE_UUID_KEY).apply();
+            return migrated;
+        }
         String created = UUID.randomUUID().toString();
-        context
-            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .putString(PREFS_DEVICE_UUID_KEY, created)
-            .apply();
+        unified.edit().putString(INSTANCE_UUID_KEY, created).apply();
         return created;
     }
 }

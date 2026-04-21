@@ -12,7 +12,8 @@ import Darwin
     private let defaultMdnsServiceType = "_synra._tcp."
     private let udpDiscoveryPort: UInt16 = 32101
     private let udpDiscoveryMagic = "SYNRA_DISCOVERY_V1"
-    private let deviceUuidStorageKey = "synra.lan-discovery.device-uuid"
+    private let unifiedDeviceUuidDefaultsKey = "synra.preferences.synra.device.instance-uuid"
+    private let legacyLanDeviceUuidKey = "synra.lan-discovery.device-uuid"
     private var state: String = "idle"
     private var startedAt: Int?
     private var scanWindowMs: Int = 15_000
@@ -129,8 +130,26 @@ import Darwin
         let checkedAt = now()
         for (deviceId, device) in devices {
             let outcome = probeDevice(host: device.ipAddress, port: targetPort, timeoutMs: targetTimeout)
-            let updated = device.withConnectable(outcome.connectable, outcome.error)
-            devices[deviceId] = updated
+            var updated = device.withConnectable(outcome.connectable, outcome.error)
+            if let remote = outcome.remoteDeviceId, !remote.isEmpty, remote != device.deviceId {
+                devices.removeValue(forKey: deviceId)
+                let nextName =
+                    updated.name.hasPrefix("Manual") || updated.name.hasPrefix("Synra Device")
+                    ? "Synra \(String(remote.prefix(8)))"
+                    : updated.name
+                updated = DeviceRecord(
+                    deviceId: remote,
+                    name: nextName,
+                    ipAddress: updated.ipAddress,
+                    source: updated.source,
+                    connectable: updated.connectable,
+                    connectCheckAt: updated.connectCheckAt,
+                    connectCheckError: updated.connectCheckError,
+                    discoveredAt: updated.discoveredAt,
+                    lastSeenAt: updated.lastSeenAt
+                )
+            }
+            devices[updated.deviceId] = updated
         }
 
         return [
@@ -251,6 +270,12 @@ import Darwin
             )
         }
         return records
+    }
+
+    private func primarySourceHostIpv4() -> String? {
+        let records = collectInterfaceDevices(includeLoopback: false)
+        let ips = records.map(\.ipAddress).filter { !$0.hasPrefix("169.254.") }.sorted()
+        return ips.first ?? records.first?.ipAddress
     }
 
     private func collectManualDevices(_ manualTargets: [String]) -> [DeviceRecord] {
@@ -411,6 +436,7 @@ import Darwin
                 let helloPayload = frame["payload"] as? [String: Any]
                 let sourceDeviceId = helloPayload?["sourceDeviceId"] as? String
                 let isProbe = (helloPayload?["probe"] as? Bool) ?? false
+                let peerDisplayName = (helloPayload?["displayName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard let sourceDeviceId, !sourceDeviceId.isEmpty else {
                     self.sendFrame(
                         self.frame(
@@ -429,27 +455,39 @@ import Darwin
                     return
                 }
                 current.sessionId = sessionId
+                let (observedPeerIp, _) = self.describeHostPort(current.connection.endpoint)
+                var helloAckPayload: [String: Any] = [
+                    "sourceDeviceId": self.localDeviceUuid(),
+                    "displayName": self.localSynraDisplayName(),
+                ]
+                if let selfIp = self.primarySourceHostIpv4(), !selfIp.isEmpty {
+                    helloAckPayload["sourceHostIp"] = selfIp
+                }
+                if let observedPeerIp, !observedPeerIp.isEmpty {
+                    helloAckPayload["observedPeerIp"] = observedPeerIp
+                }
                 self.sendFrame(
                     self.frame(
                         type: "helloAck",
                         sessionId: sessionId,
                         messageId: nil,
-                        payload: [
-                            "sourceDeviceId": self.localDeviceUuid(),
-                        ]
+                        payload: helloAckPayload
                     ),
                     through: current.connection
-                )
+                ) {
+                    if isProbe {
+                        self.closeInboundConnection(
+                            connectionId: connectionId,
+                            reason: "probe-completed",
+                            emitSessionClosed: false
+                        )
+                    }
+                }
                 if isProbe {
-                    self.closeInboundConnection(
-                        connectionId: connectionId,
-                        reason: "probe-completed",
-                        emitSessionClosed: false
-                    )
                     return
                 }
                 let (host, _) = self.describeHostPort(current.connection.endpoint)
-                self.onSessionOpened?([
+                var opened: [String: Any] = [
                     "sessionId": sessionId,
                     "deviceId": sourceDeviceId,
                     "direction": "inbound",
@@ -457,7 +495,11 @@ import Darwin
                     "host": host as Any,
                     // Always report host TCP server port for reverse-connect handoff.
                     "port": Int(self.defaultTcpPort),
-                ])
+                ]
+                if let peerDisplayName, !peerDisplayName.isEmpty {
+                    opened["displayName"] = peerDisplayName
+                }
+                self.onSessionOpened?(opened)
             } else if type == "message" {
                 guard let establishedSessionId = current.sessionId, establishedSessionId == sessionId else {
                     self.sendFrame(
@@ -881,13 +923,29 @@ import Darwin
         Int(Date().timeIntervalSince1970 * 1000)
     }
 
+    private func localSynraDisplayName() -> String {
+        let name = ProcessInfo.processInfo.hostName
+        return name.isEmpty ? "Synra" : name
+    }
+
     private func localDeviceUuid() -> String {
         let defaults = UserDefaults.standard
-        if let existing = defaults.string(forKey: deviceUuidStorageKey), !existing.isEmpty {
+        if let existing = defaults.string(forKey: unifiedDeviceUuidDefaultsKey), !existing.isEmpty {
             return existing
         }
+        if let legacy = defaults.string(forKey: legacyLanDeviceUuidKey), !legacy.isEmpty {
+            defaults.set(legacy, forKey: unifiedDeviceUuidDefaultsKey)
+            defaults.removeObject(forKey: legacyLanDeviceUuidKey)
+            return legacy
+        }
+        let legacyDcKey = "synra.device-connection.device-uuid"
+        if let legacyDc = defaults.string(forKey: legacyDcKey), !legacyDc.isEmpty {
+            defaults.set(legacyDc, forKey: unifiedDeviceUuidDefaultsKey)
+            defaults.removeObject(forKey: legacyDcKey)
+            return legacyDc
+        }
         let created = UUID().uuidString
-        defaults.set(created, forKey: deviceUuidStorageKey)
+        defaults.set(created, forKey: unifiedDeviceUuidDefaultsKey)
         return created
     }
 
@@ -899,12 +957,12 @@ import Darwin
 
     private func probeDevice(host: String, port: UInt16, timeoutMs: Int) -> ProbeOutcome {
         guard let endpointPort = NWEndpoint.Port(rawValue: port) else {
-            return ProbeOutcome(connectable: false, error: "INVALID_PORT")
+            return ProbeOutcome(connectable: false, error: "INVALID_PORT", remoteDeviceId: nil)
         }
 
         let connection = NWConnection(host: NWEndpoint.Host(host), port: endpointPort, using: .tcp)
         let semaphore = DispatchSemaphore(value: 0)
-        var outcome = ProbeOutcome(connectable: false, error: "PROBE_FAILED")
+        var outcome = ProbeOutcome(connectable: false, error: "PROBE_FAILED", remoteDeviceId: nil)
         connection.stateUpdateHandler = { [weak self] state in
             guard let self else {
                 semaphore.signal()
@@ -917,23 +975,37 @@ import Darwin
                         type: "hello",
                         sessionId: UUID().uuidString,
                         messageId: nil,
-                        payload: [
-                            "sourceDeviceId": self.localDeviceUuid(),
-                            "probe": true,
-                        ]
+                        payload: {
+                            var probeHello: [String: Any] = [
+                                "sourceDeviceId": self.localDeviceUuid(),
+                                "probe": true,
+                                "displayName": self.localSynraDisplayName(),
+                            ]
+                            if let selfIp = self.primarySourceHostIpv4(), !selfIp.isEmpty {
+                                probeHello["sourceHostIp"] = selfIp
+                            }
+                            return probeHello
+                        }()
                     ),
                     through: connection
-                )
-                self.receiveSingleFrame(through: connection) { frame in
-                    if let frame, frame["type"] as? String == "helloAck", frame["appId"] as? String == "synra" {
-                        outcome = ProbeOutcome(connectable: true, error: nil)
-                    } else {
-                        outcome = ProbeOutcome(connectable: false, error: "HELLO_ACK_INVALID")
+                ) {
+                    self.receiveSingleFrame(through: connection) { frame in
+                        if let frame, frame["type"] as? String == "helloAck", frame["appId"] as? String == "synra" {
+                            let payload = frame["payload"] as? [String: Any]
+                            let remote = payload?["sourceDeviceId"] as? String
+                            outcome = ProbeOutcome(
+                                connectable: true,
+                                error: nil,
+                                remoteDeviceId: (remote?.isEmpty == false) ? remote : nil
+                            )
+                        } else {
+                            outcome = ProbeOutcome(connectable: false, error: "HELLO_ACK_INVALID", remoteDeviceId: nil)
+                        }
+                        semaphore.signal()
                     }
-                    semaphore.signal()
                 }
             case .failed(let error):
-                outcome = ProbeOutcome(connectable: false, error: error.localizedDescription)
+                outcome = ProbeOutcome(connectable: false, error: error.localizedDescription, remoteDeviceId: nil)
                 semaphore.signal()
             default:
                 break
@@ -946,7 +1018,7 @@ import Darwin
             return outcome
         }
         if outcome.error == "PROBE_FAILED" {
-            return ProbeOutcome(connectable: false, error: "PROBE_TIMEOUT")
+            return ProbeOutcome(connectable: false, error: "PROBE_TIMEOUT", remoteDeviceId: nil)
         }
         return outcome
     }
@@ -970,14 +1042,21 @@ import Darwin
         return base
     }
 
-    private func sendFrame(_ frame: [String: Any], through target: NWConnection) {
+    private func sendFrame(
+        _ frame: [String: Any],
+        through target: NWConnection,
+        onSent: (() -> Void)? = nil
+    ) {
         guard let payload = try? JSONSerialization.data(withJSONObject: frame) else {
+            onSent?()
             return
         }
         var length = UInt32(payload.count).bigEndian
         let header = Data(bytes: &length, count: MemoryLayout<UInt32>.size)
         let packet = header + payload
-        target.send(content: packet, completion: .contentProcessed({ _ in }))
+        target.send(content: packet, completion: .contentProcessed({ _ in
+            onSent?()
+        }))
     }
 
     private func receiveSingleFrame(
@@ -1068,6 +1147,7 @@ private final class MdnsCollector: NSObject, NetServiceBrowserDelegate, NetServi
         guard let rawAddresses = sender.addresses else {
             return
         }
+        var ipv4Candidates: [String] = []
         for rawAddress in rawAddresses {
             guard
                 let address = rawAddress.withUnsafeBytes({ pointer -> String? in
@@ -1098,10 +1178,26 @@ private final class MdnsCollector: NSObject, NetServiceBrowserDelegate, NetServi
             else {
                 continue
             }
-            accessQueue.async { [weak self] in
-                self?.addresses.insert(address)
-            }
+            ipv4Candidates.append(address)
         }
+        let chosen = Self.pickPreferredIpv4(ipv4Candidates)
+        guard let chosen else {
+            return
+        }
+        accessQueue.async { [weak self] in
+            self?.addresses.insert(chosen)
+        }
+    }
+
+    private static func pickPreferredIpv4(_ candidates: [String]) -> String? {
+        guard !candidates.isEmpty else {
+            return nil
+        }
+        let nonLinkLocal = candidates.filter { !$0.hasPrefix("169.254.") }
+        if let first = nonLinkLocal.sorted().first {
+            return first
+        }
+        return candidates.sorted().first
     }
 }
 
@@ -1209,6 +1305,7 @@ private struct DeviceRecord {
 private struct ProbeOutcome {
     let connectable: Bool
     let error: String?
+    let remoteDeviceId: String?
 }
 
 private final class InboundConnectionContext {
