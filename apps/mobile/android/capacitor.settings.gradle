@@ -7,3 +7,6 @@ project(':synra-capacitor-device-connection').projectDir = new File('../../../pa
 
 include ':synra-capacitor-lan-discovery'
 project(':synra-capacitor-lan-discovery').projectDir = new File('../../../packages/capacitor-lan-discovery/android')
+
+include ':synra-capacitor-preferences'
+project(':synra-capacitor-preferences').projectDir = new File('../../../packages/capacitor-preferences/android')

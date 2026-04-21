@@ -22,13 +22,16 @@ type BuildStep = {
   env?: NodeJS.ProcessEnv
 }
 
+const buildToolsStep: BuildStep = {
+  title: 'Build tools/packages',
+  command: VP_COMMAND,
+  args: ['run', 'build:tools'],
+  env: process.platform === 'win32' ? { VP_RUN_CONCURRENCY_LIMIT: '1' } : undefined
+}
+
 const stepsByTarget: Record<BuildTarget, BuildStep[]> = {
   frontend: [
-    {
-      title: 'Build tools/packages',
-      command: VP_COMMAND,
-      args: ['run', 'build:tools']
-    },
+    buildToolsStep,
     {
       title: 'Build frontend',
       command: VP_COMMAND,
@@ -60,11 +63,7 @@ const stepsByTarget: Record<BuildTarget, BuildStep[]> = {
     }
   ],
   android: [
-    {
-      title: 'Build tools/packages',
-      command: VP_COMMAND,
-      args: ['run', 'build:tools']
-    },
+    buildToolsStep,
     {
       title: 'Build frontend for mobile',
       command: VP_COMMAND,
@@ -77,11 +76,7 @@ const stepsByTarget: Record<BuildTarget, BuildStep[]> = {
     }
   ],
   ios: [
-    {
-      title: 'Build tools/packages',
-      command: VP_COMMAND,
-      args: ['run', 'build:tools']
-    },
+    buildToolsStep,
     {
       title: 'Build frontend for mobile',
       command: VP_COMMAND,
@@ -94,11 +89,7 @@ const stepsByTarget: Record<BuildTarget, BuildStep[]> = {
     }
   ],
   all: [
-    {
-      title: 'Build tools/packages',
-      command: VP_COMMAND,
-      args: ['run', 'build:tools']
-    },
+    buildToolsStep,
     {
       title: 'Build frontend',
       command: VP_COMMAND,
