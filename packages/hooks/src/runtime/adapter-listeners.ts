@@ -12,10 +12,29 @@ type SessionOpenedLike = {
   deviceId?: string
   host?: string
   displayName?: string
+  port?: number
 }
 
 function normalizeHost(value: string): string {
   return value.trim().toLowerCase()
+}
+
+function nonEmptyTrimmed(value: string | undefined): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined
+  }
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : undefined
+}
+
+function resolveValidPort(
+  eventPort: number | undefined,
+  fallbackPort: number | undefined
+): number | undefined {
+  if (typeof eventPort === 'number' && eventPort > 0) {
+    return eventPort
+  }
+  return fallbackPort
 }
 
 function upsertDiscoveredPeerFromSession(
@@ -33,20 +52,35 @@ function upsertDiscoveredPeerFromSession(
     return
   }
   const now = Date.now()
-  const display =
-    typeof event.displayName === 'string' && event.displayName.trim().length > 0
-      ? event.displayName.trim()
-      : `Peer ${event.deviceId.slice(0, 8)}`
-  const peer: DiscoveredDevice = {
-    deviceId: event.deviceId,
-    name: display,
-    ipAddress: host,
-    source: 'session',
-    connectable: true,
-    connectCheckAt: now,
-    discoveredAt: now,
-    lastSeenAt: now
-  }
+  const existing =
+    devices.value.find((device) => device.deviceId === event.deviceId) ??
+    devices.value.find((device) => normalizeHost(device.ipAddress) === host)
+  const existingName = nonEmptyTrimmed(existing?.name)
+  const eventDisplayName = nonEmptyTrimmed(event.displayName)
+  const displayName = existingName ?? eventDisplayName ?? `Peer ${event.deviceId.slice(0, 8)}`
+  const port = resolveValidPort(event.port, existing?.port)
+  const peer: DiscoveredDevice = existing
+    ? {
+        ...existing,
+        name: displayName,
+        ipAddress: existing.ipAddress || host,
+        port,
+        source: existing.source,
+        connectable: true,
+        connectCheckAt: now,
+        lastSeenAt: now
+      }
+    : {
+        deviceId: event.deviceId,
+        name: displayName,
+        ipAddress: host,
+        port,
+        source: 'session',
+        connectable: true,
+        connectCheckAt: now,
+        discoveredAt: now,
+        lastSeenAt: now
+      }
   const others = devices.value.filter((device) => {
     if (device.deviceId === peer.deviceId) {
       return false

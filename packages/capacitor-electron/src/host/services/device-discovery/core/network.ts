@@ -37,5 +37,19 @@ export function normalizeRemoteIp(value: string | undefined): string | undefined
   if (!value) {
     return undefined
   }
-  return value.replace(/^::ffff:/i, '')
+  const normalized = value.replace(/^::ffff:/i, '').trim()
+  const segments = normalized.split('.')
+  if (segments.length !== 4) {
+    return undefined
+  }
+  for (const segment of segments) {
+    if (!/^\d{1,3}$/.test(segment)) {
+      return undefined
+    }
+    const num = Number(segment)
+    if (num < 0 || num > 255) {
+      return undefined
+    }
+  }
+  return normalized
 }

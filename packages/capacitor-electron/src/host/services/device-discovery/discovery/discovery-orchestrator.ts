@@ -73,7 +73,13 @@ export function createDiscoveryOrchestrator(
         activeKinds.has(strategy.kind)
       )
       const discovered = await Promise.all(
-        activeStrategies.map((strategy) => strategy.discover({ options: startOptions, timeoutMs }))
+        activeStrategies.map((strategy) =>
+          strategy.discover({
+            options: startOptions,
+            timeoutMs,
+            localDeviceUuid: options.resolveLocalDeviceUuid()
+          })
+        )
       )
       options.registry.merge(discovered.flat())
 

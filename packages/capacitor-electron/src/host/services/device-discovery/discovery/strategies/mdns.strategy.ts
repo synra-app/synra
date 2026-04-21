@@ -40,7 +40,12 @@ export function createMdnsDiscoveryStrategy(): DiscoveryStrategy {
         referer?: { address?: string }
         host?: string
         name?: string
+        port?: number
+        txt?: { sourceDeviceId?: string }
       }) => {
+        if (service.txt?.sourceDeviceId === context.localDeviceUuid) {
+          return
+        }
         const candidates = [
           ...(service.addresses ?? []),
           service.referer?.address ?? '',
@@ -53,7 +58,12 @@ export function createMdnsDiscoveryStrategy(): DiscoveryStrategy {
           }
           devicesByIp.set(
             normalizedIp,
-            toDiscoveredDevice(normalizedIp, 'mdns', service.name ?? `Synra Device ${normalizedIp}`)
+            toDiscoveredDevice(
+              normalizedIp,
+              'mdns',
+              service.name ?? `Synra Device ${normalizedIp}`,
+              service.port
+            )
           )
         }
       }

@@ -7,13 +7,15 @@ function createDevice(
   key: string,
   name: string,
   ipAddress: string,
-  source: DeviceSource
+  source: DeviceSource,
+  port?: number
 ): DiscoveredDevice {
   const now = Date.now()
   return {
     deviceId: hashDeviceId(key),
     name,
     ipAddress,
+    port,
     source,
     connectable: false,
     discoveredAt: now,
@@ -33,7 +35,14 @@ export function toManualDevices(targets: string[]): DiscoveredDevice[] {
 export function toDiscoveredDevice(
   ipAddress: string,
   source: DeviceSource,
-  name?: string
+  name?: string,
+  port?: number
 ): DiscoveredDevice {
-  return createDevice(`auto:${ipAddress}`, name ?? `Synra Device ${ipAddress}`, ipAddress, source)
+  return createDevice(
+    `auto:${ipAddress}`,
+    name ?? `Synra Device ${ipAddress}`,
+    ipAddress,
+    source,
+    port
+  )
 }

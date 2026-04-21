@@ -114,6 +114,7 @@ export type DiscoveredDevice = {
   deviceId: string
   name: string
   ipAddress: string
+  port?: number
   source: DiscoverySource
   connectable: boolean
   connectCheckAt?: number

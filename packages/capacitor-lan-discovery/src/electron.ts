@@ -81,6 +81,7 @@ function toListResult(result: DiscoveryListBridgeResult) {
       deviceId: device.deviceId,
       name: device.name,
       ipAddress: device.ipAddress,
+      port: device.port,
       source: device.source,
       connectable: device.connectable,
       connectCheckAt: device.connectCheckAt,

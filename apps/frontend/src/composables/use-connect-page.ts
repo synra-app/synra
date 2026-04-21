@@ -13,6 +13,19 @@ function parseManualTargets(value: string): string[] {
     .filter((item) => item.length > 0)
 }
 
+function isIpv4Address(value: string | undefined): boolean {
+  if (typeof value !== 'string') {
+    return false
+  }
+  const segments = value.trim().split('.')
+  if (segments.length !== 4) {
+    return false
+  }
+  return segments.every(
+    (segment) => /^\d{1,3}$/.test(segment) && Number(segment) >= 0 && Number(segment) <= 255
+  )
+}
+
 export function useConnectPage() {
   const router = useRouter()
   const store = useLanDiscoveryStore()
@@ -42,12 +55,7 @@ export function useConnectPage() {
   const statusLabel = computed(() => (scanState.value === 'scanning' ? 'Scanning' : 'Idle'))
   const connectableDevices = computed(() =>
     [...devices.value]
-      .filter(
-        (device) =>
-          typeof device.ipAddress === 'string' &&
-          device.ipAddress.length > 0 &&
-          Boolean(device.connectable)
-      )
+      .filter((device) => isIpv4Address(device.ipAddress) && Boolean(device.connectable))
       .sort((left, right) => right.lastSeenAt - left.lastSeenAt)
   )
   const connectedDevice = computed(() => {
@@ -98,10 +106,14 @@ export function useConnectPage() {
     }
     connectInFlight.value = true
     try {
+      const targetPort =
+        typeof selectedDevice.port === 'number' && selectedDevice.port > 0
+          ? selectedDevice.port
+          : socketPort.value
       await store.openSession({
         deviceId: selectedDevice.deviceId,
         host: selectedDevice.ipAddress,
-        port: socketPort.value
+        port: targetPort
       })
     } finally {
       connectInFlight.value = false

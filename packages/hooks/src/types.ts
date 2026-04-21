@@ -5,6 +5,7 @@ import type { SynraMessageType } from '@synra/protocol'
 export type SynraHookDevice = {
   deviceId: string
   ipAddress?: string
+  port?: number
   name?: string
   source?: string
   lastSeenAt?: number

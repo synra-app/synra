@@ -6,6 +6,7 @@ import type {
 export type DiscoveryContext = {
   options: DeviceDiscoveryStartOptions
   timeoutMs: number
+  localDeviceUuid: string
 }
 
 export interface DiscoveryStrategy {

@@ -26,7 +26,10 @@ const emit = defineEmits<{
         <div class="flex flex-wrap items-start justify-between gap-3">
           <div class="space-y-1">
             <p class="font-semibold text-slate-100">{{ device.name }}</p>
-            <p class="text-muted-2">{{ device.ipAddress }}</p>
+            <p class="text-muted-2">
+              {{ device.ipAddress
+              }}<span v-if="typeof device.port === 'number'">:{{ device.port }}</span>
+            </p>
             <p class="text-muted-4">
               Source: {{ device.source }} | Last Seen: {{ device.lastSeenAt }}
             </p>
