@@ -1,30 +1,39 @@
 <script setup lang="ts">
 import AppScrollTabs from '../../components/base/AppScrollTabs.vue'
 import type { AppScrollTabItem } from '../../components/base/AppScrollTabs.vue'
+import { RouterView } from 'vue-router'
 
-type SettingsTabId = 'basic' | 'about'
+type SettingsTabId = 'basic' | 'about' | 'development'
+
 const settingsTabs: AppScrollTabItem[] = [
   { id: 'basic', label: 'Basic Info' },
-  { id: 'about', label: 'About' }
+  { id: 'about', label: 'About' },
+  { id: 'development', label: 'Development' }
 ]
+
 const route = useRoute()
 const router = useRouter()
 
 const activeSettingsTab = computed<SettingsTabId>({
   get() {
-    return route.path.endsWith('/about') ? 'about' : 'basic'
+    if (route.path.endsWith('/about')) {
+      return 'about'
+    }
+    if (route.path.endsWith('/development')) {
+      return 'development'
+    }
+    return 'basic'
   },
   set(nextTab) {
-    const targetPath = nextTab === 'about' ? '/settings/about' : '/settings/basic'
+    const targetPath =
+      nextTab === 'about'
+        ? '/settings/about'
+        : nextTab === 'development'
+          ? '/settings/development'
+          : '/settings/basic'
     if (route.path !== targetPath) {
       void router.push(targetPath)
     }
-  }
-})
-
-onMounted(() => {
-  if (route.path === '/settings') {
-    void router.replace('/settings/basic')
   }
 })
 </script>
