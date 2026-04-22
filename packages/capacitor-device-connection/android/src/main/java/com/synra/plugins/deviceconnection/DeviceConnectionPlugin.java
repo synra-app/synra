@@ -23,11 +23,15 @@ import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 @CapacitorPlugin(name = "DeviceConnection")
 public class DeviceConnectionPlugin extends Plugin {
     private static final int SESSION_ACK_TIMEOUT_MS = 3000;
+    private static final int HEARTBEAT_INTERVAL_MS = 10_000;
     private static final String APP_ID = "synra";
     private static final String PROTOCOL_VERSION = "1.0";
   private static final String INSTANCE_PREFS_NAME = "synra_preferences_store";
@@ -57,7 +61,9 @@ public class DeviceConnectionPlugin extends Plugin {
 
     private final ExecutorService ioExecutor = Executors.newSingleThreadExecutor();
     private final ExecutorService readerExecutor = Executors.newSingleThreadExecutor();
+    private final ScheduledExecutorService heartbeatExecutor = Executors.newSingleThreadScheduledExecutor();
     private final AtomicBoolean sessionOpen = new AtomicBoolean(false);
+    private ScheduledFuture<?> heartbeatTask;
     private Socket sessionSocket;
     private DataInputStream sessionInput;
     private DataOutputStream sessionOutput;
@@ -124,6 +130,7 @@ public class DeviceConnectionPlugin extends Plugin {
                 this.lastSessionError = null;
                 this.sessionOpen.set(true);
 
+                startHeartbeatLoop();
                 startSessionReader();
 
                 JSObject result = new JSObject();
@@ -262,6 +269,7 @@ public class DeviceConnectionPlugin extends Plugin {
         closeSessionSocket();
         ioExecutor.shutdownNow();
         readerExecutor.shutdownNow();
+        heartbeatExecutor.shutdownNow();
     }
 
     private void startSessionReader() {
@@ -290,6 +298,8 @@ public class DeviceConnectionPlugin extends Plugin {
                         event.put("timestamp", frame.optLong("timestamp", System.currentTimeMillis()));
                         event.put("transport", "tcp");
                         notifyListeners("messageAck", event);
+                    } else if ("heartbeat".equals(type)) {
+                        // Keepalive frame from peer; no-op.
                     } else if ("close".equals(type)) {
                         JSObject event = new JSObject();
                         event.put("sessionId", frame.optString("sessionId"));
@@ -353,6 +363,7 @@ public class DeviceConnectionPlugin extends Plugin {
     }
 
     private void closeSessionSocket() {
+        stopHeartbeatLoop();
         this.sessionOpen.set(false);
         if (this.sessionSocket != null) {
             closeQuietly(this.sessionSocket);
@@ -360,6 +371,47 @@ public class DeviceConnectionPlugin extends Plugin {
         }
         this.sessionInput = null;
         this.sessionOutput = null;
+    }
+
+    private synchronized void startHeartbeatLoop() {
+        stopHeartbeatLoop();
+        heartbeatTask =
+            heartbeatExecutor.scheduleAtFixedRate(
+                () -> {
+                    if (!sessionOpen.get()) {
+                        return;
+                    }
+                    DataOutputStream output = sessionOutput;
+                    String sessionId = currentSessionId;
+                    if (output == null || sessionId == null || sessionId.isBlank()) {
+                        return;
+                    }
+                    try {
+                        writeFrame(output, frame("heartbeat", sessionId, null, null));
+                    } catch (Exception error) {
+                        lastSessionError = error.getMessage();
+                        if (sessionOpen.get()) {
+                            JSObject event = new JSObject();
+                            event.put("sessionId", sessionId);
+                            event.put("message", error.getMessage());
+                            event.put("transport", "tcp");
+                            event.put("code", "HEARTBEAT_SEND_FAILED");
+                            notifyListeners("transportError", event);
+                        }
+                        closeSessionSocket();
+                    }
+                },
+                HEARTBEAT_INTERVAL_MS,
+                HEARTBEAT_INTERVAL_MS,
+                TimeUnit.MILLISECONDS
+            );
+    }
+
+    private synchronized void stopHeartbeatLoop() {
+        if (heartbeatTask != null) {
+            heartbeatTask.cancel(true);
+            heartbeatTask = null;
+        }
     }
 
     private static void closeQuietly(Socket socket) {
