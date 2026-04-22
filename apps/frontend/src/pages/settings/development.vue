@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AppButton from '../../components/base/AppButton.vue'
+import { useLanDiscoveryStore } from '../../stores/lan-discovery'
 import {
   createEmptyPairedDevicesPayload,
   savePairedDevicesPayload
@@ -9,6 +10,7 @@ import { usePairingStore } from '../../stores/pairing'
 type ActionStatus = 'idle' | 'success' | 'error'
 
 const pairingStore = usePairingStore()
+const lanStore = useLanDiscoveryStore()
 const actionStatus = ref<ActionStatus>('idle')
 const actionMessage = ref('')
 const isClearing = ref(false)
@@ -24,6 +26,14 @@ async function clearPairedDevicesList(): Promise<void> {
   try {
     await savePairedDevicesPayload(createEmptyPairedDevicesPayload())
     pairingStore.bumpPairedList()
+    const opened = lanStore.connectedSessions.filter((session) => session.status === 'open')
+    await Promise.all(
+      opened.map((session) =>
+        typeof session.deviceId === 'string' && session.deviceId.length > 0
+          ? lanStore.disconnectDevice(session.deviceId).catch(() => undefined)
+          : Promise.resolve()
+      )
+    )
     actionStatus.value = 'success'
     actionMessage.value = 'Cleared paired devices list.'
   } catch (error: unknown) {

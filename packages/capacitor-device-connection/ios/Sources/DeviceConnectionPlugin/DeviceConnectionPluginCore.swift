@@ -8,6 +8,7 @@ public final class DeviceConnectionPluginCore: NSObject {
     private let sessionAckTimeoutMs = 3000
     private let unifiedDeviceUuidDefaultsKey = "synra.preferences.synra.device.instance-uuid"
     private let deviceBasicInfoDefaultsKey = "synra.preferences.synra.device.basic-info"
+    private let pairedDevicesDefaultsKey = "synra.preferences.synra.device.paired-peers"
     private let legacyDeviceDisplayNameDefaultsKey = "synra.preferences.synra.device.display-name"
     private let legacyDeviceUuidStorageKey = "synra.device-connection.device-uuid"
 
@@ -17,6 +18,26 @@ public final class DeviceConnectionPluginCore: NSObject {
         }
         return raw.compactMap { $0 as? String }.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter {
             !$0.isEmpty
+        }
+    }
+
+    private func storedPairedPeerDeviceIds() -> [String] {
+        guard let raw = UserDefaults.standard.string(forKey: pairedDevicesDefaultsKey), !raw.isEmpty else {
+            return []
+        }
+        guard
+            let data = raw.data(using: .utf8),
+            let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let items = payload["items"] as? [[String: Any]]
+        else {
+            return []
+        }
+        return items.compactMap { item in
+            guard let id = item["deviceId"] as? String else {
+                return nil
+            }
+            let trimmed = id.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
         }
     }
 
@@ -63,6 +84,7 @@ public final class DeviceConnectionPluginCore: NSObject {
         var opened = false
         var openError: String?
         var capturedPairedPeerIds: [String] = []
+        let claimsPeerPaired = storedPairedPeerDeviceIds().contains(deviceId)
         let generatedSessionId = UUID().uuidString
 
         let helloPayload: Any? = {
@@ -70,6 +92,8 @@ public final class DeviceConnectionPluginCore: NSObject {
                 "sourceDeviceId": localDeviceUuid(),
                 "probe": false,
                 "displayName": localSynraDisplayName(),
+                "handshakeKind": claimsPeerPaired ? "paired" : "fresh",
+                "claimsPeerPaired": claimsPeerPaired,
             ]
             if let token {
                 payload["token"] = token
@@ -148,6 +172,8 @@ public final class DeviceConnectionPluginCore: NSObject {
                 "state": sessionState.state,
                 "transport": "tcp",
                 "pairedPeerDeviceIds": capturedPairedPeerIds,
+                "handshakeKind": claimsPeerPaired ? "paired" : "fresh",
+                "claimsPeerPaired": claimsPeerPaired,
             ]
             if let name = sessionState.peerDisplayName, !name.isEmpty {
                 payload["displayName"] = name

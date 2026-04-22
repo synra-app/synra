@@ -72,6 +72,12 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
             let paired = pairedAny.compactMap { $0 as? String }.filter { !$0.isEmpty }
             opened["pairedPeerDeviceIds"] = paired
         }
+        if let handshakeKind = result["handshakeKind"] as? String, !handshakeKind.isEmpty {
+            opened["handshakeKind"] = handshakeKind
+        }
+        if let claimsPeerPaired = result["claimsPeerPaired"] as? Bool {
+            opened["claimsPeerPaired"] = claimsPeerPaired
+        }
         notifyListeners("sessionOpened", data: opened)
         call.resolve(result)
     }

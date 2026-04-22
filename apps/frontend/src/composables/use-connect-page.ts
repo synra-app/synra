@@ -10,7 +10,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import type { DiscoveredDevice } from '@synra/capacitor-lan-discovery'
 import { buildLocalPairInitiatorProfile } from '../lib/pair-profile'
 import { resolveSelfOnLanForPairing } from '../lib/resolve-self-on-lan-for-pairing'
-import { PAIR_MESSAGE_REQUEST } from '../lib/pair-protocol'
+import { PAIR_MESSAGE_REQUEST, PAIR_MESSAGE_UNPAIR_REQUIRED } from '../lib/pair-protocol'
 import { registerPairingOutbound } from '../lib/pairing-outbound-pending'
 import { syncPairedDiscoveryExclusionFromRecords } from '../lib/discovery-paired-exclusion'
 import {
@@ -38,7 +38,8 @@ function isIpv4Address(value: string | undefined): boolean {
 export function useConnectPage() {
   const store = useLanDiscoveryStore()
   const pairingStore = usePairingStore()
-  const { scanState, peers, connectedDeviceIds, loading, error } = storeToRefs(store)
+  const { scanState, peers, connectedDeviceIds, connectedSessions, loading, error } =
+    storeToRefs(store)
   const { pairedListEpoch, feedbackMessage } = storeToRefs(pairingStore)
 
   const pendingDeviceActionIds = ref<string[]>([])
@@ -160,6 +161,21 @@ export function useConnectPage() {
     addPendingDeviceAction(device.deviceId)
     setPairAwaitingAccept(device.deviceId, false)
     try {
+      const openedSession = connectedSessions.value.find(
+        (session) => session.status === 'open' && session.deviceId === device.deviceId
+      )
+      if (openedSession?.sessionId) {
+        await store
+          .sendConnectionMessage({
+            sessionId: openedSession.sessionId,
+            messageType: PAIR_MESSAGE_UNPAIR_REQUIRED,
+            payload: {
+              mode: 'stale',
+              reason: 'Peer manually removed this pairing.'
+            }
+          })
+          .catch(() => undefined)
+      }
       await removePairedDeviceRecord(device.deviceId)
       await refreshPairedRecords()
       pairingStore.bumpPairedList()

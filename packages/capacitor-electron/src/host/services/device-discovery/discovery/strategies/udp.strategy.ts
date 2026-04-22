@@ -1,4 +1,5 @@
 import { createSocket } from 'node:dgram'
+import { networkInterfaces } from 'node:os'
 import type { DiscoveredDevice } from '../../../../../shared/protocol/types'
 import { UDP_DISCOVERY_MAGIC, UDP_DISCOVERY_PORT } from '../../core/constants'
 import { toProbeCandidate } from '../../core/device-mapper'
@@ -11,6 +12,7 @@ export function createUdpDiscoveryStrategy(): DiscoveryStrategy {
     async discover(context: DiscoveryContext): Promise<DiscoveredDevice[]> {
       const socket = createSocket('udp4')
       const devicesByIp = new Map<string, DiscoveredDevice>()
+      const destinations = collectUdpBroadcastDestinations()
       await new Promise<void>((resolve) => {
         socket.on('message', (buffer, remote) => {
           const text = buffer.toString('utf8').trim()
@@ -31,7 +33,9 @@ export function createUdpDiscoveryStrategy(): DiscoveryStrategy {
         socket.bind(() => {
           socket.setBroadcast(true)
           const payload = Buffer.from(UDP_DISCOVERY_MAGIC, 'utf8')
-          socket.send(payload, UDP_DISCOVERY_PORT, '255.255.255.255')
+          for (const destination of destinations) {
+            socket.send(payload, UDP_DISCOVERY_PORT, destination)
+          }
           setTimeout(resolve, context.timeoutMs)
         })
       })
@@ -77,4 +81,55 @@ function resolveUdpDiscoveryPayload(text: string): string | undefined {
     return text
   }
   return undefined
+}
+
+function collectUdpBroadcastDestinations(): string[] {
+  const destinations = new Set<string>(['255.255.255.255'])
+  const interfaces = networkInterfaces()
+  for (const records of Object.values(interfaces)) {
+    for (const record of records ?? []) {
+      if (record.family !== 'IPv4' || record.internal) {
+        continue
+      }
+      if (typeof record.cidr !== 'string' || record.cidr.length === 0) {
+        continue
+      }
+      const [ipText, prefixText] = record.cidr.split('/')
+      const prefix = Number(prefixText)
+      if (!ipText || !Number.isInteger(prefix) || prefix < 0 || prefix > 32) {
+        continue
+      }
+      const ipInt = ipv4ToInt(ipText)
+      if (ipInt === undefined) {
+        continue
+      }
+      const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0
+      const broadcastInt = (ipInt & mask) | (~mask >>> 0)
+      const broadcast = intToIpv4(broadcastInt >>> 0)
+      if (broadcast) {
+        destinations.add(broadcast)
+      }
+    }
+  }
+  return [...destinations]
+}
+
+function ipv4ToInt(ip: string): number | undefined {
+  const parts = ip.split('.')
+  if (parts.length !== 4) {
+    return undefined
+  }
+  const nums = parts.map((part) => Number(part))
+  if (nums.some((value) => !Number.isInteger(value) || value < 0 || value > 255)) {
+    return undefined
+  }
+  return (
+    (((nums[0] ?? 0) << 24) | ((nums[1] ?? 0) << 16) | ((nums[2] ?? 0) << 8) | (nums[3] ?? 0)) >>> 0
+  )
+}
+
+function intToIpv4(value: number): string {
+  return [(value >>> 24) & 0xff, (value >>> 16) & 0xff, (value >>> 8) & 0xff, value & 0xff].join(
+    '.'
+  )
 }

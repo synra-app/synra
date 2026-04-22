@@ -7,7 +7,6 @@ import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.net.nsd.NsdManager;
 import android.net.nsd.NsdServiceInfo;
-import android.util.Log;
 import androidx.annotation.NonNull;
 
 import com.getcapacitor.JSArray;
@@ -24,6 +23,7 @@ import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.io.EOFException;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -34,6 +34,7 @@ import java.net.InterfaceAddress;
 import java.net.NetworkInterface;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -58,8 +59,6 @@ import java.util.concurrent.atomic.AtomicLong;
 
 @CapacitorPlugin(name = "LanDiscovery")
 public class LanDiscoveryPluginPlugin extends Plugin {
-    private static final String TAG = "SynraLanDiscovery";
-    private static final boolean VERBOSE_LOGS = BuildConfig.DEBUG;
     private static final int DEFAULT_TCP_PORT = 32100;
     private static final int DEFAULT_TIMEOUT_MS = 1500;
     private static final int DEFAULT_DISCOVERY_TIMEOUT_MS = 1500;
@@ -91,20 +90,6 @@ public class LanDiscoveryPluginPlugin extends Plugin {
     private final Map<String, Socket> inboundSessionSockets = new ConcurrentHashMap<>();
     private NsdManager.RegistrationListener mdnsRegistrationListener;
     private volatile String registeredMdnsServiceName;
-
-    private static void logDebug(String message) {
-        if (VERBOSE_LOGS) {
-            Log.d(TAG, message);
-        }
-    }
-
-    private static void logWarn(String message) {
-        Log.w(TAG, message);
-    }
-
-    private static void logWarn(String message, Throwable error) {
-        Log.w(TAG, message, error);
-    }
 
     private void notifyTransportError(String code, String message, String transport) {
         JSObject payload = new JSObject();
@@ -341,10 +326,6 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             notifyListeners("sessionClosed", closed);
             emittedSessionClosed = true;
         }
-        if (!emittedSessionClosed) {
-            logDebug("closeSession skipped sessionClosed event: no active socket for " + sessionId);
-        }
-
         JSObject result = new JSObject();
         result.put("success", true);
         result.put("sessionId", sessionId);
@@ -713,7 +694,6 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                 payload.put("ipAddress", sourceHostIp);
             }
             notifyListeners("deviceLost", payload);
-            logDebug("Received offline announcement for deviceId=" + offlineDeviceId);
         } catch (Exception ignored) {
             // noop
         }
@@ -751,10 +731,7 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                     }
                 }
             }
-            logDebug("Broadcasted offline announcement to " + destinations.size() + " UDP targets.");
-        } catch (Exception error) {
-            logWarn("Failed to broadcast offline announcement.", error);
-        }
+        } catch (Exception ignored) {}
     }
 
     @SuppressLint("MissingPermission")
@@ -959,6 +936,24 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                             helloPayload == null ? null : helloPayload.optString("sourceHostIp", null);
                         String peerDisplay =
                             helloPayload == null ? null : helloPayload.optString("displayName", null);
+                        String handshakeKind =
+                            helloPayload == null ? null : helloPayload.optString("handshakeKind", null);
+                        Boolean claimsPeerPaired =
+                            helloPayload == null || !helloPayload.has("claimsPeerPaired")
+                                ? null
+                                : helloPayload.optBoolean("claimsPeerPaired", false);
+                        JSONArray remotePairedPeerDeviceIds = new JSONArray();
+                        if (helloPayload != null) {
+                            JSONArray inboundPairedPeerIds = helloPayload.optJSONArray("pairedPeerDeviceIds");
+                            if (inboundPairedPeerIds != null) {
+                                for (int i = 0; i < inboundPairedPeerIds.length(); i++) {
+                                    String id = inboundPairedPeerIds.optString(i, "").trim();
+                                    if (!id.isEmpty()) {
+                                        remotePairedPeerDeviceIds.put(id);
+                                    }
+                                }
+                            }
+                        }
                         if (peerDisplay != null) {
                             peerDisplay = peerDisplay.trim();
                             if (peerDisplay.isEmpty()) {
@@ -966,18 +961,10 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                             }
                         }
                         if (sourceDeviceId == null || sourceDeviceId.isBlank()) {
-                            logWarn("Inbound hello missing sourceDeviceId.");
                             writeFrame(output, frame("error", sessionId, null, "SOURCE_DEVICE_ID_REQUIRED"));
                             sessionClosedNotified = true;
                             break;
                         }
-                        logDebug(
-                            "Inbound hello received: sourceDeviceId=" + sourceDeviceId
-                                + ", peerDisplay=" + peerDisplay
-                                + ", sourceHostIp=" + sourceHostIp
-                                + ", remote=" + socket.getInetAddress().getHostAddress()
-                                + ", probe=" + isProbe
-                        );
                         JSObject discoveredPeerDevice = buildDiscoveredPeerDevicePayload(
                             sourceDeviceId,
                             peerDisplay,
@@ -987,12 +974,9 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                         if (discoveredPeerDevice != null) {
                             JSObject payload = new JSObject();
                             payload.put("device", discoveredPeerDevice);
-                            logDebug("Publishing discovered peer from inbound hello: " + discoveredPeerDevice);
                             notifyListeners("deviceFound", payload);
                             notifyListeners("deviceUpdated", payload);
                             notifyListeners("deviceConnectableUpdated", payload);
-                        } else {
-                            logWarn("Failed to build discovered peer payload from inbound hello.");
                         }
                         JSObject helloAckPayload = new JSObject();
                         helloAckPayload.put("sourceDeviceId", getOrCreateLocalDeviceUuid());
@@ -1031,7 +1015,13 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                         if (peerDisplay != null) {
                             opened.put("displayName", peerDisplay);
                         }
-                        opened.put("pairedPeerDeviceIds", readStoredPairedPeerDeviceIds());
+                        opened.put("pairedPeerDeviceIds", remotePairedPeerDeviceIds);
+                        if ("paired".equals(handshakeKind) || "fresh".equals(handshakeKind)) {
+                            opened.put("handshakeKind", handshakeKind);
+                        }
+                        if (claimsPeerPaired != null) {
+                            opened.put("claimsPeerPaired", claimsPeerPaired);
+                        }
                         notifyListeners("sessionOpened", opened);
                         continue;
                     }
@@ -1059,6 +1049,13 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                         }
                         continue;
                     }
+                    if ("heartbeat".equals(type)) {
+                        if (activeSessionId == null || !activeSessionId.equals(sessionId)) {
+                            continue;
+                        }
+                        writeFrame(output, frame("heartbeat", activeSessionId, null, null));
+                        continue;
+                    }
                     if ("close".equals(type)) {
                         if (activeSessionId == null || !activeSessionId.equals(sessionId)) {
                             break;
@@ -1072,6 +1069,16 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                         sessionClosedNotified = true;
                         break;
                     }
+                }
+            } catch (EOFException ignored) {
+                // Peer closed the socket gracefully.
+            } catch (SocketException error) {
+                if (!socket.isClosed()) {
+                    notifyTransportError(
+                        "TRANSPORT_IO_ERROR",
+                        "Inbound socket failed: " + error.getMessage(),
+                        "tcp"
+                    );
                 }
             } catch (IOException error) {
                 notifyTransportError(
@@ -1181,7 +1188,6 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         String normalizedDeviceId = LanDiscoveryIdUtils.canonicalLanDeviceId(sourceDeviceId);
         String host = LanDiscoveryIdUtils.normalizePeerHost(sourceHostIp, socket);
         if (host == null || host.isBlank()) {
-            logWarn("Cannot resolve peer host for sourceDeviceId=" + sourceDeviceId);
             return null;
         }
         String normalizedName = displayName;

@@ -77,6 +77,7 @@ export type HostEvent = {
     | 'transport.message.received'
     | 'transport.message.ack'
     | 'transport.error'
+    | 'host.member.online'
     | 'host.retire'
     | 'host.member.offline'
     | 'host.heartbeat.timeout'
@@ -104,6 +105,10 @@ export type SessionOpenedEvent = {
   displayName?: string
   /** From helloAck: LAN device ids this peer still keeps as paired partners (may be empty). */
   pairedPeerDeviceIds?: string[]
+  /** Handshake intent reported by the remote peer for this session. */
+  handshakeKind?: 'paired' | 'fresh'
+  /** Whether remote says current target is paired on its side. */
+  claimsPeerPaired?: boolean
 }
 
 export type SessionClosedEvent = {

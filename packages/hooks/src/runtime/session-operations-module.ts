@@ -7,6 +7,7 @@ import type {
 } from '../types'
 import type { ConnectionRuntimeAdapter } from './adapter'
 import type { ConnectedSessionsBook } from './connected-sessions-book'
+import { setSessionStateWithTransitionLog } from './session-state-transition-log'
 
 const OPEN_SESSION_ERROR_MESSAGE = 'Failed to open session.'
 const CLOSE_SESSION_ERROR_MESSAGE = 'Failed to close session.'
@@ -61,15 +62,19 @@ export function createSessionOperationsModule(options: {
       await adapter.closeSession(sessionId)
       const shouldClearCurrentSession =
         !sessionState.value.sessionId || !sessionId || sessionState.value.sessionId === sessionId
-      sessionState.value = {
-        ...sessionState.value,
-        sessionId: shouldClearCurrentSession ? undefined : sessionState.value.sessionId,
-        deviceId: shouldClearCurrentSession ? undefined : sessionState.value.deviceId,
-        host: shouldClearCurrentSession ? undefined : sessionState.value.host,
-        port: shouldClearCurrentSession ? undefined : sessionState.value.port,
-        state: 'closed',
-        closedAt: Date.now()
-      }
+      setSessionStateWithTransitionLog(
+        sessionState,
+        {
+          ...sessionState.value,
+          sessionId: shouldClearCurrentSession ? undefined : sessionState.value.sessionId,
+          deviceId: shouldClearCurrentSession ? undefined : sessionState.value.deviceId,
+          host: shouldClearCurrentSession ? undefined : sessionState.value.host,
+          port: shouldClearCurrentSession ? undefined : sessionState.value.port,
+          state: 'closed',
+          closedAt: Date.now()
+        },
+        { reason: 'manual_close_session' }
+      )
       sessionsBook.markConnectionClosed(sessionId, Date.now())
       error.value = null
     } catch (unknownError) {

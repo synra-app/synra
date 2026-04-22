@@ -1,8 +1,12 @@
 import type {
   DeviceConnectableUpdatedEvent,
-  DiscoveryState,
   DiscoveredDevice,
+  DiscoveryState,
   StartDiscoveryOptions
+} from '@synra/capacitor-lan-discovery'
+import {
+  discoveredDeviceFromHostEvent,
+  lostDeviceFromHostEvent
 } from '@synra/capacitor-lan-discovery'
 import type {
   GetSessionStateResult,
@@ -17,6 +21,12 @@ import type {
   TransportErrorEvent
 } from '@synra/capacitor-device-connection'
 import type { ConnectionRuntimeAdapter } from '../adapter'
+import {
+  mapMessageTypeFromHostEvent,
+  mapSessionClosedHostEvent,
+  mapSessionOpenedHostEvent,
+  mapTransportErrorHostEvent
+} from './electron-host-event-mappers'
 
 type MainHooksBridge = {
   startDiscovery: (options?: StartDiscoveryOptions) => Promise<{
@@ -34,26 +44,6 @@ type MainHooksBridge = {
 
 type MainHooksGlobal = typeof globalThis & {
   __synraHooksMainBridge?: MainHooksBridge
-}
-
-function normalizeTransportErrorMessage(payload: unknown): string {
-  if (typeof payload === 'string') {
-    return payload
-  }
-  if (payload && typeof payload === 'object' && 'message' in payload) {
-    const message = (payload as { message?: unknown }).message
-    if (typeof message === 'string') {
-      return message
-    }
-    return JSON.stringify(message ?? 'Transport error')
-  }
-  return 'Transport error'
-}
-
-function createNoopHandle() {
-  return {
-    remove: async () => {}
-  }
 }
 
 export function createElectronMainRuntimeAdapter(): ConnectionRuntimeAdapter {
@@ -89,76 +79,38 @@ export function createElectronMainRuntimeAdapter(): ConnectionRuntimeAdapter {
     },
     getSessionState: (sessionId) => bridge.getSessionState(sessionId),
     addDeviceConnectableUpdatedListener: async (
-      _listener: (event: DeviceConnectableUpdatedEvent) => void
-    ) => createNoopHandle(),
-    addDeviceLostListener: async (listener) =>
+      listener: (event: DeviceConnectableUpdatedEvent) => void
+    ) =>
       addHostListener((event) => {
-        if (event.type !== 'host.member.offline') {
+        const discovered = discoveredDeviceFromHostEvent(event)
+        if (!discovered) {
           return
         }
-        const payload =
-          event.payload && typeof event.payload === 'object'
-            ? (event.payload as Record<string, unknown>)
-            : {}
-        const deviceId =
-          typeof payload.deviceId === 'string' && payload.deviceId.length > 0
-            ? payload.deviceId
-            : undefined
-        if (!deviceId) {
+        listener({ device: discovered })
+      }),
+    addDeviceLostListener: async (listener) =>
+      addHostListener((event) => {
+        const lost = lostDeviceFromHostEvent(event)
+        if (!lost) {
           return
         }
         listener({
-          deviceId,
-          ipAddress:
-            typeof payload.sourceHostIp === 'string' && payload.sourceHostIp.length > 0
-              ? payload.sourceHostIp
-              : undefined
+          deviceId: lost.deviceId,
+          ipAddress: lost.ipAddress
         })
       }),
     addSessionOpenedListener: async (listener: (event: SessionOpenedEvent) => void) =>
       addHostListener((event) => {
-        if (event.type === 'transport.session.opened' && event.sessionId) {
-          const pl =
-            event.payload && typeof event.payload === 'object'
-              ? (event.payload as Record<string, unknown>)
-              : {}
-          const hostFromPayload = typeof pl.host === 'string' ? pl.host : undefined
-          const portFromPayload = typeof pl.port === 'number' ? pl.port : undefined
-          const deviceId = typeof pl.deviceId === 'string' ? pl.deviceId : undefined
-          const direction =
-            pl.direction === 'inbound' || pl.direction === 'outbound' ? pl.direction : undefined
-          const displayName = typeof pl.displayName === 'string' ? pl.displayName : undefined
-          const pairedRaw = pl.pairedPeerDeviceIds
-          const pairedPeerDeviceIds = Array.isArray(pairedRaw)
-            ? pairedRaw.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
-            : undefined
-          const fallbackRemote = typeof event.remote === 'string' ? event.remote : ''
-          const [hostPart, portText] = fallbackRemote.split(':')
-          const parsedRemotePort = Number.parseInt(portText ?? '', 10)
-          listener({
-            sessionId: event.sessionId,
-            deviceId,
-            direction,
-            host: hostFromPayload ?? (hostPart.length > 0 ? hostPart : undefined),
-            port: Number.isFinite(portFromPayload)
-              ? portFromPayload
-              : Number.isFinite(parsedRemotePort)
-                ? parsedRemotePort
-                : undefined,
-            displayName: displayName && displayName.length > 0 ? displayName : undefined,
-            pairedPeerDeviceIds,
-            transport: event.transport ?? 'tcp'
-          })
+        const mapped = mapSessionOpenedHostEvent(event)
+        if (mapped) {
+          listener(mapped)
         }
       }),
     addSessionClosedListener: async (listener: (event: SessionClosedEvent) => void) =>
       addHostListener((event) => {
-        if (event.type === 'transport.session.closed') {
-          listener({
-            sessionId: event.sessionId,
-            reason: 'peer-closed',
-            transport: event.transport
-          })
+        const mapped = mapSessionClosedHostEvent(event)
+        if (mapped) {
+          listener(mapped)
         }
       }),
     addMessageReceivedListener: async (listener: (event: MessageReceivedEvent) => void) =>
@@ -167,8 +119,9 @@ export function createElectronMainRuntimeAdapter(): ConnectionRuntimeAdapter {
           listener({
             sessionId: event.sessionId,
             messageId: event.messageId,
-            messageType: (event.messageType ??
-              'transport.message.received') as SendMessageOptions['messageType'],
+            messageType:
+              mapMessageTypeFromHostEvent(event) ??
+              ('transport.message.received' as SendMessageOptions['messageType']),
             payload:
               event.payload && typeof event.payload === 'object' && 'payload' in event.payload
                 ? (event.payload as { payload: unknown }).payload
@@ -191,13 +144,9 @@ export function createElectronMainRuntimeAdapter(): ConnectionRuntimeAdapter {
       }),
     addTransportErrorListener: async (listener: (event: TransportErrorEvent) => void) =>
       addHostListener((event) => {
-        if (event.type === 'transport.error') {
-          listener({
-            sessionId: event.sessionId,
-            code: event.code,
-            message: normalizeTransportErrorMessage(event.payload),
-            transport: event.transport
-          })
+        const mapped = mapTransportErrorHostEvent(event)
+        if (mapped) {
+          listener(mapped)
         }
       })
   }

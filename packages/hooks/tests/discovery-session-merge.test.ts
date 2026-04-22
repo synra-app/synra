@@ -57,7 +57,7 @@ function createScanOnlyAdapter(
   }
 }
 
-test('startDiscovery keeps session-sourced peers when rescan does not include them', async () => {
+test('startDiscovery drops session-sourced peers when scan does not include them', async () => {
   const sessionPeer: DiscoveredDevice = {
     deviceId: 'device-ios',
     name: 'iOS',
@@ -103,5 +103,44 @@ test('startDiscovery keeps session-sourced peers when rescan does not include th
 
   await transport.startScan()
   const ids = transport.peers.value.map((p) => p.deviceId).sort()
-  expect(ids).toEqual(['device-ios', 'device-other'].sort())
+  expect(ids).toEqual(['device-other'])
+})
+
+test('session open can promote source, but rescan still uses fresh discovery snapshot', async () => {
+  const adapter = createScanOnlyAdapter([
+    [
+      {
+        deviceId: 'device-android',
+        name: 'Android',
+        ipAddress: '192.168.1.30',
+        source: 'mdns',
+        connectable: true,
+        discoveredAt: 1,
+        lastSeenAt: 1
+      }
+    ],
+    []
+  ])
+
+  configureHooksRuntime({ adapterFactory: () => adapter })
+  resetConnectionRuntime()
+  const transport = useTransport()
+  await transport.ensureReady()
+  await transport.startScan()
+  expect(transport.peers.value.map((p) => p.deviceId)).toEqual(['device-android'])
+  expect(transport.peers.value[0]?.source).toBe('mdns')
+
+  adapter.emitInboundSessionOpened({
+    sessionId: 'in-android-1',
+    deviceId: 'device-android',
+    host: '192.168.1.30',
+    port: 32100,
+    direction: 'inbound',
+    displayName: 'Android',
+    transport: 'tcp'
+  })
+  expect(transport.peers.value[0]?.source).toBe('session')
+
+  await transport.startScan()
+  expect(transport.peers.value.map((p) => p.deviceId)).toEqual([])
 })

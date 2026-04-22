@@ -92,7 +92,9 @@ async function probeSingle(
         clearTimeout(timer)
         end(true, {
           deviceId: peerDeviceId ? hashDeviceId(peerDeviceId) : device.deviceId,
-          name: typeof payload.displayName === 'string' ? payload.displayName : device.name
+          name: typeof payload.displayName === 'string' ? payload.displayName : device.name,
+          // Keep the resolved connect port so UI can show actionable endpoint info.
+          port
         })
       }
     })

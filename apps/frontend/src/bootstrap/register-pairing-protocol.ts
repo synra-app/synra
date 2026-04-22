@@ -8,11 +8,18 @@ import {
   PAIR_MESSAGE_ACCEPT,
   PAIR_MESSAGE_REJECT,
   PAIR_MESSAGE_REQUEST,
+  PAIR_MESSAGE_UNPAIR_REQUIRED,
   isPairDecisionPayload,
+  isPairUnpairRequiredPayload,
   isPairRequestPayload
 } from '../lib/pair-protocol'
 import { consumePairingOutbound } from '../lib/pairing-outbound-pending'
-import { upsertPairedDeviceRecord } from '../lib/paired-devices-storage'
+import {
+  listPairedDeviceRecords,
+  removePairedDeviceRecord,
+  upsertPairedDeviceRecord
+} from '../lib/paired-devices-storage'
+import { syncPairedDiscoveryExclusionFromRecords } from '../lib/discovery-paired-exclusion'
 import { useLanDiscoveryStore } from '../stores/lan-discovery'
 import { usePairingStore } from '../stores/pairing'
 
@@ -21,6 +28,26 @@ export async function registerPairingProtocol(pinia: Pinia): Promise<void> {
   await runtime.ensureListeners()
   const pairingStore = usePairingStore(pinia)
   const lanStore = useLanDiscoveryStore(pinia)
+  const findOpenDeviceIdBySessionId = (sessionId: string): string | undefined => {
+    const match = runtime.connectedSessions.value.find(
+      (session) =>
+        session.sessionId === sessionId &&
+        session.status === 'open' &&
+        typeof session.deviceId === 'string' &&
+        session.deviceId.length > 0
+    )
+    return match?.deviceId
+  }
+  const unpairAndDisconnect = async (deviceId: string, reason: string): Promise<void> => {
+    await removePairedDeviceRecord(deviceId)
+    const next = await listPairedDeviceRecords()
+    syncPairedDiscoveryExclusionFromRecords(next)
+    pairingStore.bumpPairedList()
+    setPairAwaitingAccept(deviceId, false)
+    setPairedDeviceConnecting(deviceId, false)
+    await lanStore.disconnectDevice(deviceId).catch(() => undefined)
+    pairingStore.pushFeedback(reason)
+  }
 
   runtime.onMessage(
     (message) => {
@@ -90,17 +117,11 @@ export async function registerPairingProtocol(pinia: Pinia): Promise<void> {
       } else {
         const sid = message.sessionId
         if (typeof sid === 'string' && sid.length > 0) {
-          const match = runtime.connectedSessions.value.find(
-            (s) =>
-              s.sessionId === sid &&
-              s.status === 'open' &&
-              typeof s.deviceId === 'string' &&
-              s.deviceId.length > 0
-          )
-          if (match?.deviceId) {
-            setPairAwaitingAccept(match.deviceId, false)
-            setPairedDeviceConnecting(match.deviceId, false)
-            void lanStore.disconnectDevice(match.deviceId).catch(() => undefined)
+          const deviceId = findOpenDeviceIdBySessionId(sid)
+          if (deviceId) {
+            setPairAwaitingAccept(deviceId, false)
+            setPairedDeviceConnecting(deviceId, false)
+            void lanStore.disconnectDevice(deviceId).catch(() => undefined)
           }
         }
       }
@@ -111,5 +132,26 @@ export async function registerPairingProtocol(pinia: Pinia): Promise<void> {
       pairingStore.pushFeedback(reason)
     },
     { messageType: PAIR_MESSAGE_REJECT }
+  )
+
+  runtime.onMessage(
+    (message) => {
+      if (message.messageType !== PAIR_MESSAGE_UNPAIR_REQUIRED) {
+        return
+      }
+      if (!isPairUnpairRequiredPayload(message.payload)) {
+        return
+      }
+      const deviceId = findOpenDeviceIdBySessionId(message.sessionId)
+      if (!deviceId) {
+        return
+      }
+      const reason =
+        typeof message.payload.reason === 'string' && message.payload.reason.trim().length > 0
+          ? message.payload.reason.trim()
+          : 'Peer requested to cancel pairing.'
+      void unpairAndDisconnect(deviceId, reason).catch(() => undefined)
+    },
+    { messageType: PAIR_MESSAGE_UNPAIR_REQUIRED }
   )
 }

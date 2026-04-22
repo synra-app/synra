@@ -39,6 +39,7 @@ type OutboundState = {
 type OutboundClientSessionOptions = {
   eventBus: HostEventBus
   resolveLocalDeviceUuid: () => string
+  readPairedPeerDeviceIds?: () => string[]
 }
 
 export interface OutboundClientSession {
@@ -66,6 +67,11 @@ export function createOutboundClientSession(
       }) => void)
     | undefined
   let rejectHello: ((reason: unknown) => void) | undefined
+
+  const normalizePairedPeerDeviceIds = (): Set<string> => {
+    const ids = options.readPairedPeerDeviceIds?.() ?? []
+    return new Set(ids.map((id) => id.trim()).filter((id) => id.length > 0))
+  }
 
   const closeWithError = (reason?: string) => {
     if (socket) {
@@ -255,6 +261,10 @@ export function createOutboundClientSession(
         lastError: undefined
       }
       attachSocketHandlers(socket)
+      let handshakeMeta: { handshakeKind: 'paired' | 'fresh'; claimsPeerPaired: boolean } = {
+        handshakeKind: 'fresh',
+        claimsPeerPaired: false
+      }
 
       const helloAck = await new Promise<{
         sessionId: string
@@ -266,11 +276,17 @@ export function createOutboundClientSession(
         rejectHello = reject
         const timeout = setTimeout(() => reject('SESSION_OPEN_TIMEOUT'), DEFAULT_ACK_TIMEOUT_MS)
         socket?.connect(openOptions.port, openOptions.host, () => {
+          const pairedPeerDeviceIds = normalizePairedPeerDeviceIds()
+          const claimsPeerPaired = pairedPeerDeviceIds.has(openOptions.deviceId)
+          const handshakeKind: 'paired' | 'fresh' = claimsPeerPaired ? 'paired' : 'fresh'
+          handshakeMeta = { handshakeKind, claimsPeerPaired }
           const payload: Record<string, unknown> = {
             token: openOptions.token,
             sourceDeviceId: options.resolveLocalDeviceUuid(),
             probe: false,
-            displayName: localDisplayName()
+            displayName: localDisplayName(),
+            handshakeKind,
+            claimsPeerPaired
           }
           const sourceHostIp = pickPrimarySourceHostIp()
           if (sourceHostIp) {
@@ -323,7 +339,9 @@ export function createOutboundClientSession(
           host: openOptions.host,
           port: openOptions.port,
           displayName: helloAck.displayName,
-          pairedPeerDeviceIds: helloAck.pairedPeerDeviceIds ?? []
+          pairedPeerDeviceIds: helloAck.pairedPeerDeviceIds ?? [],
+          handshakeKind: handshakeMeta.handshakeKind,
+          claimsPeerPaired: handshakeMeta.claimsPeerPaired
         },
         transport: 'tcp'
       })

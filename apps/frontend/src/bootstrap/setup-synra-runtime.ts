@@ -40,9 +40,7 @@ export function setupSynraRuntime(pinia: Pinia): void {
   const INITIAL_SCAN_MAX_ATTEMPTS = 2
   const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
   const ensureRuntimeListeners = async (): Promise<void> => {
-    await lanDiscoveryStore.ensureReady().catch((error: unknown) => {
-      console.warn('[SynraConnection] failed to register global listeners:', error)
-    })
+    await lanDiscoveryStore.ensureReady().catch(() => undefined)
   }
 
   /** Matches connect page: `ensureReady` then `startScan` only — no extra native reads. */
@@ -53,9 +51,7 @@ export function setupSynraRuntime(pinia: Pinia): void {
         if (!initialDiscoveryLooksIncomplete(lanDiscoveryStore.peers)) {
           return
         }
-      } catch (error: unknown) {
-        console.warn(`[SynraLanDiscovery] initial auto scan attempt ${attempt} failed:`, error)
-      }
+      } catch {}
 
       if (attempt < INITIAL_SCAN_MAX_ATTEMPTS) {
         await wait(INITIAL_SCAN_RETRY_DELAY_MS)
@@ -67,9 +63,7 @@ export function setupSynraRuntime(pinia: Pinia): void {
     .then(async (deviceInstanceUuid) => {
       try {
         await ensureDeviceBasicInfo(deviceInstanceUuid)
-      } catch (error: unknown) {
-        console.warn('[SynraPreferences] ensureDeviceBasicInfo failed:', error)
-      }
+      } catch {}
       const localDiscoveryDeviceId = await hashDeviceIdFromInstanceUuid(deviceInstanceUuid)
       configureHooksRuntime({
         localDiscoveryDeviceId,
@@ -78,7 +72,9 @@ export function setupSynraRuntime(pinia: Pinia): void {
             pinia,
             peerDeviceId,
             theirPairedPeerDeviceIds,
-            openedSessionId: meta?.sessionId
+            openedSessionId: meta?.sessionId,
+            remoteHandshakeKind: meta?.handshakeKind,
+            remoteClaimsPeerPaired: meta?.claimsPeerPaired
           })
         },
         onRemoteDeviceProfile: (deviceId, displayName) => {
@@ -94,8 +90,7 @@ export function setupSynraRuntime(pinia: Pinia): void {
       registerPairedAutoConnect(pinia)
       await startInitialDiscovery()
     })
-    .catch((error: unknown) => {
-      console.warn('[SynraPreferences] ensureDeviceInstanceUuid failed:', error)
+    .catch(() => {
       void (async () => {
         await ensureRuntimeListeners()
         await registerPairingProtocol(pinia)

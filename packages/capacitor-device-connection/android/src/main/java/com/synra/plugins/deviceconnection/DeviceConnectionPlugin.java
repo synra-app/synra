@@ -37,6 +37,7 @@ public class DeviceConnectionPlugin extends Plugin {
   private static final String INSTANCE_PREFS_NAME = "synra_preferences_store";
   private static final String INSTANCE_UUID_KEY = "synra.preferences.synra.device.instance-uuid";
   private static final String DEVICE_BASIC_INFO_KEY = "synra.preferences.synra.device.basic-info";
+  private static final String PAIRED_DEVICES_KEY = "synra.preferences.synra.device.paired-peers";
   private static final String LEGACY_DEVICE_DISPLAY_NAME_KEY = "synra.preferences.synra.device.display-name";
     private static final String LEGACY_PREFS_NAME = "synra_device_connection";
     private static final String LEGACY_PREFS_DEVICE_UUID_KEY = "device_uuid";
@@ -57,6 +58,55 @@ public class DeviceConnectionPlugin extends Plugin {
             }
         }
         return out;
+    }
+
+    private JSONArray readStoredPairedPeerDeviceIds() {
+        JSONArray out = new JSONArray();
+        Context context = getContext();
+        if (context == null) {
+            return out;
+        }
+        android.content.SharedPreferences unified =
+            context.getSharedPreferences(INSTANCE_PREFS_NAME, Context.MODE_PRIVATE);
+        String raw = unified.getString(PAIRED_DEVICES_KEY, null);
+        if (raw == null || raw.isBlank()) {
+            return out;
+        }
+        try {
+            JSONObject parsed = new JSONObject(raw);
+            JSONArray items = parsed.optJSONArray("items");
+            if (items == null) {
+                return out;
+            }
+            for (int i = 0; i < items.length(); i++) {
+                JSONObject item = items.optJSONObject(i);
+                if (item == null) {
+                    continue;
+                }
+                String id = item.optString("deviceId", "").trim();
+                if (!id.isEmpty()) {
+                    out.put(id);
+                }
+            }
+        } catch (JSONException ignored) {
+            // ignore malformed paired payload
+        }
+        return out;
+    }
+
+    private boolean isPeerMarkedPaired(String deviceId) {
+        String target = deviceId == null ? "" : deviceId.trim();
+        if (target.isEmpty()) {
+            return false;
+        }
+        JSONArray ids = readStoredPairedPeerDeviceIds();
+        for (int i = 0; i < ids.length(); i++) {
+            String id = ids.optString(i, "").trim();
+            if (!id.isEmpty() && id.equals(target)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private final ExecutorService ioExecutor = Executors.newSingleThreadExecutor();
@@ -94,10 +144,13 @@ public class DeviceConnectionPlugin extends Plugin {
                     new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
 
                 String sessionId = UUID.randomUUID().toString();
+                boolean claimsPeerPaired = isPeerMarkedPaired(deviceId);
                 JSObject helloPayload = new JSObject();
                 helloPayload.put("sourceDeviceId", getOrCreateLocalDeviceUuid());
                 helloPayload.put("probe", false);
                 helloPayload.put("displayName", localSynraDisplayName());
+                helloPayload.put("handshakeKind", claimsPeerPaired ? "paired" : "fresh");
+                helloPayload.put("claimsPeerPaired", claimsPeerPaired);
                 writeFrame(output, frame("hello", sessionId, null, helloPayload));
                 JSONObject helloAck = readFrame(input);
                 if (!"helloAck".equals(helloAck.optString("type"))) {
@@ -142,6 +195,8 @@ public class DeviceConnectionPlugin extends Plugin {
                 result.put("port", this.currentPort);
                 result.put("state", "open");
                 result.put("transport", "tcp");
+                result.put("handshakeKind", claimsPeerPaired ? "paired" : "fresh");
+                result.put("claimsPeerPaired", claimsPeerPaired);
                 String remoteDisplay =
                     helloAckPayload == null ? null : helloAckPayload.optString("displayName", null);
                 if (remoteDisplay != null && !remoteDisplay.isBlank()) {

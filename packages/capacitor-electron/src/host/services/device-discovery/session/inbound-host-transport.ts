@@ -177,6 +177,7 @@ export function createInboundHostTransport(
         frame.payload && typeof frame.payload === 'object'
           ? (frame.payload as Record<string, unknown>)
           : {}
+      const isProbe = payload.probe === true
       const remoteDeviceId =
         typeof payload.sourceDeviceId === 'string' && payload.sourceDeviceId.length > 0
           ? payload.sourceDeviceId
@@ -184,14 +185,40 @@ export function createInboundHostTransport(
       const sessionId = frame.sessionId ?? randomUUID()
       const peerHost = peerAddressFromSocket(socket.remoteAddress)
       const remote = `${peerHost ?? 'unknown'}:${String(socket.remotePort ?? 0)}`
-      sessions.set(sessionId, {
-        sessionId,
-        socket,
+      const peerDisplayName =
+        typeof payload.displayName === 'string' && payload.displayName.length > 0
+          ? payload.displayName
+          : undefined
+      const handshakeKind =
+        payload.handshakeKind === 'paired' || payload.handshakeKind === 'fresh'
+          ? payload.handshakeKind
+          : undefined
+      const claimsPeerPaired =
+        typeof payload.claimsPeerPaired === 'boolean'
+          ? payload.claimsPeerPaired
+          : handshakeKind === 'paired'
+            ? true
+            : handshakeKind === 'fresh'
+              ? false
+              : undefined
+      const inboundPairedRaw = payload.pairedPeerDeviceIds
+      const remotePairedPeerDeviceIds = Array.isArray(inboundPairedRaw)
+        ? inboundPairedRaw
+            .filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
+            .map((id) => id.trim())
+        : []
+      options.eventBus.publish({
+        type: 'host.member.online',
         remote,
-        remoteDeviceId: hashDeviceId(remoteDeviceId),
-        displayName: typeof payload.displayName === 'string' ? payload.displayName : undefined,
-        openedAt: Date.now(),
-        lastActiveAt: Date.now()
+        payload: {
+          deviceId: hashDeviceId(remoteDeviceId),
+          host: peerHost,
+          port: options.port ?? DEFAULT_TCP_PORT,
+          displayName: peerDisplayName,
+          source: isProbe ? 'probe' : 'session',
+          connectable: true
+        },
+        transport: 'tcp'
       })
       const pairedPeerDeviceIds = options.readPairedPeerDeviceIds?.() ?? []
       await writeFrame(socket, {
@@ -209,6 +236,19 @@ export function createInboundHostTransport(
           pairedPeerDeviceIds
         }
       })
+      if (isProbe) {
+        socket.destroy()
+        return
+      }
+      sessions.set(sessionId, {
+        sessionId,
+        socket,
+        remote,
+        remoteDeviceId: hashDeviceId(remoteDeviceId),
+        displayName: peerDisplayName,
+        openedAt: Date.now(),
+        lastActiveAt: Date.now()
+      })
       options.eventBus.publish({
         type: 'transport.session.opened',
         remote,
@@ -216,8 +256,10 @@ export function createInboundHostTransport(
         payload: {
           direction: 'inbound',
           deviceId: hashDeviceId(remoteDeviceId),
-          displayName: typeof payload.displayName === 'string' ? payload.displayName : undefined,
-          pairedPeerDeviceIds,
+          displayName: peerDisplayName,
+          pairedPeerDeviceIds: remotePairedPeerDeviceIds,
+          ...(handshakeKind ? { handshakeKind } : {}),
+          ...(typeof claimsPeerPaired === 'boolean' ? { claimsPeerPaired } : {}),
           ...(peerHost
             ? {
                 host: peerHost,
@@ -432,6 +474,13 @@ export function createInboundHostTransport(
         sessionId: targetId,
         timestamp: Date.now()
       }).catch(() => undefined)
+      options.eventBus.publish({
+        type: 'transport.session.closed',
+        remote: session.remote,
+        sessionId: targetId,
+        payload: { reason: 'LOCAL_CLOSED' },
+        transport: 'tcp'
+      })
       session.socket.destroy()
       sessions.delete(targetId)
     }

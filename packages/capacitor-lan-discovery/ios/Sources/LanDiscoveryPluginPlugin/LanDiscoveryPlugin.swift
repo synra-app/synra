@@ -3,12 +3,6 @@ import CryptoKit
 import Network
 
 @objc public class LanDiscoveryPlugin: NSObject {
-    private enum LogLevel {
-        case debug
-        case warning
-        case error
-    }
-
     private let appId = "synra"
     private let protocolVersion = "1.0"
     private let defaultTcpPort: UInt16 = 32100
@@ -44,16 +38,6 @@ import Network
 
     public override init() {
         super.init()
-    }
-
-    private func log(_ level: LogLevel, _ message: String) {
-        #if DEBUG
-        print("[SynraLanDiscovery] \(message)")
-        #else
-        if level == .warning || level == .error {
-            print("[SynraLanDiscovery] \(message)")
-        }
-        #endif
     }
 
     deinit {
@@ -359,7 +343,6 @@ import Network
     }
 
     @objc public func startBackgroundDiscoveryServices() {
-        validateLocalNetworkPermissionConfiguration()
         startMdnsAdvertisement()
         startUdpDiscoveryResponder()
         startTcpServer()
@@ -371,27 +354,11 @@ import Network
         stopUdpDiscoveryResponder()
     }
 
-    private func validateLocalNetworkPermissionConfiguration() {
-        let info = Bundle.main.infoDictionary ?? [:]
-        let localNetworkUsageDescription = info["NSLocalNetworkUsageDescription"] as? String
-        if localNetworkUsageDescription?.isEmpty != false {
-            log(.warning, "WARNING: NSLocalNetworkUsageDescription is missing. Local network discovery may fail.")
-        }
-        let bonjourServices = info["NSBonjourServices"] as? [String] ?? []
-        let expectedService = normalizeMdnsType(defaultMdnsServiceType)
-        let hasExpectedService = bonjourServices.contains { normalizeMdnsType($0) == expectedService }
-        if !hasExpectedService {
-            log(.warning, "WARNING: NSBonjourServices does not include \(expectedService).")
-        }
-    }
-
     private func startTcpServer() {
         if tcpListener != nil {
-            log(.debug, "TCP server already active.")
             return
         }
         guard let port = NWEndpoint.Port(rawValue: defaultTcpPort) else {
-            log(.error, "Failed to create TCP listener port: \(defaultTcpPort).")
             return
         }
         do {
@@ -399,9 +366,8 @@ import Network
             listener.stateUpdateHandler = { [weak self] state in
                 switch state {
                 case .ready:
-                    self?.log(.debug, "TCP server started on port \(self?.defaultTcpPort ?? 0).")
+                    break
                 case .failed(let error):
-                    self?.log(.error, "TCP server failed: \(error.localizedDescription)")
                     self?.onTransportError?([
                         "code": "TRANSPORT_IO_ERROR",
                         "message": error.localizedDescription,
@@ -416,9 +382,7 @@ import Network
             }
             listener.start(queue: tcpServerQueue)
             tcpListener = listener
-        } catch {
-            log(.error, "Failed to start TCP server: \(error.localizedDescription)")
-        }
+        } catch {}
     }
 
     private func stopTcpServer() {  
@@ -492,6 +456,17 @@ import Network
                 let sourceDeviceId = helloPayload?["sourceDeviceId"] as? String
                 let isProbe = (helloPayload?["probe"] as? Bool) ?? false
                 let peerDisplayName = (helloPayload?["displayName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let handshakeKind = helloPayload?["handshakeKind"] as? String
+                let claimsPeerPaired = helloPayload?["claimsPeerPaired"] as? Bool
+                let remotePairedPeerDeviceIds =
+                    (helloPayload?["pairedPeerDeviceIds"] as? [Any] ?? [])
+                        .compactMap { item -> String? in
+                            guard let text = item as? String else {
+                                return nil
+                            }
+                            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                            return trimmed.isEmpty ? nil : trimmed
+                        }
                 guard let sourceDeviceId, !sourceDeviceId.isEmpty else {
                     self.sendFrame(
                         self.frame(
@@ -551,10 +526,16 @@ import Network
                     "host": host as Any,
                     // Always report host TCP server port for reverse-connect handoff.
                     "port": Int(self.defaultTcpPort),
-                    "pairedPeerDeviceIds": self.readPairedPeerDeviceIdsFromDefaults(),
+                    "pairedPeerDeviceIds": remotePairedPeerDeviceIds,
                 ]
                 if let peerDisplayName, !peerDisplayName.isEmpty {
                     opened["displayName"] = peerDisplayName
+                }
+                if let handshakeKind, handshakeKind == "paired" || handshakeKind == "fresh" {
+                    opened["handshakeKind"] = handshakeKind
+                }
+                if let claimsPeerPaired {
+                    opened["claimsPeerPaired"] = claimsPeerPaired
                 }
                 self.onSessionOpened?(opened)
             } else if type == "message" {
@@ -647,7 +628,6 @@ import Network
 
     private func startMdnsAdvertisement() {
         if advertisedService != nil {
-            log(.debug, "mDNS advertisement already active.")
             return
         }
         let serviceName = "synra-\(UUID().uuidString.prefix(8))"
@@ -659,13 +639,11 @@ import Network
         )
         service.publish()
         advertisedService = service
-        log(.debug, "mDNS advertisement started. type=\(defaultMdnsServiceType) port=\(defaultTcpPort)")
     }
 
     private func stopMdnsAdvertisement() {
         advertisedService?.stop()
         advertisedService = nil
-        log(.debug, "mDNS advertisement stopped.")
     }
 
     /// Resolves `_synra._tcp` to candidate IPv4 addresses only (not devices until TCP helloAck).
@@ -868,12 +846,10 @@ import Network
 
     private func startUdpDiscoveryResponder() {
         if udpResponderSocket >= 0 {
-            log(.debug, "UDP responder already active.")
             return
         }
         let socketFd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)
         guard socketFd >= 0 else {
-            log(.error, "Failed to create UDP responder socket.")
             return
         }
         var reuseFlag: Int32 = 1
@@ -900,11 +876,9 @@ import Network
         }
         guard bindResult == 0 else {
             close(socketFd)
-            log(.error, "Failed to bind UDP responder on port \(udpDiscoveryPort).")
             return
         }
         udpResponderSocket = socketFd
-        log(.debug, "UDP responder started on port \(udpDiscoveryPort).")
         let source = DispatchSource.makeReadSource(fileDescriptor: socketFd, queue: udpResponderQueue)
         source.setEventHandler { [weak self] in
             self?.handleUdpResponderRead(socketFd: socketFd)
@@ -920,7 +894,6 @@ import Network
         udpResponderSource?.cancel()
         udpResponderSource = nil
         udpResponderSocket = -1
-        log(.debug, "UDP responder stopped.")
     }
 
     private func handleUdpResponderRead(socketFd: Int32) {

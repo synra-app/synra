@@ -108,6 +108,8 @@ export type DiscoverySessionOpenedEvent = {
   port?: number
   displayName?: string
   pairedPeerDeviceIds?: string[]
+  handshakeKind?: 'paired' | 'fresh'
+  claimsPeerPaired?: boolean
 }
 
 export type DiscoverySessionClosedEvent = {

@@ -97,9 +97,9 @@ export function upsertDiscoveredPeerFromSession(
         ...existing,
         deviceId: event.deviceId,
         name: displayName,
-        ipAddress: existing.ipAddress || host,
+        ipAddress: host,
         port,
-        source: existing.source,
+        source: 'session',
         connectable: true,
         connectCheckAt: now,
         lastSeenAt: now

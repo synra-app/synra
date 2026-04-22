@@ -16,6 +16,15 @@ import { normalizeHost } from './host-normalization'
 import { sortDevices } from './device-sort'
 import type { MessageListenersRegistry } from './message-listeners'
 import { getHooksRuntimeOptions, isLocalDiscoveryDeviceId } from './config'
+import { setSessionStateWithTransitionLog } from './session-state-transition-log'
+
+function shouldSuppressTransportErrorMessage(message: string | undefined): boolean {
+  if (typeof message !== 'string' || message.length === 0) {
+    return false
+  }
+  const normalized = message.toLowerCase()
+  return normalized.includes('econnrefused')
+}
 
 export async function registerAdapterListeners(options: {
   adapter: ConnectionRuntimeAdapter
@@ -97,16 +106,20 @@ export async function registerAdapterListeners(options: {
       (inferredDirection === 'outbound' && currentDirection !== 'inbound') ||
       sessionState.value.state !== 'open'
     if (shouldReplacePrimarySession) {
-      sessionState.value = {
-        ...sessionState.value,
-        sessionId: event.sessionId,
-        deviceId: event.deviceId,
-        host: event.host,
-        port: event.port,
-        direction: inferredDirection,
-        state: 'open',
-        openedAt: Date.now()
-      }
+      setSessionStateWithTransitionLog(
+        sessionState,
+        {
+          ...sessionState.value,
+          sessionId: event.sessionId,
+          deviceId: event.deviceId,
+          host: event.host,
+          port: event.port,
+          direction: inferredDirection,
+          state: 'open',
+          openedAt: Date.now()
+        },
+        { reason: 'session_opened_event' }
+      )
     }
     sessionsBook.upsertConnectedSession(
       {
@@ -123,18 +136,30 @@ export async function registerAdapterListeners(options: {
     )
 
     const pairedFromEvent = (event as { pairedPeerDeviceIds?: unknown }).pairedPeerDeviceIds
+    const rawHandshakeKind = (event as { handshakeKind?: unknown }).handshakeKind
+    const handshakeKind =
+      rawHandshakeKind === 'paired' || rawHandshakeKind === 'fresh' ? rawHandshakeKind : undefined
+    const claimsPeerPairedRaw = (event as { claimsPeerPaired?: unknown }).claimsPeerPaired
+    const claimsPeerPaired =
+      typeof claimsPeerPairedRaw === 'boolean' ? claimsPeerPairedRaw : undefined
     const sync = getHooksRuntimeOptions().onHandshakePairedPeerIds
     if (
       typeof sync === 'function' &&
       typeof event.deviceId === 'string' &&
       event.deviceId.length > 0 &&
-      Array.isArray(pairedFromEvent)
+      (Array.isArray(pairedFromEvent) ||
+        handshakeKind !== undefined ||
+        claimsPeerPaired !== undefined)
     ) {
-      const ids = pairedFromEvent.filter(
-        (id): id is string => typeof id === 'string' && id.trim().length > 0
-      )
+      const ids = Array.isArray(pairedFromEvent)
+        ? pairedFromEvent.filter(
+            (id): id is string => typeof id === 'string' && id.trim().length > 0
+          )
+        : []
       sync(event.deviceId, ids, {
-        sessionId: typeof event.sessionId === 'string' ? event.sessionId : undefined
+        sessionId: typeof event.sessionId === 'string' ? event.sessionId : undefined,
+        handshakeKind,
+        claimsPeerPaired
       })
     }
   })
@@ -145,21 +170,25 @@ export async function registerAdapterListeners(options: {
       !currentSessionId || !event.sessionId || currentSessionId === event.sessionId
     if (shouldAffectPrimarySession) {
       const shouldClearCurrentSession = !currentSessionId || currentSessionId === event.sessionId
-      sessionState.value = shouldClearCurrentSession
-        ? {
-            ...sessionState.value,
-            sessionId: undefined,
-            deviceId: undefined,
-            host: undefined,
-            port: undefined,
-            state: 'closed',
-            closedAt: Date.now()
-          }
-        : {
-            ...sessionState.value,
-            state: 'closed',
-            closedAt: Date.now()
-          }
+      setSessionStateWithTransitionLog(
+        sessionState,
+        shouldClearCurrentSession
+          ? {
+              ...sessionState.value,
+              sessionId: undefined,
+              deviceId: undefined,
+              host: undefined,
+              port: undefined,
+              state: 'closed',
+              closedAt: Date.now()
+            }
+          : {
+              ...sessionState.value,
+              state: 'closed',
+              closedAt: Date.now()
+            },
+        { reason: 'session_closed_event' }
+      )
     }
     sessionsBook.markConnectionClosed(event.sessionId, Date.now())
   })
@@ -184,11 +213,48 @@ export async function registerAdapterListeners(options: {
   })
 
   await adapter.addTransportErrorListener((event) => {
+    const now = Date.now()
+    const transportErrorSessionId =
+      typeof event.sessionId === 'string' && event.sessionId.length > 0
+        ? event.sessionId
+        : undefined
+    if (transportErrorSessionId) {
+      const currentSessionId = sessionState.value.sessionId
+      const shouldAffectPrimarySession =
+        !currentSessionId || currentSessionId === transportErrorSessionId
+      if (shouldAffectPrimarySession) {
+        const shouldClearCurrentSession =
+          !currentSessionId || currentSessionId === transportErrorSessionId
+        setSessionStateWithTransitionLog(
+          sessionState,
+          shouldClearCurrentSession
+            ? {
+                ...sessionState.value,
+                sessionId: undefined,
+                deviceId: undefined,
+                host: undefined,
+                port: undefined,
+                state: 'closed',
+                closedAt: now
+              }
+            : {
+                ...sessionState.value,
+                state: 'closed',
+                closedAt: now
+              },
+          { reason: 'transport_error_event' }
+        )
+      }
+      sessionsBook.markConnectionClosed(transportErrorSessionId, now)
+    }
+    if (shouldSuppressTransportErrorMessage(event.message)) {
+      return
+    }
     error.value = event.message
   })
 
   const snapshot = await adapter.getSessionState()
-  sessionState.value = snapshot
+  setSessionStateWithTransitionLog(sessionState, snapshot, { reason: 'adapter_snapshot' })
   if (snapshot.state === 'open' && snapshot.sessionId) {
     sessionsBook.upsertConnectedSession(
       {

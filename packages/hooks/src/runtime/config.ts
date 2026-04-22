@@ -21,7 +21,11 @@ export type HooksRuntimeOptions = {
   onHandshakePairedPeerIds?: (
     peerDeviceId: string,
     theirPairedPeerDeviceIds: string[],
-    meta?: { sessionId?: string }
+    meta?: {
+      sessionId?: string
+      handshakeKind?: 'paired' | 'fresh'
+      claimsPeerPaired?: boolean
+    }
   ) => void
   /** After `custom.device.profileUpdated`: peer display name changed (optional paired-store patch). */
   onRemoteDeviceProfile?: (deviceId: string, displayName: string) => void

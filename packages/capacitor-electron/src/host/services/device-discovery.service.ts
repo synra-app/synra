@@ -66,7 +66,8 @@ export function createDeviceDiscoveryService(
   })
   const outboundSession = createOutboundClientSession({
     eventBus,
-    resolveLocalDeviceUuid
+    resolveLocalDeviceUuid,
+    readPairedPeerDeviceIds
   })
 
   let heartbeatTimer: NodeJS.Timeout | undefined

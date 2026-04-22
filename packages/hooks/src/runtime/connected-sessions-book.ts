@@ -71,15 +71,14 @@ export class ConnectedSessionsBook {
     options: { immediate?: boolean } = {}
   ): void {
     const current = this.connectedSessionMap.get(next.sessionId)
-    this.connectedSessionMap.set(
-      next.sessionId,
-      current
-        ? {
-            ...current,
-            ...next
-          }
-        : next
-    )
+    const merged = current
+      ? {
+          ...current,
+          ...next
+        }
+      : next
+    this.connectedSessionMap.set(next.sessionId, merged)
+
     this.scheduleConnectedSessionsRebuild(Boolean(options.immediate))
   }
 

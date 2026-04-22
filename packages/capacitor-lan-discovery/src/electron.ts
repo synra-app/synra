@@ -12,11 +12,14 @@ import type {
   StartDiscoveryResult,
   StopDiscoveryResult
 } from './definitions'
+import { discoveredDeviceFromHostEvent, lostDeviceFromHostEvent } from './host-event-device'
 
 type ElectronBridgeTarget = {
   __synraCapElectron?: {
     invoke?: BridgeInvoke
-    onHostEvent?: (listener: (event: { type: string; payload?: unknown }) => void) => () => void
+    onHostEvent?: (
+      listener: (event: { type: string; remote?: string; payload?: unknown }) => void
+    ) => () => void
   }
 }
 
@@ -119,26 +122,20 @@ export class LanDiscoveryElectron extends WebPlugin implements LanDiscoveryPlugi
       return
     }
     subscribe((event) => {
-      if (event.type !== 'host.member.offline') {
+      const device = discoveredDeviceFromHostEvent(event)
+      if (device) {
+        this.notifyListeners('deviceFound', { device })
+        this.notifyListeners('deviceUpdated', { device })
+        this.notifyListeners('deviceConnectableUpdated', { device })
         return
       }
-      const payload =
-        event.payload && typeof event.payload === 'object'
-          ? (event.payload as Record<string, unknown>)
-          : {}
-      const deviceId =
-        typeof payload.deviceId === 'string' && payload.deviceId.length > 0
-          ? payload.deviceId
-          : undefined
-      if (!deviceId) {
+      const lost = lostDeviceFromHostEvent(event)
+      if (!lost) {
         return
       }
       this.notifyListeners('deviceLost', {
-        deviceId,
-        ipAddress:
-          typeof payload.sourceHostIp === 'string' && payload.sourceHostIp.length > 0
-            ? payload.sourceHostIp
-            : undefined
+        deviceId: lost.deviceId,
+        ipAddress: lost.ipAddress
       })
     })
     this.hostEventSubscribed = true

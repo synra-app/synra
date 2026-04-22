@@ -222,6 +222,7 @@ export type DeviceDiscoveryHostEvent = {
     | 'transport.message.received'
     | 'transport.message.ack'
     | 'transport.error'
+    | 'host.member.online'
     | 'host.retire'
     | 'host.member.offline'
     | 'host.heartbeat.timeout'

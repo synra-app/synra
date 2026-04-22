@@ -6,6 +6,7 @@ import {
 import type { Pinia } from 'pinia'
 import { syncPairedDiscoveryExclusionFromRecords } from './discovery-paired-exclusion'
 import { listPairedDeviceRecords, removePairedDeviceRecord } from './paired-devices-storage'
+import { PAIR_MESSAGE_UNPAIR_REQUIRED } from './pair-protocol'
 import { useLanDiscoveryStore } from '../stores/lan-discovery'
 import { usePairingStore } from '../stores/pairing'
 
@@ -19,6 +20,8 @@ export async function applyHandshakePairedSync(options: {
   theirPairedPeerDeviceIds: string[]
   /** Session just opened on helloAck; close it after dropping stale pairing so UI does not stay green. */
   openedSessionId?: string
+  remoteHandshakeKind?: 'paired' | 'fresh'
+  remoteClaimsPeerPaired?: boolean
 }): Promise<void> {
   const localId = getHooksRuntimeOptions().localDiscoveryDeviceId
   if (typeof localId !== 'string' || localId.length === 0) {
@@ -31,26 +34,52 @@ export async function applyHandshakePairedSync(options: {
   const their = new Set(
     options.theirPairedPeerDeviceIds.map((id) => id.trim()).filter((id) => id.length > 0)
   )
-  if (their.has(localId)) {
-    return
-  }
+  const remoteListsLocal = their.has(localId)
   const records = await listPairedDeviceRecords()
-  if (!records.some((r) => r.deviceId === peerId)) {
+  const hasLocalPair = records.some((record) => record.deviceId === peerId)
+  const sid = options.openedSessionId?.trim()
+  const runtime = getConnectionRuntime()
+  const lanStore = useLanDiscoveryStore(options.pinia)
+  const pairingStore = usePairingStore(options.pinia)
+  const closeAndDisconnect = async (): Promise<void> => {
+    if (sid) {
+      await runtime.closeSession(sid).catch(() => undefined)
+    }
+    await lanStore.disconnectDevice(peerId).catch(() => undefined)
+  }
+
+  if (!hasLocalPair) {
+    const shouldRequestUnpair =
+      options.remoteClaimsPeerPaired === true || options.remoteHandshakeKind === 'paired'
+    if (shouldRequestUnpair && sid) {
+      await runtime
+        .sendMessage({
+          sessionId: sid,
+          messageType: PAIR_MESSAGE_UNPAIR_REQUIRED,
+          payload: {
+            mode: 'stale',
+            reason: 'Peer is no longer paired on this device.'
+          }
+        })
+        .catch(() => undefined)
+      setPairedDeviceConnecting(peerId, false)
+      await closeAndDisconnect()
+    }
     return
   }
+
+  const shouldDropForFreshHandshake = options.remoteHandshakeKind === 'fresh'
+  const shouldDropForStaleAck = !remoteListsLocal
+  if (!shouldDropForFreshHandshake && !shouldDropForStaleAck) {
+    return
+  }
+
   await removePairedDeviceRecord(peerId)
-  const next = await listPairedDeviceRecords()
+  const next = records.filter((record) => record.deviceId !== peerId)
   syncPairedDiscoveryExclusionFromRecords(next)
-  usePairingStore(options.pinia).bumpPairedList()
+  pairingStore.bumpPairedList()
 
   setPairedDeviceConnecting(peerId, false)
 
-  const runtime = getConnectionRuntime()
-  const sid = options.openedSessionId?.trim()
-  if (sid) {
-    await runtime.closeSession(sid).catch(() => undefined)
-  }
-  await useLanDiscoveryStore(options.pinia)
-    .disconnectDevice(peerId)
-    .catch(() => undefined)
+  await closeAndDisconnect()
 }

@@ -169,6 +169,14 @@ export function createCapacitorRuntimeAdapter(): ConnectionRuntimeAdapter {
               (id): id is string => typeof id === 'string' && id.trim().length > 0
             )
           : undefined
+        const rawHandshakeKind = (event as { handshakeKind?: unknown }).handshakeKind
+        const handshakeKind =
+          rawHandshakeKind === 'paired' || rawHandshakeKind === 'fresh'
+            ? rawHandshakeKind
+            : undefined
+        const claimsPeerPairedRaw = (event as { claimsPeerPaired?: unknown }).claimsPeerPaired
+        const claimsPeerPaired =
+          typeof claimsPeerPairedRaw === 'boolean' ? claimsPeerPairedRaw : undefined
         listener({
           sessionId: event.sessionId,
           deviceId: event.deviceId,
@@ -180,7 +188,9 @@ export function createCapacitorRuntimeAdapter(): ConnectionRuntimeAdapter {
             typeof event.displayName === 'string' && event.displayName.length > 0
               ? event.displayName
               : undefined,
-          ...(pairedPeerDeviceIds !== undefined ? { pairedPeerDeviceIds } : {})
+          ...(pairedPeerDeviceIds !== undefined ? { pairedPeerDeviceIds } : {}),
+          ...(handshakeKind ? { handshakeKind } : {}),
+          ...(typeof claimsPeerPaired === 'boolean' ? { claimsPeerPaired } : {})
         })
         const allowLanHandoff =
           getHooksRuntimeOptions().enableMobileLanDeviceConnectionHandoff === true

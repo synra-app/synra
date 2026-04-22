@@ -18,4 +18,5 @@ const LanDiscovery = registerPlugin<LanDiscoveryPlugin>('LanDiscovery', {
 })
 
 export * from './definitions'
+export * from './host-event-device'
 export { LanDiscovery }

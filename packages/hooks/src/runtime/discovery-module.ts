@@ -18,37 +18,6 @@ export function createDiscoveryModule(options: {
 } {
   const { adapter, scanState, devices, loading, error } = options
 
-  function mergeScanWithSessionPeers(
-    scanDevices: DiscoveredDevice[],
-    previous: DiscoveredDevice[],
-    excludeDeviceId: (deviceId: string) => boolean
-  ): DiscoveredDevice[] {
-    const mergedById = new Map<string, DiscoveredDevice>()
-    for (const device of scanDevices) {
-      mergedById.set(device.deviceId, device)
-    }
-    const scanHosts = new Set(
-      scanDevices.map((device) => normalizeHost(device.ipAddress)).filter((host) => host.length > 0)
-    )
-    for (const prev of previous) {
-      if (prev.source !== 'session') {
-        continue
-      }
-      if (excludeDeviceId(prev.deviceId)) {
-        continue
-      }
-      if (mergedById.has(prev.deviceId)) {
-        continue
-      }
-      const prevHost = normalizeHost(prev.ipAddress)
-      if (prevHost.length > 0 && scanHosts.has(prevHost)) {
-        continue
-      }
-      mergedById.set(prev.deviceId, prev)
-    }
-    return sortDevices([...mergedById.values()])
-  }
-
   async function startDiscovery(discoveryOptions: SynraDiscoveryStartOptions = {}): Promise<void> {
     loading.value = true
     try {
@@ -63,7 +32,12 @@ export function createDiscoveryModule(options: {
       const shouldDrop = (deviceId: string) =>
         isLocalDiscoveryDeviceId(deviceId) || (typeof exclude === 'function' && exclude(deviceId))
       const filtered = result.devices.filter((device) => !shouldDrop(device.deviceId))
-      devices.value = mergeScanWithSessionPeers(filtered, devices.value, shouldDrop)
+      devices.value = sortDevices(
+        filtered.map((device) => ({
+          ...device,
+          ipAddress: normalizeHost(device.ipAddress)
+        }))
+      )
       error.value = null
     } catch (unknownError) {
       error.value = unknownToErrorMessage(unknownError, 'Failed to start discovery.')

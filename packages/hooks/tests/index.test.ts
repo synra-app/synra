@@ -118,6 +118,91 @@ test('cleanup runtime options', () => {
   resetConnectionRuntime()
 })
 
+test('transport error closes connected session state', async () => {
+  let sessionOpenedListener: ((event: SessionOpenedEvent) => void) | undefined
+  let transportErrorListener: ((event: TransportErrorEvent) => void) | undefined
+
+  configureHooksRuntime({
+    adapterFactory: () => ({
+      async startDiscovery() {
+        return {
+          state: 'scanning' as const,
+          devices: [
+            {
+              deviceId: 'device-a',
+              name: 'Device A',
+              ipAddress: '192.168.1.10',
+              source: 'mdns' as const,
+              connectable: true,
+              discoveredAt: Date.now(),
+              lastSeenAt: Date.now()
+            }
+          ]
+        }
+      },
+      async openSession(options: OpenSessionOptions) {
+        const openedEvent: SessionOpenedEvent = {
+          sessionId: 'session-device-a',
+          deviceId: options.deviceId,
+          host: options.host,
+          port: options.port,
+          transport: 'tcp',
+          direction: 'outbound'
+        }
+        sessionOpenedListener?.(openedEvent)
+        return { sessionId: openedEvent.sessionId, state: 'open', transport: 'tcp' as const }
+      },
+      async closeSession() {},
+      async sendMessage() {},
+      async getSessionState(): Promise<GetSessionStateResult> {
+        return { state: 'idle', transport: 'tcp' }
+      },
+      async addDeviceConnectableUpdatedListener() {
+        return { remove: async () => {} }
+      },
+      async addDeviceLostListener() {
+        return { remove: async () => {} }
+      },
+      async addSessionOpenedListener(listener: (event: SessionOpenedEvent) => void) {
+        sessionOpenedListener = listener
+        return { remove: async () => {} }
+      },
+      async addSessionClosedListener() {
+        return { remove: async () => {} }
+      },
+      async addMessageReceivedListener() {
+        return { remove: async () => {} }
+      },
+      async addMessageAckListener() {
+        return { remove: async () => {} }
+      },
+      async addTransportErrorListener(listener: (event: TransportErrorEvent) => void) {
+        transportErrorListener = listener
+        return { remove: async () => {} }
+      },
+      invalidateHandoffForHostKeys() {}
+    })
+  })
+  resetConnectionRuntime()
+  const transport = useTransport()
+  await transport.ensureReady()
+  await transport.startScan()
+  await transport.connectToDevice('device-a')
+  expect(transport.connectedDeviceIds.value).toContain('device-a')
+
+  transportErrorListener?.({
+    sessionId: 'session-device-a',
+    code: 'SOCKET_CLOSED',
+    message: 'socket closed',
+    transport: 'tcp'
+  })
+
+  expect(transport.connectedDeviceIds.value).not.toContain('device-a')
+  expect(
+    transport.connectedSessions.value.find((session) => session.sessionId === 'session-device-a')
+  ).toMatchObject({ status: 'closed' })
+})
+
 test('startScan clears peer list when discovery returns empty', async () => {
   let scanCount = 0
   configureHooksRuntime({

@@ -26,11 +26,7 @@ export function resolveRuntimeAdapter(): ConnectionRuntimeAdapter {
   if (isElectronMainProcess()) {
     try {
       return createElectronMainRuntimeAdapter()
-    } catch (unknownError) {
-      console.warn(
-        '[hooks-runtime] failed to initialize electron main adapter, fallback to unsupported adapter',
-        unknownError
-      )
+    } catch {
       return createUnsupportedMainAdapter()
     }
   }
