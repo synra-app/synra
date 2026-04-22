@@ -2,6 +2,8 @@ import { WebPlugin } from '@capacitor/core'
 import type {
   DiscoveryCloseSessionOptions,
   DiscoveryCloseSessionResult,
+  ProbeConnectableOptions,
+  ProbeConnectableResult,
   DiscoverySendMessageOptions,
   DiscoverySendMessageResult,
   LanDiscoveryPlugin,
@@ -46,6 +48,8 @@ export class LanDiscoveryWeb extends WebPlugin implements LanDiscoveryPlugin {
     return {
       requestId: `web-${this.scanState.startedAt ?? now()}`,
       state: this.scanState.state,
+      scanWindowMs: this.scanState.scanWindowMs,
+      startedAt: this.scanState.startedAt,
       devices: this.scanState.devices
     }
   }
@@ -66,6 +70,18 @@ export class LanDiscoveryWeb extends WebPlugin implements LanDiscoveryPlugin {
   async getDiscoveredDevices(): Promise<ListDiscoveredDevicesResult> {
     return {
       state: this.scanState.state,
+      scanWindowMs: this.scanState.scanWindowMs,
+      startedAt: this.scanState.startedAt,
+      devices: this.scanState.devices
+    }
+  }
+
+  async probeConnectable(_options: ProbeConnectableOptions = {}): Promise<ProbeConnectableResult> {
+    const checkedAt = now()
+    return {
+      checkedAt,
+      port: 32100,
+      timeoutMs: 1500,
       devices: this.scanState.devices
     }
   }

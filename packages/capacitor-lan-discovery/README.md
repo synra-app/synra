@@ -22,6 +22,23 @@ Sync native files
 npx cap sync
 ```
 
+## Platform support
+
+| Capability                                                                 | iOS                    | Android                    | Web     | Electron |
+| -------------------------------------------------------------------------- | ---------------------- | -------------------------- | ------- | -------- |
+| `startDiscovery` / `stopDiscovery` / `getDiscoveredDevices`                | Yes                    | Yes                        | Mocked  | Yes      |
+| `probeConnectable`                                                         | Yes                    | Yes                        | No      | No       |
+| `sendMessage` / `closeSession`                                             | Yes (inbound sessions) | Yes (inbound sessions)     | No      | No       |
+| `scanStateChanged` / `sessionOpened` / `sessionClosed` / `messageReceived` | Yes                    | Yes                        | Partial | Partial  |
+| `transportError`                                                           | Yes                    | Yes                        | No      | No       |
+| `deviceFound` / `deviceUpdated` / `deviceLost`                             | No                     | Yes (compatibility events) | Partial | Partial  |
+
+## Notes
+
+- `hybrid` discovery mode uses mDNS first, and falls back to UDP only when mDNS does not produce candidates.
+- `deviceFound`, `deviceUpdated`, and `deviceLost` are currently Android-compatible events and should not be treated as cross-platform guarantees.
+- `scanWindowMs` and `startedAt` can be returned by native platforms in discovery result payloads.
+
 ## API
 
 <docgen-index></docgen-index>

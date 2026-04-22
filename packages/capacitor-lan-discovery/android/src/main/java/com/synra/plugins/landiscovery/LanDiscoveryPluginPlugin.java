@@ -36,7 +36,6 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -105,6 +104,14 @@ public class LanDiscoveryPluginPlugin extends Plugin {
 
     private static void logWarn(String message, Throwable error) {
         Log.w(TAG, message, error);
+    }
+
+    private void notifyTransportError(String code, String message, String transport) {
+        JSObject payload = new JSObject();
+        payload.put("code", code);
+        payload.put("message", message);
+        payload.put("transport", transport);
+        notifyListeners("transportError", payload);
     }
 
     private JSONArray readStoredPairedPeerDeviceIds() {
@@ -215,7 +222,7 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             toProbe = new ArrayList<>(toProbe.subList(0, maxProbeHosts));
         }
         long now = System.currentTimeMillis();
-        List<LanDiscoveryPlugin.DeviceRecord> probed = new ArrayList<>();
+        List<DeviceRecord> probed = new ArrayList<>();
         for (String host : toProbe) {
             ProbeOutcome outcome = probeDevice(host, port, timeoutMs);
             if (!outcome.connectable) {
@@ -300,6 +307,11 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                 result.put("transport", "tcp");
                 call.resolve(result);
             } catch (Exception error) {
+                notifyTransportError(
+                    "TRANSPORT_IO_ERROR",
+                    "sendMessage failed: " + error.getMessage(),
+                    "tcp"
+                );
                 call.reject("sendMessage failed: " + error.getMessage());
             }
         });
@@ -313,6 +325,7 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             return;
         }
         Socket socket = inboundSessionSockets.remove(sessionId);
+        boolean emittedSessionClosed = false;
         if (socket != null && !socket.isClosed()) {
             try {
                 writeSocketFrame(socket, frame("close", sessionId, null, null));
@@ -321,12 +334,16 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             }
             closeQuietly(socket);
             inboundTcpSockets.remove(socket);
+            JSObject closed = new JSObject();
+            closed.put("sessionId", sessionId);
+            closed.put("reason", "closed-by-host");
+            closed.put("transport", "tcp");
+            notifyListeners("sessionClosed", closed);
+            emittedSessionClosed = true;
         }
-        JSObject closed = new JSObject();
-        closed.put("sessionId", sessionId);
-        closed.put("reason", "closed-by-host");
-        closed.put("transport", "tcp");
-        notifyListeners("sessionClosed", closed);
+        if (!emittedSessionClosed) {
+            logDebug("closeSession skipped sessionClosed event: no active socket for " + sessionId);
+        }
 
         JSObject result = new JSObject();
         result.put("success", true);
@@ -393,7 +410,7 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             List<String> mdnsTargets = discoverByMdns(mdnsServiceType, timeoutMs);
             discovered.addAll(mdnsTargets);
         }
-        if (shouldRunUdpFallback) {
+        if (shouldRunUdpFallback && discovered.isEmpty()) {
             List<String> udpTargets = discoverByUdp(timeoutMs);
             discovered.addAll(udpTargets);
         }
@@ -689,10 +706,10 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             if (sourceDeviceId.equals(localDeviceId)) {
                 return;
             }
-            String offlineDeviceId = canonicalLanDeviceId(sourceDeviceId);
+            String offlineDeviceId = LanDiscoveryIdUtils.canonicalLanDeviceId(sourceDeviceId);
             JSObject payload = new JSObject();
             payload.put("deviceId", offlineDeviceId);
-            if (sourceHostIp != null && !sourceHostIp.isBlank() && isIpv4Address(sourceHostIp)) {
+            if (sourceHostIp != null && !sourceHostIp.isBlank() && LanDiscoveryIdUtils.isIpv4Address(sourceHostIp)) {
                 payload.put("ipAddress", sourceHostIp);
             }
             notifyListeners("deviceLost", payload);
@@ -864,9 +881,19 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                         if (!tcpServerRunning) {
                             break;
                         }
+                        notifyTransportError(
+                            "TCP_ACCEPT_ERROR",
+                            "TCP accept failed: " + error.getMessage(),
+                            "tcp"
+                        );
                     }
                 }
             } catch (IOException error) {
+                notifyTransportError(
+                    "TCP_SERVER_START_FAILED",
+                    "TCP server failed to start: " + error.getMessage(),
+                    "tcp"
+                );
             } finally {
                 tcpServerRunning = false;
                 ServerSocket current = tcpServerSocket;
@@ -997,7 +1024,7 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                         JSObject opened = new JSObject();
                         opened.put("sessionId", sessionId);
                         opened.put("transport", "tcp");
-                        opened.put("deviceId", canonicalLanDeviceId(sourceDeviceId));
+                        opened.put("deviceId", LanDiscoveryIdUtils.canonicalLanDeviceId(sourceDeviceId));
                         opened.put("direction", "inbound");
                         opened.put("host", socket.getInetAddress().getHostAddress());
                         opened.put("port", DEFAULT_TCP_PORT);
@@ -1047,6 +1074,11 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                     }
                 }
             } catch (IOException error) {
+                notifyTransportError(
+                    "TRANSPORT_IO_ERROR",
+                    "Inbound socket failed: " + error.getMessage(),
+                    "tcp"
+                );
             } finally {
                 if (activeSessionId != null) {
                     inboundSessionSockets.remove(activeSessionId);
@@ -1146,8 +1178,8 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         String sourceHostIp,
         Socket socket
     ) {
-        String normalizedDeviceId = canonicalLanDeviceId(sourceDeviceId);
-        String host = normalizePeerHost(sourceHostIp, socket);
+        String normalizedDeviceId = LanDiscoveryIdUtils.canonicalLanDeviceId(sourceDeviceId);
+        String host = LanDiscoveryIdUtils.normalizePeerHost(sourceHostIp, socket);
         if (host == null || host.isBlank()) {
             logWarn("Cannot resolve peer host for sourceDeviceId=" + sourceDeviceId);
             return null;
@@ -1171,80 +1203,6 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         device.put("discoveredAt", now);
         device.put("lastSeenAt", now);
         return device;
-    }
-
-    private String normalizePeerHost(String sourceHostIp, Socket socket) {
-        if (sourceHostIp != null) {
-            String trimmed = sourceHostIp.trim();
-            if (isIpv4Address(trimmed)) {
-                return trimmed;
-            }
-        }
-        InetAddress peerAddr = socket.getInetAddress();
-        if (peerAddr == null) {
-            return null;
-        }
-        String observed = peerAddr.getHostAddress();
-        if (observed == null || observed.isBlank() || observed.contains(":")) {
-            return null;
-        }
-        return observed;
-    }
-
-    private boolean isIpv4Address(String value) {
-        if (value == null || value.isBlank() || value.contains(":")) {
-            return false;
-        }
-        String[] parts = value.split("\\.");
-        if (parts.length != 4) {
-            return false;
-        }
-        for (String part : parts) {
-            if (part == null || part.isBlank()) {
-                return false;
-            }
-            try {
-                int parsed = Integer.parseInt(part);
-                if (parsed < 0 || parsed > 255) {
-                    return false;
-                }
-            } catch (NumberFormatException error) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private String hashDeviceId(String value) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-1");
-            byte[] bytes = digest.digest(value.getBytes(StandardCharsets.UTF_8));
-            StringBuilder builder = new StringBuilder();
-            for (byte current : bytes) {
-                if (builder.length() >= 12) {
-                    break;
-                }
-                builder.append(String.format("%02x", current));
-            }
-            return "device-" + builder;
-        } catch (Exception ignored) {
-            return "device-" + Math.abs(value.hashCode());
-        }
-    }
-
-    /** Raw instance UUID in helloAck vs {@code device-} + hex used in lists and pairing storage. */
-    private String canonicalLanDeviceId(String raw) {
-        if (raw == null) {
-            return null;
-        }
-        String t = raw.trim();
-        if (t.isEmpty()) {
-            return t;
-        }
-        if (t.startsWith("device-") && t.length() >= "device-".length() + 8) {
-            return t;
-        }
-        return hashDeviceId(t);
     }
 
     private String primarySourceHostIp() {
@@ -1319,7 +1277,7 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             if (remote != null && remote.equals(localUuid)) {
                 return new ProbeOutcome(false, "SELF_DEVICE", null, remoteDisplayName);
             }
-            return new ProbeOutcome(true, null, canonicalLanDeviceId(remote), remoteDisplayName);
+            return new ProbeOutcome(true, null, LanDiscoveryIdUtils.canonicalLanDeviceId(remote), remoteDisplayName);
         } catch (Exception error) {
             return new ProbeOutcome(false, error.getMessage(), null, null);
         } finally {
@@ -1343,9 +1301,9 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             String deviceId = device.optString("deviceId");
             String host = device.optString("ipAddress");
             ProbeOutcome outcome = probeDevice(host, port, timeoutMs);
-            LanDiscoveryPlugin.DeviceRecord updated;
-            String canonicalRemote = canonicalLanDeviceId(outcome.remoteDeviceId);
-            String canonicalExisting = canonicalLanDeviceId(deviceId);
+            DeviceRecord updated;
+            String canonicalRemote = LanDiscoveryIdUtils.canonicalLanDeviceId(outcome.remoteDeviceId);
+            String canonicalExisting = LanDiscoveryIdUtils.canonicalLanDeviceId(deviceId);
             if (canonicalRemote != null
                 && !canonicalRemote.isBlank()
                 && !canonicalRemote.equals(canonicalExisting)) {
@@ -1461,25 +1419,6 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         String created = UUID.randomUUID().toString();
         unified.edit().putString(INSTANCE_UUID_KEY, created).apply();
         return created;
-    }
-
-    private static final class ProbeOutcome {
-        private final boolean connectable;
-        private final String error;
-        private final String remoteDeviceId;
-        private final String remoteDisplayName;
-
-        private ProbeOutcome(
-            boolean connectable,
-            String error,
-            String remoteDeviceId,
-            String remoteDisplayName
-        ) {
-            this.connectable = connectable;
-            this.error = error;
-            this.remoteDeviceId = remoteDeviceId;
-            this.remoteDisplayName = remoteDisplayName;
-        }
     }
 
 }

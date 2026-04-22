@@ -267,8 +267,20 @@ export function createCapacitorRuntimeAdapter(): ConnectionRuntimeAdapter {
       return combineListenerHandles(connectionHandle, discoveryHandle)
     },
     addMessageAckListener: (listener) => DeviceConnection.addListener('messageAck', listener),
-    addTransportErrorListener: (listener) =>
-      DeviceConnection.addListener('transportError', listener)
+    addTransportErrorListener: async (listener) => {
+      const connectionHandle = await DeviceConnection.addListener('transportError', listener)
+      const discoveryHandle = await LanDiscovery.addListener('transportError', (event) => {
+        listener({
+          transport: 'tcp',
+          code: typeof event.code === 'string' ? event.code : undefined,
+          message:
+            typeof event.message === 'string' && event.message.length > 0
+              ? event.message
+              : 'LanDiscovery transport error'
+        })
+      })
+      return combineListenerHandles(connectionHandle, discoveryHandle)
+    }
   }
 
   ;(

@@ -27,6 +27,8 @@ export type StartDiscoveryOptions = {
   mdnsServiceType?: string
   subnetCidrs?: string[]
   maxProbeHosts?: number
+  scanWindowMs?: number
+  /** @deprecated Not consumed by native implementations. */
   concurrency?: number
   discoveryTimeoutMs?: number
   reset?: boolean
@@ -37,6 +39,8 @@ export type StartDiscoveryOptions = {
 export type StartDiscoveryResult = {
   requestId: string
   state: DiscoveryState
+  scanWindowMs?: number
+  startedAt?: number
   devices: DiscoveredDevice[]
 }
 
@@ -56,6 +60,20 @@ export type DiscoveryCloseSessionResult = {
 
 export type ListDiscoveredDevicesResult = {
   state: DiscoveryState
+  scanWindowMs?: number
+  startedAt?: number
+  devices: DiscoveredDevice[]
+}
+
+export type ProbeConnectableOptions = {
+  port?: number
+  timeoutMs?: number
+}
+
+export type ProbeConnectableResult = {
+  checkedAt: number
+  port: number
+  timeoutMs: number
   devices: DiscoveredDevice[]
 }
 
@@ -89,6 +107,7 @@ export type DiscoverySessionOpenedEvent = {
   host?: string
   port?: number
   displayName?: string
+  pairedPeerDeviceIds?: string[]
 }
 
 export type DiscoverySessionClosedEvent = {
@@ -106,10 +125,17 @@ export type DiscoveryMessageReceivedEvent = {
   transport: 'tcp'
 }
 
+export type DiscoveryTransportErrorEvent = {
+  code?: string
+  message?: string
+  transport: 'tcp'
+}
+
 export interface LanDiscoveryPlugin {
   startDiscovery(options?: StartDiscoveryOptions): Promise<StartDiscoveryResult>
   stopDiscovery(): Promise<StopDiscoveryResult>
   getDiscoveredDevices(): Promise<ListDiscoveredDevicesResult>
+  probeConnectable(options?: ProbeConnectableOptions): Promise<ProbeConnectableResult>
   closeSession(options: DiscoveryCloseSessionOptions): Promise<DiscoveryCloseSessionResult>
   sendMessage(options: DiscoverySendMessageOptions): Promise<DiscoverySendMessageResult>
   addListener(
@@ -122,7 +148,7 @@ export interface LanDiscoveryPlugin {
   ): Promise<PluginListenerHandle>
   addListener(
     eventName: 'deviceLost',
-    listenerFunc: (event: { deviceId: string }) => void
+    listenerFunc: (event: { deviceId: string; ipAddress?: string }) => void
   ): Promise<PluginListenerHandle>
   addListener(
     eventName: 'scanStateChanged',
@@ -143,5 +169,9 @@ export interface LanDiscoveryPlugin {
   addListener(
     eventName: 'messageReceived',
     listenerFunc: (event: DiscoveryMessageReceivedEvent) => void
+  ): Promise<PluginListenerHandle>
+  addListener(
+    eventName: 'transportError',
+    listenerFunc: (event: DiscoveryTransportErrorEvent) => void
   ): Promise<PluginListenerHandle>
 }

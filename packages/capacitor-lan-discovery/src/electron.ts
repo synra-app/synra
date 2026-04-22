@@ -2,6 +2,8 @@ import { WebPlugin } from '@capacitor/core'
 import type {
   DiscoveryCloseSessionOptions,
   DiscoveryCloseSessionResult,
+  ProbeConnectableOptions,
+  ProbeConnectableResult,
   DiscoverySendMessageOptions,
   DiscoverySendMessageResult,
   LanDiscoveryPlugin,
@@ -173,6 +175,10 @@ export class LanDiscoveryElectron extends WebPlugin implements LanDiscoveryPlugi
     this.ensureHostEventSubscription()
     const result = await this.invokeBridge('discovery.list', {})
     return toListResult(result)
+  }
+
+  async probeConnectable(_options: ProbeConnectableOptions = {}): Promise<ProbeConnectableResult> {
+    throw this.unavailable('probeConnectable is unavailable on electron runtime.')
   }
 
   async closeSession(options: DiscoveryCloseSessionOptions): Promise<DiscoveryCloseSessionResult> {
