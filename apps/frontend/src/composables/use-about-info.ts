@@ -9,7 +9,7 @@ export type AboutInfoItem = {
 }
 
 export type AboutTab = {
-  id: AboutTabId
+  name: AboutTabId
   label: string
   items: AboutInfoItem[]
 }
@@ -67,7 +67,7 @@ export function useAboutInfo() {
 
     return [
       {
-        id: 'device',
+        name: 'device',
         label: 'Device',
         items: [
           { label: 'Device Instance UUID', value: uuidDisplay },
@@ -77,7 +77,7 @@ export function useAboutInfo() {
         ]
       },
       {
-        id: 'build',
+        name: 'build',
         label: 'Build',
         items: [
           { label: 'App Name', value: appName },
@@ -90,7 +90,7 @@ export function useAboutInfo() {
         ]
       },
       {
-        id: 'environment',
+        name: 'environment',
         label: 'Environment',
         items: [
           { label: 'Current Time', value: now.value.toISOString() },
@@ -100,7 +100,7 @@ export function useAboutInfo() {
         ]
       },
       {
-        id: 'display',
+        name: 'display',
         label: 'Display',
         items: [
           { label: 'Screen Size', value: screenSize },

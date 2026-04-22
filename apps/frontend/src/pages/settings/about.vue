@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import AppButton from '../../components/base/AppButton.vue'
-import AppScrollTabs from '../../components/base/AppScrollTabs.vue'
+import SynraTabs from '../../components/base/SynraTabs.vue'
 import type { AboutTabId } from '../../composables/use-about-info'
 
 const { aboutTabs, copyDiagnostics, copyMessage, copyStatus, refreshNow } = useAboutInfo()
@@ -8,7 +8,7 @@ const { aboutTabs, copyDiagnostics, copyMessage, copyStatus, refreshNow } = useA
 const activeAboutTab = ref<AboutTabId>('device')
 
 const activeAboutItems = computed(() => {
-  const tab = aboutTabs.value.find((t) => t.id === activeAboutTab.value)
+  const tab = aboutTabs.value.find((t) => t.name === activeAboutTab.value)
   return tab?.items ?? []
 })
 </script>
@@ -30,7 +30,7 @@ const activeAboutItems = computed(() => {
       {{ copyMessage }}
     </p>
 
-    <AppScrollTabs v-model="activeAboutTab" :tabs="aboutTabs" aria-label="About categories" />
+    <SynraTabs v-model="activeAboutTab" :tabs="aboutTabs" aria-label="About categories" />
 
     <dl class="space-y-3 text-sm" role="tabpanel" :aria-label="`${activeAboutTab} details`">
       <div
