@@ -1,50 +1,33 @@
 <script setup lang="ts">
-import AppScrollTabs from '../../components/base/AppScrollTabs.vue'
-import type { AppScrollTabItem } from '../../components/base/AppScrollTabs.vue'
-import { RouterView } from 'vue-router'
+import SynraTabPanel from '../../components/base/SynraTabPanel.vue'
+import SynraTabs from '../../components/base/SynraTabs.vue'
+import type { SynraTabItem } from '../../components/base/SynraTabs.vue'
+import AboutPage from './about.vue'
+import BasicPage from './basic.vue'
+import DevelopmentPage from './development.vue'
 
-type SettingsTabId = 'basic' | 'about' | 'development'
+type SettingsTabName = 'basic' | 'about' | 'development'
 
-const settingsTabs: AppScrollTabItem[] = [
-  { id: 'basic', label: 'Basic Info' },
-  { id: 'about', label: 'About' },
-  { id: 'development', label: 'Development' }
+const settingsTabs: SynraTabItem[] = [
+  { name: 'basic', label: 'Basic Info' },
+  { name: 'about', label: 'About' },
+  { name: 'development', label: 'Development' }
 ]
 
-const route = useRoute()
-const router = useRouter()
-
-const activeSettingsTab = computed<SettingsTabId>({
-  get() {
-    if (route.path.endsWith('/about')) {
-      return 'about'
-    }
-    if (route.path.endsWith('/development')) {
-      return 'development'
-    }
-    return 'basic'
-  },
-  set(nextTab) {
-    const targetPath =
-      nextTab === 'about'
-        ? '/settings/about'
-        : nextTab === 'development'
-          ? '/settings/development'
-          : '/settings/basic'
-    if (route.path !== targetPath) {
-      void router.push(targetPath)
-    }
-  }
-})
+const activeSettingsTab = ref<SettingsTabName>('basic')
 </script>
 
 <template>
   <section class="space-y-4">
-    <AppScrollTabs
-      v-model="activeSettingsTab"
-      :tabs="settingsTabs"
-      aria-label="Settings sections"
-    />
-    <RouterView />
+    <SynraTabs v-model="activeSettingsTab" :tabs="settingsTabs" aria-label="Settings sections" />
+    <SynraTabPanel name="basic" :active-name="activeSettingsTab">
+      <BasicPage />
+    </SynraTabPanel>
+    <SynraTabPanel name="about" :active-name="activeSettingsTab">
+      <AboutPage />
+    </SynraTabPanel>
+    <SynraTabPanel name="development" :active-name="activeSettingsTab">
+      <DevelopmentPage />
+    </SynraTabPanel>
   </section>
 </template>
