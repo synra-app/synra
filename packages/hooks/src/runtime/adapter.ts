@@ -49,4 +49,9 @@ export interface ConnectionRuntimeAdapter {
   ): Promise<ListenerHandle>
   addMessageAckListener(listener: (event: MessageAckEvent) => void): Promise<ListenerHandle>
   addTransportErrorListener(listener: (event: TransportErrorEvent) => void): Promise<ListenerHandle>
+  /**
+   * Mobile (Capacitor): invalidates in-flight reverse TCP handoffs for the given host keys.
+   * No-op on adapters that do not implement mobile LanDiscovery/DeviceConnection handoff.
+   */
+  invalidateHandoffForHostKeys?(keys: readonly string[]): void
 }

@@ -1,7 +1,7 @@
 import { Bonjour } from 'bonjour-service'
 import type { DiscoveredDevice } from '../../../../../shared/protocol/types'
 import { DEFAULT_MDNS_SERVICE_TYPE } from '../../core/constants'
-import { toDiscoveredDevice } from '../../core/device-mapper'
+import { toProbeCandidate } from '../../core/device-mapper'
 import { normalizeRemoteIp } from '../../core/network'
 import type { DiscoveryContext, DiscoveryStrategy } from '../discovery-strategy'
 
@@ -56,15 +56,7 @@ export function createMdnsDiscoveryStrategy(): DiscoveryStrategy {
           if (!normalizedIp || normalizedIp.length === 0 || normalizedIp.includes(':')) {
             continue
           }
-          devicesByIp.set(
-            normalizedIp,
-            toDiscoveredDevice(
-              normalizedIp,
-              'mdns',
-              service.name ?? `Synra Device ${normalizedIp}`,
-              service.port
-            )
-          )
+          devicesByIp.set(normalizedIp, toProbeCandidate(normalizedIp, 'mdns', service.port))
         }
       }
       browser.on('up', onUp)

@@ -1,5 +1,5 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { useTransport } from '@synra/plugin-sdk/hooks'
+import { deriveDeviceCardBadge, useTransport } from '@synra/plugin-sdk/hooks'
 import type { ChatMessage } from '../src/types/chat'
 
 export function useMessagesPage() {
@@ -11,19 +11,22 @@ export function useMessagesPage() {
   const sending = ref(false)
   const messages = ref<ChatMessage[]>([])
 
-  const devices = computed(() =>
-    peers.value.map((device) => ({
+  const devices = computed(() => {
+    const scanPhase = loading.value ? 'scanning' : 'idle'
+    return peers.value.map((device) => ({
       deviceId: device.deviceId,
       name: device.name,
       ipAddress: device.ipAddress,
       source: device.source,
       connectable: device.connectable,
+      connectCheckError: device.connectCheckError,
       lastSeenAt: device.lastSeenAt,
       lastSeenLabel: device.lastSeenAt ? new Date(device.lastSeenAt).toLocaleTimeString() : '-',
       connectionStatus: connectedDeviceIds.value.includes(device.deviceId) ? 'connected' : 'idle',
-      isSelected: selectedDeviceId.value === device.deviceId
+      isSelected: selectedDeviceId.value === device.deviceId,
+      badge: deriveDeviceCardBadge(device, scanPhase)
     }))
-  )
+  })
 
   const selectedDevice = computed(
     () => devices.value.find((device) => device.deviceId === selectedDeviceId.value) ?? null

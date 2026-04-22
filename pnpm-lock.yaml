@@ -544,6 +544,9 @@ importers:
         specifier: catalog:vue
         version: 3.5.32(typescript@6.0.3)
     devDependencies:
+      '@iconify-json/eos-icons':
+        specifier: ^1.2.2
+        version: 1.2.4
       '@tsdown/css':
         specifier: 'catalog:'
         version: 0.21.9(jiti@2.6.1)(postcss@8.5.9)(sass@1.99.0)(tsdown@0.21.9)(tsx@4.21.0)(yaml@2.8.3)
@@ -1052,6 +1055,9 @@ packages:
     engines: {node: '>=18'}
     cpu: [x64]
     os: [win32]
+
+  '@iconify-json/eos-icons@1.2.4':
+    resolution: {integrity: sha512-gp2BCSF3+aRgMqE7LRAVxT5nXJLOtfcvGnOYwJz4gc4zxcEqAaOByxFVLZej15jXPRJmUv2TSzMNrQ2gDtw4VA==}
 
   '@iconify/types@2.0.0':
     resolution: {integrity: sha512-+wluvCrRhXrhyOmRDJ3q8mux9JkKy5SJ/v8ol2tu4FVjyYvtEzkc/3pK15ET6RKg4b4w4BmTk1+gsCUhf21Ykg==}
@@ -4839,6 +4845,10 @@ snapshots:
 
   '@esbuild/win32-x64@0.28.0':
     optional: true
+
+  '@iconify-json/eos-icons@1.2.4':
+    dependencies:
+      '@iconify/types': 2.0.0
 
   '@iconify/types@2.0.0': {}
 

@@ -6,7 +6,7 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import android.content.Context;
-import android.os.Build;
+import java.util.Locale;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -32,6 +32,8 @@ public class DeviceConnectionPlugin extends Plugin {
     private static final String PROTOCOL_VERSION = "1.0";
   private static final String INSTANCE_PREFS_NAME = "synra_preferences_store";
   private static final String INSTANCE_UUID_KEY = "synra.preferences.synra.device.instance-uuid";
+  private static final String DEVICE_BASIC_INFO_KEY = "synra.preferences.synra.device.basic-info";
+  private static final String LEGACY_DEVICE_DISPLAY_NAME_KEY = "synra.preferences.synra.device.display-name";
   private static final String LEGACY_PREFS_NAME = "synra_device_connection";
   private static final String LEGACY_PREFS_DEVICE_UUID_KEY = "device_uuid";
 
@@ -350,10 +352,72 @@ public class DeviceConnectionPlugin extends Plugin {
     }
 
     private String localSynraDisplayName() {
-        if (Build.MODEL != null && !Build.MODEL.isBlank()) {
-            return Build.MODEL.trim();
+        Context context = getContext();
+        if (context == null) {
+            return defaultDeviceNameFromUuid(UUID.randomUUID().toString());
         }
-        return "Synra";
+        android.content.SharedPreferences unified =
+            context.getSharedPreferences(INSTANCE_PREFS_NAME, Context.MODE_PRIVATE);
+        String rawBasic = unified.getString(DEVICE_BASIC_INFO_KEY, null);
+        if (rawBasic != null && !rawBasic.isBlank()) {
+            String parsed = parseBasicInfoDeviceName(rawBasic.trim());
+            if (parsed != null && !parsed.isBlank()) {
+                return parsed.trim();
+            }
+        }
+        String legacy = unified.getString(LEGACY_DEVICE_DISPLAY_NAME_KEY, null);
+        if (legacy != null && !legacy.isBlank()) {
+            String trimmed = legacy.trim();
+            try {
+                JSONObject payload = new JSONObject();
+                payload.put("deviceName", trimmed);
+                unified.edit()
+                    .putString(DEVICE_BASIC_INFO_KEY, payload.toString())
+                    .remove(LEGACY_DEVICE_DISPLAY_NAME_KEY)
+                    .apply();
+            } catch (JSONException ignored) {
+                // ignore
+            }
+            return trimmed;
+        }
+        String uuid = getOrCreateLocalDeviceUuid();
+        String derived = defaultDeviceNameFromUuid(uuid);
+        persistBasicInfoJson(unified, derived);
+        return derived;
+    }
+
+    private static String parseBasicInfoDeviceName(String json) {
+        try {
+            JSONObject object = new JSONObject(json);
+            String dn = object.optString("deviceName", "");
+            if (dn.isBlank()) {
+                return null;
+            }
+            return dn.trim();
+        } catch (JSONException error) {
+            return null;
+        }
+    }
+
+    private static void persistBasicInfoJson(
+        android.content.SharedPreferences unified,
+        String deviceName
+    ) {
+        try {
+            JSONObject payload = new JSONObject();
+            payload.put("deviceName", deviceName);
+            unified.edit().putString(DEVICE_BASIC_INFO_KEY, payload.toString()).apply();
+        } catch (JSONException ignored) {
+            // ignore
+        }
+    }
+
+    private static String defaultDeviceNameFromUuid(String uuid) {
+        String raw = uuid.replace("-", "").toLowerCase(Locale.ROOT);
+        if (raw.length() >= 6) {
+            return raw.substring(0, 6);
+        }
+        return raw.isEmpty() ? "device" : raw;
     }
 
     private String getOrCreateLocalDeviceUuid() {

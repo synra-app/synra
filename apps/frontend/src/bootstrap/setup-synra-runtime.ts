@@ -1,9 +1,16 @@
 import type { Pinia } from 'pinia'
 import { Capacitor } from '@capacitor/core'
-import { LanDiscovery } from '@synra/capacitor-lan-discovery'
 import { installElectronCapacitor } from '@synra/capacitor-electron/capacitor'
 import { ensureDeviceInstanceUuid } from '../lib/device-instance-uuid'
 import { useLanDiscoveryStore } from '../stores/lan-discovery'
+
+/** Cold start: retry once if no connectable Synra peer (TCP helloAck succeeded on native). */
+function initialDiscoveryLooksIncomplete(peers: ReadonlyArray<{ connectable?: boolean }>): boolean {
+  if (peers.length === 0) {
+    return true
+  }
+  return !peers.some((peer) => peer.connectable)
+}
 
 export function setupSynraRuntime(pinia: Pinia): void {
   installElectronCapacitor({ capacitor: Capacitor })
@@ -18,12 +25,12 @@ export function setupSynraRuntime(pinia: Pinia): void {
     })
   }
 
+  /** Matches connect page: `ensureReady` then `startScan` only — no extra native reads. */
   const startInitialDiscovery = async (): Promise<void> => {
     for (let attempt = 1; attempt <= INITIAL_SCAN_MAX_ATTEMPTS; attempt += 1) {
       try {
         await lanDiscoveryStore.startScan()
-        const discoveredCount = lanDiscoveryStore.peers.length
-        if (discoveredCount > 0) {
+        if (!initialDiscoveryLooksIncomplete(lanDiscoveryStore.peers)) {
           return
         }
       } catch (error: unknown) {
@@ -40,16 +47,12 @@ export function setupSynraRuntime(pinia: Pinia): void {
     .then(async () => {
       await ensureRuntimeListeners()
       await startInitialDiscovery()
-      const platform = Capacitor.getPlatform()
-      if (platform === 'android' || platform === 'ios') {
-        void LanDiscovery.getDiscoveredDevices().catch((error: unknown) => {
-          console.warn('[SynraLanDiscovery] warm-up failed on mobile platform:', platform, error)
-        })
-      }
     })
     .catch((error: unknown) => {
       console.warn('[SynraPreferences] ensureDeviceInstanceUuid failed:', error)
-      void ensureRuntimeListeners()
-      void startInitialDiscovery()
+      void (async () => {
+        await ensureRuntimeListeners()
+        await startInitialDiscovery()
+      })()
     })
 }

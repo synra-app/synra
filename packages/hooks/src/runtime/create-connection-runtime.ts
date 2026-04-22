@@ -28,6 +28,7 @@ export type ConnectionRuntime = {
   startDiscovery(options?: SynraDiscoveryStartOptions): Promise<void>
   openSession(options: RuntimeOpenSessionInput): Promise<void>
   closeSession(sessionId?: string): Promise<void>
+  invalidateHandoffForHostKeys(keys: readonly string[]): void
   sendMessage(input: SynraConnectionSendInput): Promise<void>
   onMessage(
     handler: (message: SynraConnectionMessage) => void | Promise<void>,
@@ -95,6 +96,10 @@ export function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): Conn
     listenersRegistered = true
   }
 
+  function invalidateHandoffForHostKeys(keys: readonly string[]): void {
+    adapter.invalidateHandoffForHostKeys?.(keys)
+  }
+
   return {
     scanState,
     devices,
@@ -106,6 +111,7 @@ export function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): Conn
     startDiscovery: discoveryModule.startDiscovery.bind(discoveryModule),
     openSession: sessionModule.openSession.bind(sessionModule),
     closeSession: sessionModule.closeSession.bind(sessionModule),
+    invalidateHandoffForHostKeys,
     sendMessage: sessionModule.sendMessage.bind(sessionModule),
     onMessage: messageRegistry.onMessage.bind(messageRegistry)
   }

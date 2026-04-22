@@ -1,7 +1,7 @@
 import { createSocket } from 'node:dgram'
 import type { DiscoveredDevice } from '../../../../../shared/protocol/types'
 import { UDP_DISCOVERY_MAGIC, UDP_DISCOVERY_PORT } from '../../core/constants'
-import { toDiscoveredDevice } from '../../core/device-mapper'
+import { toProbeCandidate } from '../../core/device-mapper'
 import { normalizeRemoteIp } from '../../core/network'
 import type { DiscoveryContext, DiscoveryStrategy } from '../discovery-strategy'
 
@@ -18,15 +18,15 @@ export function createUdpDiscoveryStrategy(): DiscoveryStrategy {
           if (!envelope) {
             return
           }
-          const name = envelope.displayName
+          const name = envelope.displayName?.trim()
           const normalizedIp = normalizeRemoteIp(remote.address)
           if (!normalizedIp) {
             return
           }
-          devicesByIp.set(
-            normalizedIp,
-            toDiscoveredDevice(normalizedIp, 'probe', name ?? `Synra Device ${normalizedIp}`)
-          )
+          if (!name) {
+            return
+          }
+          devicesByIp.set(normalizedIp, toProbeCandidate(normalizedIp, 'probe'))
         })
         socket.bind(() => {
           socket.setBroadcast(true)

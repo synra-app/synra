@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, test } from 'vite-plus/test'
 import { SynraPreferencesWeb } from '../src/web'
-import { SYNRA_DEVICE_INSTANCE_UUID_KEY, SYNRA_PREFERENCES_STORAGE_PREFIX } from '../src/constants'
+import {
+  SYNRA_DEVICE_BASIC_INFO_KEY,
+  SYNRA_DEVICE_INSTANCE_UUID_KEY,
+  SYNRA_PREFERENCES_STORAGE_PREFIX
+} from '../src/constants'
 
 describe('capacitor-preferences/web', () => {
   beforeEach(() => {
@@ -31,8 +35,9 @@ describe('capacitor-preferences/web', () => {
     expect(after.value).toBeNull()
   })
 
-  test('exports canonical device UUID key', () => {
+  test('exports canonical device keys', () => {
     expect(SYNRA_DEVICE_INSTANCE_UUID_KEY).toBe('synra.device.instance-uuid')
+    expect(SYNRA_DEVICE_BASIC_INFO_KEY).toBe('synra.device.basic-info')
     expect(SYNRA_PREFERENCES_STORAGE_PREFIX).toBe('synra.preferences.')
   })
 })

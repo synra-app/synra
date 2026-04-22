@@ -91,7 +91,8 @@ function createMockAdapter(): ConnectionRuntimeAdapter {
     },
     async addTransportErrorListener(_listener: (event: TransportErrorEvent) => void) {
       return { remove: async () => {} }
-    }
+    },
+    invalidateHandoffForHostKeys() {}
   }
 }
 
@@ -117,7 +118,7 @@ test('cleanup runtime options', () => {
   resetConnectionRuntime()
 })
 
-test('startScan removes peers that fail silent openSession verification', async () => {
+test('startScan clears peer list when discovery returns empty', async () => {
   let scanCount = 0
   configureHooksRuntime({
     adapterFactory: () => ({
@@ -145,7 +146,7 @@ test('startScan removes peers that fail silent openSession verification', async 
         }
       },
       async openSession() {
-        throw new Error('openSession failed')
+        throw new Error('should not probe-verify on empty scan')
       },
       async closeSession() {},
       async sendMessage() {},
@@ -172,7 +173,8 @@ test('startScan removes peers that fail silent openSession verification', async 
       },
       async addTransportErrorListener() {
         return { remove: async () => {} }
-      }
+      },
+      invalidateHandoffForHostKeys() {}
     })
   })
   resetConnectionRuntime()
@@ -183,84 +185,4 @@ test('startScan removes peers that fail silent openSession verification', async 
 
   await transport.startScan()
   expect(transport.peers.value).toEqual([])
-})
-
-test('startScan keeps reachable peers when scan snapshot is empty', async () => {
-  let callCount = 0
-  const openedHosts: string[] = []
-  const closedSessions: string[] = []
-  configureHooksRuntime({
-    adapterFactory: () => ({
-      async startDiscovery() {
-        callCount += 1
-        if (callCount === 1) {
-          return {
-            state: 'scanning',
-            devices: [
-              {
-                deviceId: 'device-a',
-                name: 'Device A',
-                ipAddress: '192.168.1.10',
-                source: 'mdns',
-                connectable: true,
-                discoveredAt: Date.now(),
-                lastSeenAt: Date.now()
-              }
-            ]
-          }
-        }
-        if (callCount === 2) {
-          return {
-            state: 'scanning',
-            devices: []
-          }
-        }
-        return { state: 'scanning', devices: [] }
-      },
-      async openSession(options: OpenSessionOptions) {
-        openedHosts.push(options.host)
-        return { sessionId: `probe-${options.deviceId}`, state: 'open', transport: 'tcp' }
-      },
-      async closeSession(sessionId?: string) {
-        if (sessionId) {
-          closedSessions.push(sessionId)
-        }
-      },
-      async sendMessage() {},
-      async getSessionState(): Promise<GetSessionStateResult> {
-        return { state: 'idle', transport: 'tcp' }
-      },
-      async addDeviceConnectableUpdatedListener() {
-        return { remove: async () => {} }
-      },
-      async addDeviceLostListener() {
-        return { remove: async () => {} }
-      },
-      async addSessionOpenedListener() {
-        return { remove: async () => {} }
-      },
-      async addSessionClosedListener() {
-        return { remove: async () => {} }
-      },
-      async addMessageReceivedListener() {
-        return { remove: async () => {} }
-      },
-      async addMessageAckListener() {
-        return { remove: async () => {} }
-      },
-      async addTransportErrorListener() {
-        return { remove: async () => {} }
-      }
-    })
-  })
-  resetConnectionRuntime()
-  const transport = useTransport()
-  await transport.ensureReady()
-  await transport.startScan()
-  expect(transport.peers.value.map((peer) => peer.deviceId)).toEqual(['device-a'])
-
-  await transport.startScan()
-  expect(transport.peers.value.map((peer) => peer.deviceId)).toEqual(['device-a'])
-  expect(openedHosts).toEqual(['192.168.1.10'])
-  expect(closedSessions).toEqual(['probe-device-a'])
 })

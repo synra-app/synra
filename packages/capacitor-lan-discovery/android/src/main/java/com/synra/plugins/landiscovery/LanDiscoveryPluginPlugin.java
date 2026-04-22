@@ -45,6 +45,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -70,6 +71,8 @@ public class LanDiscoveryPluginPlugin extends Plugin {
     private static final String PROTOCOL_VERSION = "1.0";
     private static final String INSTANCE_PREFS_NAME = "synra_preferences_store";
     private static final String INSTANCE_UUID_KEY = "synra.preferences.synra.device.instance-uuid";
+    private static final String DEVICE_BASIC_INFO_KEY = "synra.preferences.synra.device.basic-info";
+    private static final String LEGACY_DEVICE_DISPLAY_NAME_KEY = "synra.preferences.synra.device.display-name";
     private static final String LEGACY_LAN_PREFS = "synra_lan_discovery";
     private static final String LEGACY_LAN_KEY = "device_uuid";
     private static final String LEGACY_DC_PREFS = "synra_device_connection";
@@ -159,24 +162,54 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             reset,
             scanWindowMs
         );
-        applyProbeToDevices(result, port, timeoutMs);
+
+        Set<String> localAddresses = collectLocalIpv4Addresses(includeLoopback);
+        List<String> toProbe = new ArrayList<>();
+        for (String target : combinedTargets) {
+            if (target == null) {
+                continue;
+            }
+            String trimmed = target.trim();
+            if (trimmed.isEmpty() || localAddresses.contains(trimmed)) {
+                continue;
+            }
+            if (!toProbe.contains(trimmed)) {
+                toProbe.add(trimmed);
+            }
+        }
+        if (maxProbeHosts != null && maxProbeHosts > 0 && toProbe.size() > maxProbeHosts) {
+            toProbe = new ArrayList<>(toProbe.subList(0, maxProbeHosts));
+        }
+        long now = System.currentTimeMillis();
+        List<LanDiscoveryPlugin.DeviceRecord> probed = new ArrayList<>();
+        for (String host : toProbe) {
+            ProbeOutcome outcome = probeDevice(host, port, timeoutMs);
+            if (!outcome.connectable) {
+                continue;
+            }
+            if (outcome.remoteDisplayName == null || outcome.remoteDisplayName.isBlank()) {
+                continue;
+            }
+            if (outcome.remoteDeviceId == null || outcome.remoteDeviceId.isBlank()) {
+                continue;
+            }
+            probed.add(
+                LanDiscoveryPlugin.createProbedSynraDevice(
+                    outcome.remoteDeviceId.trim(),
+                    outcome.remoteDisplayName.trim(),
+                    host,
+                    now,
+                    now
+                )
+            );
+        }
+        implementation.mergeDevices(probed);
+        result = implementation.listDevices();
+        result.put("requestId", UUID.randomUUID().toString());
 
         JSObject scanStateEvent = new JSObject();
         scanStateEvent.put("state", result.optString("state"));
         notifyListeners("scanStateChanged", scanStateEvent);
-
-        JSONArray devices = result.optJSONArray("devices");
-        if (devices != null) {
-            for (int i = 0; i < devices.length(); i += 1) {
-                JSONObject device = devices.optJSONObject(i);
-                if (device == null) {
-                    continue;
-                }
-                JSObject payload = new JSObject();
-                payload.put("device", device);
-                notifyListeners("deviceFound", payload);
-            }
-        }
 
         call.resolve(result);
     }
@@ -1003,10 +1036,72 @@ public class LanDiscoveryPluginPlugin extends Plugin {
     }
 
     private String localSynraDisplayName() {
-        if (Build.MODEL != null && !Build.MODEL.isBlank()) {
-            return Build.MODEL.trim();
+        Context context = getContext();
+        if (context == null) {
+            return defaultDeviceNameFromUuid(UUID.randomUUID().toString());
         }
-        return "Synra";
+        android.content.SharedPreferences unified =
+            context.getSharedPreferences(INSTANCE_PREFS_NAME, Context.MODE_PRIVATE);
+        String rawBasic = unified.getString(DEVICE_BASIC_INFO_KEY, null);
+        if (rawBasic != null && !rawBasic.isBlank()) {
+            String parsed = parseBasicInfoDeviceName(rawBasic.trim());
+            if (parsed != null && !parsed.isBlank()) {
+                return parsed.trim();
+            }
+        }
+        String legacy = unified.getString(LEGACY_DEVICE_DISPLAY_NAME_KEY, null);
+        if (legacy != null && !legacy.isBlank()) {
+            String trimmed = legacy.trim();
+            try {
+                JSONObject payload = new JSONObject();
+                payload.put("deviceName", trimmed);
+                unified.edit()
+                    .putString(DEVICE_BASIC_INFO_KEY, payload.toString())
+                    .remove(LEGACY_DEVICE_DISPLAY_NAME_KEY)
+                    .apply();
+            } catch (JSONException ignored) {
+                // ignore
+            }
+            return trimmed;
+        }
+        String uuid = getOrCreateLocalDeviceUuid();
+        String derived = defaultDeviceNameFromUuid(uuid);
+        persistBasicInfoJson(unified, derived);
+        return derived;
+    }
+
+    private static String parseBasicInfoDeviceName(String json) {
+        try {
+            JSONObject object = new JSONObject(json);
+            String dn = object.optString("deviceName", "");
+            if (dn.isBlank()) {
+                return null;
+            }
+            return dn.trim();
+        } catch (JSONException error) {
+            return null;
+        }
+    }
+
+    private static void persistBasicInfoJson(
+        android.content.SharedPreferences unified,
+        String deviceName
+    ) {
+        try {
+            JSONObject payload = new JSONObject();
+            payload.put("deviceName", deviceName);
+            unified.edit().putString(DEVICE_BASIC_INFO_KEY, payload.toString()).apply();
+        } catch (JSONException ignored) {
+            // ignore
+        }
+    }
+
+    private static String defaultDeviceNameFromUuid(String uuid) {
+        String raw = uuid.replace("-", "").toLowerCase(Locale.ROOT);
+        if (raw.length() >= 6) {
+            return raw.substring(0, 6);
+        }
+        return raw.isEmpty() ? "device" : raw;
     }
 
     private JSObject buildDiscoveredPeerDevicePayload(
@@ -1026,7 +1121,7 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             normalizedName = normalizedName.trim();
         }
         if (normalizedName == null || normalizedName.isBlank()) {
-            normalizedName = "Synra " + normalizedDeviceId.substring(0, Math.min(8, normalizedDeviceId.length()));
+            return null;
         }
         long now = System.currentTimeMillis();
         JSObject device = new JSObject();

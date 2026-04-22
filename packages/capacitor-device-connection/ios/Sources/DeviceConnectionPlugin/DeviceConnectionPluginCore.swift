@@ -7,6 +7,8 @@ public final class DeviceConnectionPluginCore: NSObject {
     private let protocolVersion = "1.0"
     private let sessionAckTimeoutMs = 3000
     private let unifiedDeviceUuidDefaultsKey = "synra.preferences.synra.device.instance-uuid"
+    private let deviceBasicInfoDefaultsKey = "synra.preferences.synra.device.basic-info"
+    private let legacyDeviceDisplayNameDefaultsKey = "synra.preferences.synra.device.display-name"
     private let legacyDeviceUuidStorageKey = "synra.device-connection.device-uuid"
 
     private var sessionState = SessionState()
@@ -28,6 +30,14 @@ public final class DeviceConnectionPluginCore: NSObject {
             sessionState.state = "error"
             sessionState.lastError = "INVALID_PORT"
             return nil
+        }
+
+        if sessionState.state == "open", let replacedSessionId = sessionState.sessionId {
+            onSessionClosed?([
+                "sessionId": replacedSessionId,
+                "reason": "replaced",
+                "transport": "tcp",
+            ])
         }
 
         closeSession(sessionId: nil)
@@ -209,8 +219,53 @@ public final class DeviceConnectionPluginCore: NSObject {
     }
 
     private func localSynraDisplayName() -> String {
-        let name = ProcessInfo.processInfo.hostName
-        return name.isEmpty ? "Synra" : name
+        resolvedDeviceName()
+    }
+
+    private func resolvedDeviceName() -> String {
+        let defaults = UserDefaults.standard
+        if let stored = defaults.string(forKey: deviceBasicInfoDefaultsKey)?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !stored.isEmpty,
+            let parsed = parseBasicInfoDeviceName(from: stored)
+        {
+            return parsed
+        }
+        if let legacy = defaults.string(forKey: legacyDeviceDisplayNameDefaultsKey)?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !legacy.isEmpty
+        {
+            persistBasicInfoJson(deviceName: legacy, defaults: defaults)
+            defaults.removeObject(forKey: legacyDeviceDisplayNameDefaultsKey)
+            return legacy
+        }
+        let uuid = localDeviceUuid()
+        let raw = uuid.replacingOccurrences(of: "-", with: "").lowercased()
+        let derived = String(raw.prefix(6))
+        let name = derived.isEmpty ? "device" : derived
+        persistBasicInfoJson(deviceName: name, defaults: defaults)
+        return name
+    }
+
+    private func parseBasicInfoDeviceName(from jsonString: String) -> String? {
+        guard let data = jsonString.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let dn = obj["deviceName"] as? String
+        else {
+            return nil
+        }
+        let trimmed = dn.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func persistBasicInfoJson(deviceName: String, defaults: UserDefaults) {
+        let payload: [String: Any] = ["deviceName": deviceName]
+        guard let data = try? JSONSerialization.data(withJSONObject: payload),
+              let str = String(data: data, encoding: .utf8)
+        else {
+            return
+        }
+        defaults.set(str, forKey: deviceBasicInfoDefaultsKey)
     }
 
     private func localDeviceUuid() -> String {

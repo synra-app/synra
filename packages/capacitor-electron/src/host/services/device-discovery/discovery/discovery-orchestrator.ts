@@ -80,7 +80,11 @@ export function createDiscoveryOrchestrator(
         concurrency: startOptions.concurrency ?? DEFAULT_PROBE_CONCURRENCY
       })
       options.registry.reset()
-      options.registry.merge(probed)
+      const accepted = probed.filter(
+        (device) =>
+          device.connectable && typeof device.name === 'string' && device.name.trim().length > 0
+      )
+      options.registry.merge(accepted)
 
       refreshLocalIpSet(Boolean(startOptions.includeLoopback))
       return {

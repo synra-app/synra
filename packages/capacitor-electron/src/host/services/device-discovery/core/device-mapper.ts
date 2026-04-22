@@ -23,26 +23,16 @@ function createDevice(
   }
 }
 
-export function toManualDevices(targets: string[]): DiscoveredDevice[] {
-  return targets
-    .map((target) => target.trim())
-    .filter((target) => target.length > 0)
-    .map((target, index) =>
-      createDevice(`manual:${target}`, `Manual Target ${index + 1}`, target, 'manual')
-    )
+/** Manual IP list is only used as TCP probe candidates; devices appear only after helloAck with displayName. */
+export function toManualDevices(_targets: string[]): DiscoveredDevice[] {
+  return []
 }
 
-export function toDiscoveredDevice(
+/** mDNS/UDP yield IPv4 candidates only; name is filled by TCP probe (helloAck). */
+export function toProbeCandidate(
   ipAddress: string,
   source: DeviceSource,
-  name?: string,
   port?: number
 ): DiscoveredDevice {
-  return createDevice(
-    `auto:${ipAddress}`,
-    name ?? `Synra Device ${ipAddress}`,
-    ipAddress,
-    source,
-    port
-  )
+  return createDevice(`candidate:${ipAddress}`, '', ipAddress, source, port)
 }

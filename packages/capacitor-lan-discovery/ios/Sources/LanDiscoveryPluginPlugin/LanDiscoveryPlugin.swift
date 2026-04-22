@@ -1,7 +1,6 @@
 import Foundation
 import CryptoKit
 import Network
-import Darwin
 
 @objc public class LanDiscoveryPlugin: NSObject {
     private enum LogLevel {
@@ -19,6 +18,10 @@ import Darwin
     private let udpDiscoveryPort: UInt16 = 32101
     private let udpDiscoveryMagic = "SYNRA_DISCOVERY_V1"
     private let unifiedDeviceUuidDefaultsKey = "synra.preferences.synra.device.instance-uuid"
+    /// Full UserDefaults key (matches `SynraPreferences` for `synra.device.basic-info` JSON).
+    private let deviceBasicInfoDefaultsKey = "synra.preferences.synra.device.basic-info"
+    /// Legacy display-name; read once to migrate into basic-info.
+    private let legacyDeviceDisplayNameDefaultsKey = "synra.preferences.synra.device.display-name"
     private let legacyLanDeviceUuidKey = "synra.lan-discovery.device-uuid"
     private var state: String = "idle"
     private var startedAt: Int?
@@ -65,7 +68,9 @@ import Darwin
         subnetCidrs: [String],
         maxProbeHosts: NSNumber?,
         reset: Bool,
-        scanWindowMs: NSNumber?
+        scanWindowMs: NSNumber?,
+        probePort: NSNumber?,
+        probeTimeoutMs: NSNumber?
     ) -> [String: Any] {
         if reset {
             devices.removeAll()
@@ -84,24 +89,35 @@ import Darwin
         let discoveryTimeout = max(200, discoveryTimeoutMs?.intValue ?? defaultDiscoveryTimeoutMs)
         _ = enableProbeFallback
         _ = subnetCidrs
-        _ = maxProbeHosts
 
-        var discoveredTargets: [String] = []
+        var candidateIps: [String] = []
         if includeMdns {
-            discoveredTargets = discoverByMdns(
+            candidateIps.append(contentsOf: discoverByMdns(
                 serviceType: mdnsServiceType ?? defaultMdnsServiceType,
                 timeoutMs: discoveryTimeout
-            )
+            ))
         }
-        if discoveredTargets.isEmpty, includeUdpFallback {
-            discoveredTargets = discoverByUdp(timeoutMs: discoveryTimeout)
-        }
-        if !discoveredTargets.isEmpty {
-            mergeDevices(collectManualDevices(discoveredTargets))
+        if candidateIps.isEmpty, includeUdpFallback {
+            candidateIps.append(contentsOf: discoverByUdp(timeoutMs: discoveryTimeout))
         }
         if includeManual {
-            mergeDevices(collectManualDevices(manualTargets))
+            for raw in manualTargets {
+                let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !t.isEmpty {
+                    candidateIps.append(t)
+                }
+            }
         }
+
+        var uniqueCandidates = Self.orderedUniqueIpv4Addresses(candidateIps)
+        if let cap = maxProbeHosts?.intValue, cap > 0, uniqueCandidates.count > cap {
+            uniqueCandidates = Array(uniqueCandidates.prefix(cap))
+        }
+        uniqueCandidates = pruneSelfCandidateIps(uniqueCandidates, scanIncludeLoopback: includeLoopback)
+
+        let targetPort = probePort?.uint16Value ?? defaultTcpPort
+        let targetProbeTimeout = max(200, probeTimeoutMs?.intValue ?? defaultDiscoveryTimeoutMs)
+        populateDevicesFromSynraProbes(candidateIps: uniqueCandidates, port: targetPort, timeoutMs: targetProbeTimeout)
         pruneSelfDevices(scanIncludeLoopback: includeLoopback)
 
         var result = listDevices()
@@ -149,10 +165,13 @@ import Darwin
             var updated = device.withConnectable(outcome.connectable, outcome.error)
             if let remote = outcome.remoteDeviceId, !remote.isEmpty, remote != device.deviceId {
                 devices.removeValue(forKey: deviceId)
-                let nextName =
-                    updated.name.hasPrefix("Manual") || updated.name.hasPrefix("Synra Device")
-                    ? "Synra \(String(remote.prefix(8)))"
-                    : updated.name
+                let trimmedDisplay = outcome.remoteDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let nextName: String
+                if !trimmedDisplay.isEmpty {
+                    nextName = trimmedDisplay
+                } else {
+                    nextName = updated.name
+                }
                 updated = DeviceRecord(
                     deviceId: remote,
                     name: nextName,
@@ -164,6 +183,10 @@ import Darwin
                     discoveredAt: updated.discoveredAt,
                     lastSeenAt: updated.lastSeenAt
                 )
+            } else if let dn = outcome.remoteDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines),
+                      !dn.isEmpty
+            {
+                updated = updated.withName(dn)
             }
             devices[updated.deviceId] = updated
         }
@@ -218,14 +241,53 @@ import Darwin
         ]
     }
 
-    private func mergeDevices(_ incoming: [DeviceRecord]) {
-        for device in incoming {
-            if let existing = devices[device.deviceId] {
-                devices[device.deviceId] = existing.merge(with: device)
-            } else {
-                devices[device.deviceId] = device
+    private func populateDevicesFromSynraProbes(candidateIps: [String], port: UInt16, timeoutMs: Int) {
+        let checkedAt = now()
+        for host in candidateIps {
+            let outcome = probeDevice(host: host, port: port, timeoutMs: timeoutMs)
+            guard outcome.connectable else {
+                continue
+            }
+            let display = outcome.remoteDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let remoteId = outcome.remoteDeviceId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !display.isEmpty, !remoteId.isEmpty else {
+                continue
+            }
+            devices[remoteId] = DeviceRecord(
+                deviceId: remoteId,
+                name: display,
+                ipAddress: host,
+                source: "probe",
+                connectable: true,
+                connectCheckAt: checkedAt,
+                connectCheckError: nil,
+                discoveredAt: checkedAt,
+                lastSeenAt: checkedAt
+            )
+        }
+    }
+
+    private func pruneSelfCandidateIps(_ candidates: [String], scanIncludeLoopback: Bool) -> [String] {
+        let localIps = Set(collectInterfaceDevices(includeLoopback: scanIncludeLoopback).map(\.ipAddress))
+        guard !localIps.isEmpty else {
+            return candidates
+        }
+        return candidates.filter { !localIps.contains($0) }
+    }
+
+    private static func orderedUniqueIpv4Addresses(_ raw: [String]) -> [String] {
+        var seen = Set<String>()
+        var out: [String] = []
+        for s in raw {
+            let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+            if t.isEmpty {
+                continue
+            }
+            if seen.insert(t).inserted {
+                out.append(t)
             }
         }
+        return out
     }
 
     private func pruneSelfDevices(scanIncludeLoopback: Bool) {
@@ -234,10 +296,7 @@ import Darwin
             return
         }
         devices = devices.filter { _, device in
-            if device.source == "manual" {
-                return true
-            }
-            return !localIps.contains(device.ipAddress)
+            !localIps.contains(device.ipAddress)
         }
     }
 
@@ -292,31 +351,6 @@ import Darwin
         let records = collectInterfaceDevices(includeLoopback: false)
         let ips = records.map(\.ipAddress).filter { !$0.hasPrefix("169.254.") }.sorted()
         return ips.first ?? records.first?.ipAddress
-    }
-
-    private func collectManualDevices(_ manualTargets: [String]) -> [DeviceRecord] {
-        var result: [DeviceRecord] = []
-        var index = 1
-        for target in manualTargets {
-            let trimmed = target.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.isEmpty {
-                continue
-            }
-
-            result.append(DeviceRecord(
-                deviceId: hashDeviceId("manual:\(trimmed)"),
-                name: "Manual Target \(index)",
-                ipAddress: trimmed,
-                source: "manual",
-                connectable: false,
-                connectCheckAt: nil,
-                connectCheckError: nil,
-                discoveredAt: now(),
-                lastSeenAt: now()
-            ))
-            index += 1
-        }
-        return result
     }
 
     @objc public func startBackgroundDiscoveryServices() {
@@ -627,6 +661,7 @@ import Darwin
         log(.debug, "mDNS advertisement stopped.")
     }
 
+    /// Resolves `_synra._tcp` to candidate IPv4 addresses only (not devices until TCP helloAck).
     private func discoverByMdns(serviceType: String, timeoutMs: Int) -> [String] {
         let normalized = normalizeMdnsType(serviceType)
 
@@ -635,17 +670,17 @@ import Darwin
         let runBrowse: () -> [String] = {
             let collector = MdnsCollector()
             collector.start(serviceType: normalized, timeoutMs: timeoutMs)
-            return collector.collectedAddresses()
+            return Self.orderedUniqueIpv4Addresses(collector.collectedEntries().map(\.ip))
         }
 
         if Thread.isMainThread {
             return runBrowse()
         }
-        var addresses: [String] = []
+        var ips: [String] = []
         DispatchQueue.main.sync {
-            addresses = runBrowse()
+            ips = runBrowse()
         }
-        return addresses
+        return ips
     }
 
     private func normalizeMdnsType(_ serviceType: String) -> String {
@@ -939,9 +974,55 @@ import Darwin
         Int(Date().timeIntervalSince1970 * 1000)
     }
 
+    /// Handshake `displayName` comes from `synra.device.basic-info` JSON (`deviceName`), defaulting to UUID hex prefix.
     private func localSynraDisplayName() -> String {
-        let name = ProcessInfo.processInfo.hostName
-        return name.isEmpty ? "Synra" : name
+        resolvedDeviceName()
+    }
+
+    private func resolvedDeviceName() -> String {
+        let defaults = UserDefaults.standard
+        if let stored = defaults.string(forKey: deviceBasicInfoDefaultsKey)?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !stored.isEmpty,
+            let parsed = parseBasicInfoDeviceName(from: stored)
+        {
+            return parsed
+        }
+        if let legacy = defaults.string(forKey: legacyDeviceDisplayNameDefaultsKey)?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !legacy.isEmpty
+        {
+            persistBasicInfoJson(deviceName: legacy, defaults: defaults)
+            defaults.removeObject(forKey: legacyDeviceDisplayNameDefaultsKey)
+            return legacy
+        }
+        let uuid = localDeviceUuid()
+        let raw = uuid.replacingOccurrences(of: "-", with: "").lowercased()
+        let derived = String(raw.prefix(6))
+        let name = derived.isEmpty ? "device" : derived
+        persistBasicInfoJson(deviceName: name, defaults: defaults)
+        return name
+    }
+
+    private func parseBasicInfoDeviceName(from jsonString: String) -> String? {
+        guard let data = jsonString.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let dn = obj["deviceName"] as? String
+        else {
+            return nil
+        }
+        let trimmed = dn.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func persistBasicInfoJson(deviceName: String, defaults: UserDefaults) {
+        let payload: [String: Any] = ["deviceName": deviceName]
+        guard let data = try? JSONSerialization.data(withJSONObject: payload),
+              let str = String(data: data, encoding: .utf8)
+        else {
+            return
+        }
+        defaults.set(str, forKey: deviceBasicInfoDefaultsKey)
     }
 
     private func localDeviceUuid() -> String {
@@ -973,12 +1054,12 @@ import Darwin
 
     private func probeDevice(host: String, port: UInt16, timeoutMs: Int) -> ProbeOutcome {
         guard let endpointPort = NWEndpoint.Port(rawValue: port) else {
-            return ProbeOutcome(connectable: false, error: "INVALID_PORT", remoteDeviceId: nil)
+            return ProbeOutcome(connectable: false, error: "INVALID_PORT", remoteDeviceId: nil, remoteDisplayName: nil)
         }
 
         let connection = NWConnection(host: NWEndpoint.Host(host), port: endpointPort, using: .tcp)
         let semaphore = DispatchSemaphore(value: 0)
-        var outcome = ProbeOutcome(connectable: false, error: "PROBE_FAILED", remoteDeviceId: nil)
+        var outcome = ProbeOutcome(connectable: false, error: "PROBE_FAILED", remoteDeviceId: nil, remoteDisplayName: nil)
         connection.stateUpdateHandler = { [weak self] state in
             guard let self else {
                 semaphore.signal()
@@ -1012,35 +1093,58 @@ import Darwin
                             let trimmedRemote = remote?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                             let localId = self.localDeviceUuid()
                             if !trimmedRemote.isEmpty, trimmedRemote == localId {
-                                outcome = ProbeOutcome(connectable: false, error: "SELF_DEVICE", remoteDeviceId: nil)
+                                let ackName = (payload?["displayName"] as? String)?
+                                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                                outcome = ProbeOutcome(
+                                    connectable: false,
+                                    error: "SELF_DEVICE",
+                                    remoteDeviceId: nil,
+                                    remoteDisplayName: (ackName?.isEmpty == false) ? ackName : nil
+                                )
                             } else {
+                                let ackName = (payload?["displayName"] as? String)?
+                                    .trimmingCharacters(in: .whitespacesAndNewlines)
                                 outcome = ProbeOutcome(
                                     connectable: true,
                                     error: nil,
-                                    remoteDeviceId: trimmedRemote.isEmpty ? nil : trimmedRemote
+                                    remoteDeviceId: trimmedRemote.isEmpty ? nil : trimmedRemote,
+                                    remoteDisplayName: (ackName?.isEmpty == false) ? ackName : nil
                                 )
                             }
                         } else {
-                            outcome = ProbeOutcome(connectable: false, error: "HELLO_ACK_INVALID", remoteDeviceId: nil)
+                            outcome = ProbeOutcome(
+                                connectable: false,
+                                error: "HELLO_ACK_INVALID",
+                                remoteDeviceId: nil,
+                                remoteDisplayName: nil
+                            )
                         }
                         semaphore.signal()
                     }
                 }
             case .failed(let error):
-                outcome = ProbeOutcome(connectable: false, error: error.localizedDescription, remoteDeviceId: nil)
+                outcome = ProbeOutcome(
+                    connectable: false,
+                    error: error.localizedDescription,
+                    remoteDeviceId: nil,
+                    remoteDisplayName: nil
+                )
                 semaphore.signal()
             default:
                 break
             }
         }
         connection.start(queue: .global(qos: .userInitiated))
-        _ = semaphore.wait(timeout: .now() + .milliseconds(timeoutMs))
+        // Match Android-style budget: connect and read each use `timeoutMs`; one NWConnection wait
+        // covers handshake + send + recv, so allow roughly 2× here.
+        let probeWaitMs = max(1, timeoutMs * 2)
+        _ = semaphore.wait(timeout: .now() + .milliseconds(probeWaitMs))
         connection.cancel()
         if outcome.connectable {
             return outcome
         }
         if outcome.error == "PROBE_FAILED" {
-            return ProbeOutcome(connectable: false, error: "PROBE_TIMEOUT", remoteDeviceId: nil)
+            return ProbeOutcome(connectable: false, error: "PROBE_TIMEOUT", remoteDeviceId: nil, remoteDisplayName: nil)
         }
         return outcome
     }
@@ -1116,6 +1220,7 @@ import Darwin
 private final class MdnsCollector: NSObject, NetServiceBrowserDelegate, NetServiceDelegate {
     private let browser = NetServiceBrowser()
     private var addresses = Set<String>()
+    private var bonjourHostByIp: [String: String] = [:]
     private let accessQueue = DispatchQueue(label: "com.synra.lan-discovery.mdns-collector")
     /// NetService must be retained until resolve finishes; otherwise resolution never completes.
     private var pendingResolutions: [NetService] = []
@@ -1140,9 +1245,11 @@ private final class MdnsCollector: NSObject, NetServiceBrowserDelegate, NetServi
         pendingResolutions.removeAll()
     }
 
-    func collectedAddresses() -> [String] {
+    func collectedEntries() -> [(ip: String, bonjourName: String?)] {
         accessQueue.sync {
-            Array(addresses)
+            addresses.sorted().map { ip in
+                (ip, bonjourHostByIp[ip])
+            }
         }
     }
 
@@ -1206,9 +1313,49 @@ private final class MdnsCollector: NSObject, NetServiceBrowserDelegate, NetServi
         guard let chosen else {
             return
         }
+        let rawHost = sender.hostName?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let bonjourLabel = Self.normalizeBonjourHostName(rawHost)
         accessQueue.async { [weak self] in
-            self?.addresses.insert(chosen)
+            guard let self else {
+                return
+            }
+            self.addresses.insert(chosen)
+            guard let bonjourLabel, !bonjourLabel.isEmpty else {
+                return
+            }
+            if let existing = self.bonjourHostByIp[chosen], !existing.isEmpty {
+                self.bonjourHostByIp[chosen] = Self.preferBonjourLabel(existing, bonjourLabel)
+            } else {
+                self.bonjourHostByIp[chosen] = bonjourLabel
+            }
         }
+    }
+
+    /// Human-facing label from Bonjour host: strip trailing dots and `.local` (show host stem, not DNS FQDN).
+    private static func normalizeBonjourHostName(_ raw: String) -> String? {
+        var trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        while trimmed.hasSuffix(".") {
+            trimmed = String(trimmed.dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if trimmed.isEmpty {
+            return nil
+        }
+        let lower = trimmed.lowercased()
+        if lower.hasSuffix(".local"), trimmed.count >= 6 {
+            trimmed = String(trimmed.dropLast(6)).trimmingCharacters(in: .whitespacesAndNewlines)
+            while trimmed.hasSuffix(".") {
+                trimmed = String(trimmed.dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func preferBonjourLabel(_ a: String, _ b: String) -> String {
+        if a.count != b.count {
+            return a.count >= b.count ? a : b
+        }
+        return a <= b ? a : b
     }
 
     private static func pickPreferredIpv4(_ candidates: [String]) -> String? {
@@ -1284,6 +1431,20 @@ private struct DeviceRecord {
         )
     }
 
+    func withName(_ newName: String) -> DeviceRecord {
+        DeviceRecord(
+            deviceId: deviceId,
+            name: newName,
+            ipAddress: ipAddress,
+            source: source,
+            connectable: connectable,
+            connectCheckAt: connectCheckAt,
+            connectCheckError: connectCheckError,
+            discoveredAt: discoveredAt,
+            lastSeenAt: Int(Date().timeIntervalSince1970 * 1000)
+        )
+    }
+
     init?(
         dictionary: [String: Any]
     ) {
@@ -1328,6 +1489,7 @@ private struct ProbeOutcome {
     let connectable: Bool
     let error: String?
     let remoteDeviceId: String?
+    let remoteDisplayName: String?
 }
 
 private final class InboundConnectionContext {

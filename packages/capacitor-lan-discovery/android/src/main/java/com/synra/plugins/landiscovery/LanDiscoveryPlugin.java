@@ -25,6 +25,7 @@ public class LanDiscoveryPlugin {
     private int scanWindowMs = DEFAULT_SCAN_WINDOW_MS;
     private final Map<String, DeviceRecord> devices = new LinkedHashMap<>();
 
+    @SuppressWarnings("unused")
     public synchronized JSObject startDiscovery(
         boolean includeLoopback,
         List<String> manualTargets,
@@ -43,13 +44,7 @@ public class LanDiscoveryPlugin {
         this.startedAt = System.currentTimeMillis();
         this.scanWindowMs = requestedScanWindowMs != null ? requestedScanWindowMs : DEFAULT_SCAN_WINDOW_MS;
 
-        String mode = discoveryMode == null ? "hybrid" : discoveryMode;
-        boolean includeManual = !"none".equals(mode);
-
         List<DeviceRecord> interfaceDevices = collectInterfaceDevices(includeLoopback);
-        if (includeManual) {
-            mergeDevices(collectManualDevices(manualTargets));
-        }
         pruneSelfDevices(interfaceDevices);
 
         JSObject result = listDevices();
@@ -115,11 +110,7 @@ public class LanDiscoveryPlugin {
             return null;
         }
         DeviceRecord probed = selected.withConnectable(connectable, connectCheckError);
-        String nextName =
-            probed.name.startsWith("Manual") || probed.name.startsWith("Synra Device")
-                ? ("Synra " + newDeviceId.substring(0, Math.min(8, newDeviceId.length())))
-                : probed.name;
-        DeviceRecord moved = probed.withDeviceId(newDeviceId, nextName);
+        DeviceRecord moved = probed.withDeviceId(newDeviceId, probed.name);
         this.devices.put(newDeviceId, moved);
         return moved;
     }
@@ -132,7 +123,27 @@ public class LanDiscoveryPlugin {
         return array;
     }
 
-    private void mergeDevices(List<DeviceRecord> incoming) {
+    static DeviceRecord createProbedSynraDevice(
+        String remoteDeviceId,
+        String displayName,
+        String ipAddress,
+        long discoveredAt,
+        long connectCheckAt
+    ) {
+        return new DeviceRecord(
+            remoteDeviceId,
+            displayName,
+            ipAddress,
+            "probe",
+            true,
+            connectCheckAt,
+            null,
+            discoveredAt,
+            discoveredAt
+        );
+    }
+
+    void mergeDevices(List<DeviceRecord> incoming) {
         for (DeviceRecord device : incoming) {
             DeviceRecord existing = this.devices.get(device.deviceId);
             if (existing != null) {
@@ -154,9 +165,6 @@ public class LanDiscoveryPlugin {
         List<String> toDelete = new ArrayList<>();
         for (Map.Entry<String, DeviceRecord> entry : this.devices.entrySet()) {
             DeviceRecord value = entry.getValue();
-            if ("manual".equals(value.source)) {
-                continue;
-            }
             if (localIps.contains(value.ipAddress)) {
                 toDelete.add(entry.getKey());
             }
@@ -213,35 +221,6 @@ public class LanDiscoveryPlugin {
             return result;
         }
 
-        return result;
-    }
-
-    private List<DeviceRecord> collectManualDevices(List<String> manualTargets) {
-        List<DeviceRecord> result = new ArrayList<>();
-        int index = 1;
-        for (String target : manualTargets) {
-            if (target == null) {
-                continue;
-            }
-
-            String trimmed = target.trim();
-            if (trimmed.isEmpty()) {
-                continue;
-            }
-
-            result.add(new DeviceRecord(
-                hashDeviceId("manual:" + trimmed),
-                "Manual Target " + index,
-                trimmed,
-                "manual",
-                false,
-                null,
-                null,
-                System.currentTimeMillis(),
-                System.currentTimeMillis()
-            ));
-            index += 1;
-        }
         return result;
     }
 

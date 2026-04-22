@@ -23,7 +23,7 @@ function isPlaceholderName(value: string | undefined): boolean {
     return false
   }
   const normalized = value.trim().toLowerCase()
-  return normalized.startsWith('manual target') || normalized.startsWith('peer ')
+  return normalized.startsWith('peer ')
 }
 
 function pickPreferredName(
@@ -69,10 +69,10 @@ export function upsertDiscoveredPeerFromSession(
   const existing =
     devices.value.find((device) => device.deviceId === event.deviceId) ??
     devices.value.find((device) => normalizeHost(device.ipAddress) === host)
-  const displayName =
-    nonEmptyTrimmed(event.displayName) ??
-    nonEmptyTrimmed(existing?.name) ??
-    `Peer ${event.deviceId.slice(0, 8)}`
+  const displayName = nonEmptyTrimmed(event.displayName) ?? nonEmptyTrimmed(existing?.name)
+  if (!displayName) {
+    return
+  }
   const port = resolveValidPort(event.port, existing?.port)
   const peer: DiscoveredDevice = existing
     ? {

@@ -1,6 +1,7 @@
 import { DeviceConnection } from '@synra/capacitor-device-connection'
 import { LanDiscovery } from '@synra/capacitor-lan-discovery'
 import type { ConnectionRuntimeAdapter } from '../adapter'
+import { HandoffCoordinator } from '../handoff-coordinator'
 import { normalizeHostKey } from '../host-normalization'
 
 type ListenerHandle = {
@@ -18,10 +19,11 @@ function combineListenerHandles(...handles: Array<ListenerHandle | undefined>): 
   }
 }
 
+const PREFERRED_PC_TCP_PORT = 32100
+
 export function createCapacitorRuntimeAdapter(): ConnectionRuntimeAdapter {
-  const PREFERRED_PC_TCP_PORT = 32100
+  const handoff = new HandoffCoordinator()
   const inboundSessionIds = new Set<string>()
-  const reverseConnectInFlight = new Set<string>()
   const outboundSessionMetaById = new Map<
     string,
     {
@@ -48,6 +50,14 @@ export function createCapacitorRuntimeAdapter(): ConnectionRuntimeAdapter {
   ).Capacitor?.getPlatform?.()
   const shouldPreferPcHost = runtimePlatform === 'android' || runtimePlatform === 'ios'
 
+  function resolveHostKeyForSession(sessionId: string): string | undefined {
+    const meta = outboundSessionMetaById.get(sessionId)
+    if (meta) {
+      return normalizeHostKey(meta.host, meta.port)
+    }
+    return undefined
+  }
+
   return {
     startDiscovery: (options) => LanDiscovery.startDiscovery(options),
     openSession: async (options) => {
@@ -62,7 +72,11 @@ export function createCapacitorRuntimeAdapter(): ConnectionRuntimeAdapter {
       outboundSessionMetaById.set(result.sessionId, pendingMeta)
       return result
     },
+    invalidateHandoffForHostKeys(keys: readonly string[]): void {
+      handoff.invalidateHostKeys(keys)
+    },
     closeSession: async (sessionId) => {
+      handoff.bumpForClosingSession(sessionId, resolveHostKeyForSession)
       const closeTasks: Array<Promise<unknown>> = [DeviceConnection.closeSession({ sessionId })]
       if (sessionId) {
         outboundSessionMetaById.delete(sessionId)
@@ -132,8 +146,6 @@ export function createCapacitorRuntimeAdapter(): ConnectionRuntimeAdapter {
         }
         const normalized = {
           ...event,
-          // Prefer the requested target deviceId from openSession metadata.
-          // Native payload may expose a different raw identifier format.
           deviceId: meta?.deviceId ?? event.deviceId,
           direction: normalizedDirection,
           transport: event.transport ?? 'tcp',
@@ -172,29 +184,40 @@ export function createCapacitorRuntimeAdapter(): ConnectionRuntimeAdapter {
               ? event.port
               : PREFERRED_PC_TCP_PORT
             : PREFERRED_PC_TCP_PORT
-        const reverseConnectKey = `${reverseHost}:${reverseConnectPort}`
-        if (reverseConnectInFlight.has(reverseConnectKey)) {
-          return
-        }
-        reverseConnectInFlight.add(reverseConnectKey)
-        void DeviceConnection.openSession({
+        const hostKey = normalizeHostKey(reverseHost, reverseConnectPort)
+        const ticket = handoff.beginHandoffTicket(hostKey)
+        handoff.registerInboundLanSession(event.sessionId, hostKey)
+
+        const pendingMeta = {
           deviceId: reverseDeviceId,
           host: reverseHost,
-          port: reverseConnectPort,
-          transport: 'tcp'
-        })
-          .then(async (result) => {
-            outboundSessionMetaById.set(result.sessionId, {
+          port: reverseConnectPort
+        }
+        const pendingKey = normalizeHostKey(reverseHost, reverseConnectPort)
+        pendingOutboundMetaByRemote.set(pendingKey, pendingMeta)
+
+        void (async () => {
+          try {
+            const result = await DeviceConnection.openSession({
               deviceId: reverseDeviceId,
               host: reverseHost,
-              port: reverseConnectPort
+              port: reverseConnectPort,
+              transport: 'tcp'
             })
+            if (handoff.isTicketStale(hostKey, ticket)) {
+              return
+            }
+            outboundSessionMetaById.set(result.sessionId, pendingMeta)
+            pendingOutboundMetaByRemote.delete(pendingKey)
             await LanDiscovery.closeSession({ sessionId: event.sessionId })
-          })
-          .catch(() => undefined)
-          .finally(() => {
-            reverseConnectInFlight.delete(reverseConnectKey)
-          })
+            inboundSessionIds.delete(event.sessionId)
+            handoff.clearInboundLanSession(event.sessionId)
+          } catch {
+            if (!handoff.isTicketStale(hostKey, ticket)) {
+              // Stale failures are expected when user disconnects during handoff.
+            }
+          }
+        })()
       })
       return combineListenerHandles(connectionHandle, discoveryHandle)
     },
@@ -208,6 +231,7 @@ export function createCapacitorRuntimeAdapter(): ConnectionRuntimeAdapter {
       const discoveryHandle = await LanDiscovery.addListener('sessionClosed', (event) => {
         if (event.sessionId) {
           inboundSessionIds.delete(event.sessionId)
+          handoff.clearInboundLanSession(event.sessionId)
         }
         listener({
           sessionId: event.sessionId,

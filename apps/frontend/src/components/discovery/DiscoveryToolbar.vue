@@ -19,7 +19,7 @@ const emit = defineEmits<{
 <template>
   <PanelCard title="Discovery Controls">
     <label class="block">
-      <span class="mb-1 block font-semibold text-muted-1">Manual Targets (comma separated)</span>
+      <span class="mb-1 block font-semibold text-muted-1">额外 IPv4（逗号分隔，仅作扫描候选）</span>
       <input
         v-model="manualTarget"
         class="app-focus-ring w-full rounded-lg border border-white/14 bg-white/6 px-3 py-2 text-slate-100 placeholder:text-muted-4"

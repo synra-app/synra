@@ -1,1 +1,6 @@
-export { useTransport } from '@synra/hooks'
+export {
+  deriveDeviceCardBadge,
+  useTransport,
+  type DeviceCardBadge,
+  type ScanPhase
+} from '@synra/hooks'

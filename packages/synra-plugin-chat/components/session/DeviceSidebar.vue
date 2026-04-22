@@ -44,7 +44,29 @@ const emit = defineEmits<{
           class="app-focus-ring w-full text-left rounded-lg p-1"
           @click="emit('selectDevice', device.deviceId)"
         >
-          <p class="truncate text-sm font-semibold text-slate-100">{{ device.name }}</p>
+          <div class="flex items-center justify-between gap-2">
+            <p class="min-w-0 flex-1 truncate text-sm font-semibold text-slate-100">
+              {{ device.name }}
+            </p>
+            <div class="flex h-5 w-5 shrink-0 items-center justify-center" aria-hidden="true">
+              <span
+                v-if="device.badge.tag === 'spinner'"
+                class="i-eos-icons-loading inline-block h-4 w-4 animate-spin text-slate-300"
+              />
+              <div
+                v-else-if="device.badge.tag === 'glow'"
+                class="h-2.5 w-2.5 rounded-full"
+                :class="{
+                  'bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.85)]':
+                    device.badge.tone === 'success',
+                  'bg-rose-400 shadow-[0_0_12px_rgba(251,113,133,0.85)]':
+                    device.badge.tone === 'failure',
+                  'bg-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.88)]':
+                    device.badge.tone === 'warning'
+                }"
+              />
+            </div>
+          </div>
           <p class="truncate text-xs text-slate-400">{{ device.ipAddress ?? 'No IP available' }}</p>
           <div class="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
             <span

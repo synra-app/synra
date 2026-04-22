@@ -14,6 +14,7 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
     ]
 
     private let implementation = DeviceConnectionPluginCore()
+    private let sessionQueue = DispatchQueue(label: "com.synra.device-connection.plugin")
 
     public override func load() {
         implementation.onMessageReceived = { [weak self] payload in
@@ -41,14 +42,15 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
         }
 
         let token = call.getString("token")
-        guard
-            let result = implementation.openSession(
+        let openResult: [String: Any]? = sessionQueue.sync {
+            implementation.openSession(
                 deviceId: deviceId,
                 host: host,
                 port: NSNumber(value: port),
                 token: token
             )
-        else {
+        }
+        guard let result = openResult else {
             call.reject("openSession failed.")
             return
         }
@@ -72,7 +74,9 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func closeSession(_ call: CAPPluginCall) {
         let sessionId = call.getString("sessionId")
-        let result = implementation.closeSession(sessionId: sessionId)
+        let result = sessionQueue.sync {
+            implementation.closeSession(sessionId: sessionId)
+        }
         notifyListeners("sessionClosed", data: [
             "sessionId": result["sessionId"] as Any,
             "reason": "closed-by-client",
@@ -92,14 +96,15 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
 
         let payload = call.options["payload"] ?? NSNull()
         let messageId = call.getString("messageId")
-        guard
-            let result = implementation.sendMessage(
+        let sendResult: [String: Any]? = sessionQueue.sync {
+            implementation.sendMessage(
                 sessionId: sessionId,
                 messageType: messageType,
                 payload: payload,
                 messageId: messageId
             )
-        else {
+        }
+        guard let result = sendResult else {
             call.reject("sendMessage failed.")
             return
         }
@@ -109,7 +114,10 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func getSessionState(_ call: CAPPluginCall) {
         let sessionId = call.getString("sessionId")
-        call.resolve(implementation.getSessionState(sessionId: sessionId))
+        let snapshot = sessionQueue.sync {
+            implementation.getSessionState(sessionId: sessionId)
+        }
+        call.resolve(snapshot)
     }
 
     @objc func pullHostEvents(_ call: CAPPluginCall) {

@@ -49,7 +49,7 @@ public class LanDiscoveryPluginPlugin: CAPPlugin, CAPBridgedPlugin {
         let probePort = call.getInt("port").map { NSNumber(value: $0) }
         let probeTimeoutMs = call.getInt("timeoutMs").map { NSNumber(value: $0) }
 
-        var result = implementation.startDiscovery(
+        let result = implementation.startDiscovery(
             includeLoopback: includeLoopback,
             manualTargets: manualTargets,
             enableProbeFallback: enableProbeFallback,
@@ -59,18 +59,13 @@ public class LanDiscoveryPluginPlugin: CAPPlugin, CAPBridgedPlugin {
             subnetCidrs: subnetCidrs,
             maxProbeHosts: maxProbeHosts,
             reset: reset,
-            scanWindowMs: scanWindowMs
+            scanWindowMs: scanWindowMs,
+            probePort: probePort,
+            probeTimeoutMs: probeTimeoutMs
         )
-        let probeResult = implementation.probeConnectable(port: probePort, timeoutMs: probeTimeoutMs)
-        result["devices"] = probeResult["devices"]
         notifyListeners("scanStateChanged", data: [
             "state": result["state"] as? String ?? "scanning",
         ])
-        if let devices = result["devices"] as? [[String: Any]] {
-            for device in devices {
-                notifyListeners("deviceFound", data: ["device": device])
-            }
-        }
         call.resolve(result)
     }
 

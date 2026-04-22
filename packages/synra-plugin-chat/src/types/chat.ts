@@ -1,13 +1,17 @@
+import type { DeviceCardBadge } from '@synra/plugin-sdk/hooks'
+
 export type ChatDevice = {
   deviceId: string
   name: string
   ipAddress?: string
   source?: string
   connectable: boolean
+  connectCheckError?: string
   lastSeenAt?: number
   lastSeenLabel: string
   connectionStatus?: 'connected' | 'idle'
   isSelected: boolean
+  badge: DeviceCardBadge
 }
 
 export type DeliveryState = 'sending' | 'sent' | 'failed' | 'received' | 'system'

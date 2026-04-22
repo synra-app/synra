@@ -1,6 +1,6 @@
 import { computed } from 'vue'
 import { getConnectionRuntime } from '../runtime/core'
-import { normalizeHost } from '../runtime/host-normalization'
+import { normalizeHost, normalizeHostKey } from '../runtime/host-normalization'
 
 type SynraTransportPeer = {
   deviceId: string
@@ -9,6 +9,7 @@ type SynraTransportPeer = {
   port?: number
   source?: string
   connectable: boolean
+  connectCheckError?: string
   lastSeenAt?: number
 }
 
@@ -32,6 +33,7 @@ function toPeer(input: {
   port?: number
   source?: string
   connectable?: boolean
+  connectCheckError?: string
   lastSeenAt?: number
 }): SynraTransportPeer {
   return {
@@ -41,6 +43,10 @@ function toPeer(input: {
     port: input.port,
     source: input.source,
     connectable: Boolean(input.connectable),
+    connectCheckError:
+      typeof input.connectCheckError === 'string' && input.connectCheckError.length > 0
+        ? input.connectCheckError
+        : undefined,
     lastSeenAt: input.lastSeenAt
   }
 }
@@ -129,11 +135,37 @@ export function useTransport() {
   }
 
   async function disconnectDevice(deviceId: string): Promise<void> {
-    const session = findOpenSessionByPeer(deviceId)
-    if (!session?.sessionId) {
+    const target = peers.value.find((peer) => peer.deviceId === deviceId)
+    if (!target) {
       return
     }
-    await runtime.closeSession(session.sessionId)
+    const targetHost = normalizeHost(target.ipAddress)
+    const openSessions = runtime.connectedSessions.value.filter((session) => {
+      if (session.status !== 'open') {
+        return false
+      }
+      if (session.deviceId === deviceId) {
+        return true
+      }
+      if (targetHost.length === 0) {
+        return false
+      }
+      return normalizeHost(session.host) === targetHost
+    })
+    if (openSessions.length === 0) {
+      return
+    }
+    const handoffKeys = new Set<string>()
+    for (const session of openSessions) {
+      const key = normalizeHostKey(session.host, session.port ?? 32100)
+      if (key.length > 0) {
+        handoffKeys.add(key)
+      }
+    }
+    runtime.invalidateHandoffForHostKeys([...handoffKeys])
+    for (const session of openSessions) {
+      await runtime.closeSession(session.sessionId)
+    }
   }
 
   async function resolveSessionId(deviceId: string): Promise<string | undefined> {
