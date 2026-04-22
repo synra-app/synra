@@ -2,6 +2,7 @@ import type { Pinia } from 'pinia'
 import { Capacitor } from '@capacitor/core'
 import { installElectronCapacitor } from '@synra/capacitor-electron/capacitor'
 import { ensureDeviceInstanceUuid } from '../lib/device-instance-uuid'
+import { ensureDeviceBasicInfo } from '../lib/device-basic-info'
 import { useLanDiscoveryStore } from '../stores/lan-discovery'
 
 /** Cold start: retry once if no connectable Synra peer (TCP helloAck succeeded on native). */
@@ -44,7 +45,12 @@ export function setupSynraRuntime(pinia: Pinia): void {
   }
 
   void ensureDeviceInstanceUuid()
-    .then(async () => {
+    .then(async (deviceInstanceUuid) => {
+      try {
+        await ensureDeviceBasicInfo(deviceInstanceUuid)
+      } catch (error: unknown) {
+        console.warn('[SynraPreferences] ensureDeviceBasicInfo failed:', error)
+      }
       await ensureRuntimeListeners()
       await startInitialDiscovery()
     })

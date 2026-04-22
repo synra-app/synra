@@ -58,7 +58,7 @@ export function createCapacitorRuntimeAdapter(): ConnectionRuntimeAdapter {
     return undefined
   }
 
-  return {
+  const adapter: ConnectionRuntimeAdapter = {
     startDiscovery: (options) => LanDiscovery.startDiscovery(options),
     openSession: async (options) => {
       const pendingMeta = {
@@ -71,9 +71,6 @@ export function createCapacitorRuntimeAdapter(): ConnectionRuntimeAdapter {
       const result = await DeviceConnection.openSession(options)
       outboundSessionMetaById.set(result.sessionId, pendingMeta)
       return result
-    },
-    invalidateHandoffForHostKeys(keys: readonly string[]): void {
-      handoff.invalidateHostKeys(keys)
     },
     closeSession: async (sessionId) => {
       handoff.bumpForClosingSession(sessionId, resolveHostKeyForSession)
@@ -150,7 +147,11 @@ export function createCapacitorRuntimeAdapter(): ConnectionRuntimeAdapter {
           direction: normalizedDirection,
           transport: event.transport ?? 'tcp',
           host: typeof event.host === 'string' && event.host.length > 0 ? event.host : meta?.host,
-          port: typeof event.port === 'number' ? event.port : meta?.port
+          port: typeof event.port === 'number' ? event.port : meta?.port,
+          displayName:
+            typeof event.displayName === 'string' && event.displayName.length > 0
+              ? event.displayName
+              : undefined
         }
         listener({
           ...normalized
@@ -259,4 +260,14 @@ export function createCapacitorRuntimeAdapter(): ConnectionRuntimeAdapter {
     addTransportErrorListener: (listener) =>
       DeviceConnection.addListener('transportError', listener)
   }
+
+  ;(
+    adapter as ConnectionRuntimeAdapter & {
+      invalidateHandoffForHostKeys?: (keys: readonly string[]) => void
+    }
+  ).invalidateHandoffForHostKeys = (keys: readonly string[]): void => {
+    handoff.invalidateHostKeys(keys)
+  }
+
+  return adapter
 }

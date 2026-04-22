@@ -2,12 +2,15 @@ import { createHash, randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { SYNRA_DEVICE_BASIC_INFO_KEY } from '@synra/capacitor-preferences'
+import { createPreferencesService } from '../../preferences.service'
 
 function isUuidLike(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
 }
 
 const DEVICE_BASIC_INFO_FILE = 'device-basic-info.json'
+const PREFERENCES_STORE_FILE = 'synra-preferences-store.json'
 
 function defaultDeviceNameFromUuid(uuid: string): string {
   const raw = uuid.replace(/-/g, '').toLowerCase()
@@ -21,11 +24,49 @@ export function hashDeviceId(input: string): string {
   return `device-${createHash('sha1').update(input).digest('hex').slice(0, 12)}`
 }
 
-/** LAN hello `displayName`: from `~/.synra/device-basic-info.json` `deviceName`, else instance UUID hex prefix. */
+function resolveElectronUserDataPreferencesStorePath(): string | undefined {
+  try {
+    const electronModule = require('electron') as { app?: { getPath: (name: string) => string } }
+    if (electronModule.app?.getPath) {
+      return join(electronModule.app.getPath('userData'), PREFERENCES_STORE_FILE)
+    }
+  } catch {
+    return undefined
+  }
+  return undefined
+}
+
+function resolvePreferencesStorePaths(): string[] {
+  const candidates = [
+    resolveElectronUserDataPreferencesStorePath(),
+    join(homedir(), '.synra', PREFERENCES_STORE_FILE)
+  ].filter((value): value is string => typeof value === 'string' && value.length > 0)
+  return [...new Set(candidates)]
+}
+
+/** LAN hello `displayName`: prefer SynraPreferences basic-info, then legacy file, then UUID hex prefix. */
 export function localDisplayName(): string {
   const dir = join(homedir(), '.synra')
   const path = join(dir, DEVICE_BASIC_INFO_FILE)
+  const preferenceServices = resolvePreferencesStorePaths().map((storePath) =>
+    createPreferencesService({ storePath })
+  )
+  const primaryPreferencesService = preferenceServices[0]
   try {
+    for (const preferencesService of preferenceServices) {
+      const fromPreferences = preferencesService.get(SYNRA_DEVICE_BASIC_INFO_KEY)
+      if (typeof fromPreferences !== 'string' || fromPreferences.length === 0) {
+        continue
+      }
+      const parsed = JSON.parse(fromPreferences) as { deviceName?: unknown }
+      if (typeof parsed.deviceName === 'string') {
+        const trimmed = parsed.deviceName.trim()
+        if (trimmed.length > 0) {
+          return trimmed
+        }
+      }
+    }
+
     if (existsSync(path)) {
       const raw = readFileSync(path, 'utf8').trim()
       if (raw.length > 0) {
@@ -33,13 +74,24 @@ export function localDisplayName(): string {
         if (typeof parsed.deviceName === 'string') {
           const trimmed = parsed.deviceName.trim()
           if (trimmed.length > 0) {
+            for (const preferencesService of preferenceServices) {
+              preferencesService.set(
+                SYNRA_DEVICE_BASIC_INFO_KEY,
+                JSON.stringify({ deviceName: trimmed })
+              )
+            }
             return trimmed
           }
         }
       }
     }
-    const uuid = getOrCreateLocalDeviceUuid()
+    const uuid = primaryPreferencesService
+      ? primaryPreferencesService.ensureDeviceInstanceUuid()
+      : getOrCreateLocalDeviceUuid()
     const name = defaultDeviceNameFromUuid(uuid)
+    for (const preferencesService of preferenceServices) {
+      preferencesService.set(SYNRA_DEVICE_BASIC_INFO_KEY, JSON.stringify({ deviceName: name }))
+    }
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true })
     }

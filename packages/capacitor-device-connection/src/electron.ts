@@ -111,7 +111,12 @@ export class DeviceConnectionElectron extends WebPlugin implements DeviceConnect
                 direction?: 'inbound' | 'outbound'
                 host?: string
                 port?: number
+                displayName?: string
               })
+            : undefined
+        const displayName =
+          typeof payload?.displayName === 'string' && payload.displayName.trim().length > 0
+            ? payload.displayName.trim()
             : undefined
         this.notifyListeners('sessionOpened', {
           sessionId: normalized.sessionId,
@@ -119,7 +124,8 @@ export class DeviceConnectionElectron extends WebPlugin implements DeviceConnect
           deviceId: payload?.deviceId,
           direction: payload?.direction,
           host: payload?.host,
-          port: payload?.port
+          port: payload?.port,
+          displayName
         })
       } else if (normalized.type === 'transport.session.closed') {
         this.notifyListeners('sessionClosed', {
