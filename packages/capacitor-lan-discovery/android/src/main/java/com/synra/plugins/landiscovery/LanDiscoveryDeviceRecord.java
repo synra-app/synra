@@ -3,6 +3,7 @@ package com.synra.plugins.landiscovery;
 import com.getcapacitor.JSObject;
 
 final class DeviceRecord {
+    private static final int DEFAULT_TCP_PORT = 32100;
     final String deviceId;
     final String name;
     final String ipAddress;
@@ -96,6 +97,7 @@ final class DeviceRecord {
         object.put("deviceId", this.deviceId);
         object.put("name", this.name);
         object.put("ipAddress", this.ipAddress);
+        object.put("port", DEFAULT_TCP_PORT);
         object.put("source", this.source);
         object.put("connectable", this.connectable);
         if (this.connectCheckAt != null) {
