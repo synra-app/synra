@@ -12,7 +12,6 @@ import type {
 import type { ConnectionRuntimeAdapter } from './adapter'
 import { registerAdapterListeners } from './adapter-listeners'
 import { ConnectedSessionsBook } from './connected-sessions-book'
-import { DesktopHandoffState } from './desktop-handoff'
 import { createDiscoveryModule } from './discovery-module'
 import { createMessageListenersRegistry } from './message-listeners'
 import { createSessionOperationsModule } from './session-operations-module'
@@ -56,7 +55,6 @@ export function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): Conn
   let listenersRegistered = false
 
   const sessionsBook = new ConnectedSessionsBook(connectedSessions)
-  const handoff = new DesktopHandoffState()
   const messageRegistry = createMessageListenersRegistry()
 
   const discoveryModule = createDiscoveryModule({
@@ -69,11 +67,8 @@ export function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): Conn
 
   const sessionModule = createSessionOperationsModule({
     adapter,
-    isMobileRuntime,
-    loading,
     error,
     sessionState,
-    handoff,
     sessionsBook
   })
 
@@ -89,7 +84,6 @@ export function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): Conn
       sessionState,
       error,
       sessionsBook,
-      handoff,
       messageRegistry
     })
 

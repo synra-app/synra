@@ -1,12 +1,14 @@
 <script setup lang="ts">
 const {
-  connectableDevices,
+  displayDevices,
   connectedDeviceIds,
   error,
+  feedbackMessage,
+  linkToneByDeviceId,
   loading,
-  onConnect,
-  onDisconnect,
+  onPairDevice,
   onScanDiscovery,
+  onUnpairDevice,
   pendingDeviceActionIds
 } = useConnectPage()
 </script>
@@ -19,13 +21,16 @@ const {
       </AppButton>
     </div>
 
+    <p v-if="feedbackMessage" class="text-sm text-amber-300">{{ feedbackMessage }}</p>
+
     <DeviceDiscoveryList
-      :devices="connectableDevices"
+      :devices="displayDevices"
       :loading="loading"
       :connected-device-ids="connectedDeviceIds"
       :action-pending-device-ids="pendingDeviceActionIds"
-      @connect="onConnect"
-      @disconnect="onDisconnect"
+      :link-tone-by-device-id="linkToneByDeviceId"
+      @pair="onPairDevice"
+      @unpair="onUnpairDevice"
     />
 
     <p v-if="error" class="text-sm text-error-4">{{ error }}</p>

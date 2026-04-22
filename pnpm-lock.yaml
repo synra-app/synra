@@ -451,6 +451,9 @@ importers:
       '@synra/capacitor-lan-discovery':
         specifier: workspace:*
         version: link:../capacitor-lan-discovery
+      '@synra/capacitor-preferences':
+        specifier: workspace:*
+        version: link:../capacitor-preferences
       '@synra/protocol':
         specifier: workspace:*
         version: link:../protocol

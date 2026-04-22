@@ -12,6 +12,7 @@ import { createPluginCatalogService } from '../../host/services/plugin-catalog.s
 import { createPluginRuntimeService } from '../../host/services/plugin-runtime.service'
 import { createRuntimeInfoService } from '../../host/services/runtime-info.service'
 import { createPreferencesService } from '../../host/services/preferences.service'
+import { SYNRA_PAIRED_DEVICES_KEY, parsePairedDevicesPayload } from '@synra/capacitor-preferences'
 import type { DeviceDiscoveryHostEvent } from '../../shared/protocol/types'
 import type { BridgeLogger } from '../../shared/observability/logger'
 import { homedir } from 'node:os'
@@ -58,7 +59,18 @@ export function setupBridgeMainRuntime(
 
   const deviceDiscoveryService = createDeviceDiscoveryService({
     onHostEvent: options.onDiscoveryHostEvent,
-    resolveLocalDeviceUuid: () => preferencesService.ensureDeviceInstanceUuid()
+    resolveLocalDeviceUuid: () => preferencesService.ensureDeviceInstanceUuid(),
+    readPairedPeerDeviceIds: () => {
+      const raw = preferencesService.get(SYNRA_PAIRED_DEVICES_KEY)
+      if (!raw) {
+        return []
+      }
+      try {
+        return parsePairedDevicesPayload(raw).items.map((item) => item.deviceId)
+      } catch {
+        return []
+      }
+    }
   })
   const connectionService = createConnectionService(deviceDiscoveryService)
   const pluginRuntimeService = createPluginRuntimeService()

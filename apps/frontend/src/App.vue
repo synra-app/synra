@@ -59,5 +59,6 @@ watch(
       />
     </template>
     <RouterView />
+    <PairingRequestDialog />
   </AppShellLayout>
 </template>

@@ -29,6 +29,7 @@
   "dependencies": {
     "@synra/capacitor-device-connection": "workspace:*",
     "@synra/capacitor-lan-discovery": "workspace:*",
+    "@synra/capacitor-preferences": "workspace:*",
     "@synra/protocol": "workspace:*",
     "vue": "catalog:vue"
   },

@@ -2,6 +2,7 @@ package com.synra.plugins.landiscovery;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.net.nsd.NsdManager;
@@ -77,6 +78,7 @@ public class LanDiscoveryPluginPlugin extends Plugin {
     private static final String LEGACY_LAN_KEY = "device_uuid";
     private static final String LEGACY_DC_PREFS = "synra_device_connection";
     private static final String LEGACY_DC_KEY = "device_uuid";
+    private static final String PAIRED_DEVICES_KEY = "synra.preferences.synra.device.paired-peers";
 
     private final LanDiscoveryPlugin implementation = new LanDiscoveryPlugin();
     private DatagramSocket udpResponderSocket;
@@ -103,6 +105,38 @@ public class LanDiscoveryPluginPlugin extends Plugin {
 
     private static void logWarn(String message, Throwable error) {
         Log.w(TAG, message, error);
+    }
+
+    private JSONArray readStoredPairedPeerDeviceIds() {
+        JSONArray out = new JSONArray();
+        Context ctx = getContext();
+        if (ctx == null) {
+            return out;
+        }
+        SharedPreferences p = ctx.getSharedPreferences(INSTANCE_PREFS_NAME, Context.MODE_PRIVATE);
+        String raw = p.getString(PAIRED_DEVICES_KEY, null);
+        if (raw == null || raw.isBlank()) {
+            return out;
+        }
+        try {
+            JSONObject root = new JSONObject(raw);
+            JSONArray items = root.optJSONArray("items");
+            if (items == null) {
+                return out;
+            }
+            for (int i = 0; i < items.length(); i++) {
+                JSONObject row = items.optJSONObject(i);
+                if (row == null) {
+                    continue;
+                }
+                String id = row.optString("deviceId", null);
+                if (id != null && !id.isBlank()) {
+                    out.put(id.trim());
+                }
+            }
+        } catch (JSONException ignored) {
+        }
+        return out;
     }
 
     @Override
@@ -655,7 +689,7 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             if (sourceDeviceId.equals(localDeviceId)) {
                 return;
             }
-            String offlineDeviceId = hashDeviceId(sourceDeviceId);
+            String offlineDeviceId = canonicalLanDeviceId(sourceDeviceId);
             JSObject payload = new JSObject();
             payload.put("deviceId", offlineDeviceId);
             if (sourceHostIp != null && !sourceHostIp.isBlank() && isIpv4Address(sourceHostIp)) {
@@ -936,6 +970,7 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                         JSObject helloAckPayload = new JSObject();
                         helloAckPayload.put("sourceDeviceId", getOrCreateLocalDeviceUuid());
                         helloAckPayload.put("displayName", localSynraDisplayName());
+                        helloAckPayload.put("pairedPeerDeviceIds", readStoredPairedPeerDeviceIds());
                         String selfIp = primarySourceHostIp();
                         if (selfIp != null && !selfIp.isBlank()) {
                             helloAckPayload.put("sourceHostIp", selfIp);
@@ -962,13 +997,14 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                         JSObject opened = new JSObject();
                         opened.put("sessionId", sessionId);
                         opened.put("transport", "tcp");
-                        opened.put("deviceId", sourceDeviceId);
+                        opened.put("deviceId", canonicalLanDeviceId(sourceDeviceId));
                         opened.put("direction", "inbound");
                         opened.put("host", socket.getInetAddress().getHostAddress());
                         opened.put("port", DEFAULT_TCP_PORT);
                         if (peerDisplay != null) {
                             opened.put("displayName", peerDisplay);
                         }
+                        opened.put("pairedPeerDeviceIds", readStoredPairedPeerDeviceIds());
                         notifyListeners("sessionOpened", opened);
                         continue;
                     }
@@ -1110,7 +1146,7 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         String sourceHostIp,
         Socket socket
     ) {
-        String normalizedDeviceId = hashDeviceId(sourceDeviceId);
+        String normalizedDeviceId = canonicalLanDeviceId(sourceDeviceId);
         String host = normalizePeerHost(sourceHostIp, socket);
         if (host == null || host.isBlank()) {
             logWarn("Cannot resolve peer host for sourceDeviceId=" + sourceDeviceId);
@@ -1196,6 +1232,21 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         }
     }
 
+    /** Raw instance UUID in helloAck vs {@code device-} + hex used in lists and pairing storage. */
+    private String canonicalLanDeviceId(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String t = raw.trim();
+        if (t.isEmpty()) {
+            return t;
+        }
+        if (t.startsWith("device-") && t.length() >= "device-".length() + 8) {
+            return t;
+        }
+        return hashDeviceId(t);
+    }
+
     private String primarySourceHostIp() {
         try {
             List<String> candidates = new ArrayList<>();
@@ -1268,7 +1319,7 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             if (remote != null && remote.equals(localUuid)) {
                 return new ProbeOutcome(false, "SELF_DEVICE", null, remoteDisplayName);
             }
-            return new ProbeOutcome(true, null, remote, remoteDisplayName);
+            return new ProbeOutcome(true, null, canonicalLanDeviceId(remote), remoteDisplayName);
         } catch (Exception error) {
             return new ProbeOutcome(false, error.getMessage(), null, null);
         } finally {
@@ -1293,12 +1344,14 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             String host = device.optString("ipAddress");
             ProbeOutcome outcome = probeDevice(host, port, timeoutMs);
             LanDiscoveryPlugin.DeviceRecord updated;
-            if (outcome.remoteDeviceId != null
-                && !outcome.remoteDeviceId.isBlank()
-                && !outcome.remoteDeviceId.equals(deviceId)) {
+            String canonicalRemote = canonicalLanDeviceId(outcome.remoteDeviceId);
+            String canonicalExisting = canonicalLanDeviceId(deviceId);
+            if (canonicalRemote != null
+                && !canonicalRemote.isBlank()
+                && !canonicalRemote.equals(canonicalExisting)) {
                 updated = implementation.rekeyDeviceAfterProbe(
                     deviceId,
-                    outcome.remoteDeviceId,
+                    canonicalRemote,
                     outcome.connectable,
                     outcome.error
                 );

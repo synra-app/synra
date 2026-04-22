@@ -49,6 +49,8 @@ export type RuntimeInfo = {
   nodeVersion: string
   platform: NodeJS.Platform
   capabilities: string[]
+  /** Prefer non-link-local IPv4 for LAN pairing (Electron main). */
+  primaryDiscoveryIpv4?: string
 }
 
 export type OperationResult = {

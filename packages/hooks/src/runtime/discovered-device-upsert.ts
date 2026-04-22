@@ -1,5 +1,6 @@
 import type { DiscoveredDevice } from '@synra/capacitor-lan-discovery'
 import type { Ref } from 'vue'
+import { isLocalDiscoveryDeviceId } from './config'
 import { normalizeHost } from './host-normalization'
 import { sortDevices } from './device-sort'
 
@@ -24,6 +25,20 @@ function isPlaceholderName(value: string | undefined): boolean {
   }
   const normalized = value.trim().toLowerCase()
   return normalized.startsWith('peer ')
+}
+
+/** Prefer `device-` + hex (LAN id) when one side still has a raw instance UUID string. */
+function pickStableLanDeviceId(existing: DiscoveredDevice, incoming: DiscoveredDevice): string {
+  const a = existing.deviceId
+  const b = incoming.deviceId
+  const isLanHashed = (id: string) => id.startsWith('device-') && id.length >= 16
+  if (isLanHashed(a) && !isLanHashed(b)) {
+    return a
+  }
+  if (isLanHashed(b) && !isLanHashed(a)) {
+    return b
+  }
+  return existing.connectable && !incoming.connectable ? a : b
 }
 
 function pickPreferredName(
@@ -56,6 +71,9 @@ export function upsertDiscoveredPeerFromSession(
   event: SessionOpenedLike
 ): void {
   if (typeof event.deviceId !== 'string' || event.deviceId.length === 0) {
+    return
+  }
+  if (isLocalDiscoveryDeviceId(event.deviceId)) {
     return
   }
   if (typeof event.host !== 'string' || event.host.length === 0) {
@@ -106,10 +124,44 @@ export function upsertDiscoveredPeerFromSession(
   devices.value = sortDevices([...others, peer])
 }
 
+/** In-place name refresh for an already-known peer (e.g. `custom.device.profileUpdated`). */
+export function applyRemoteDeviceProfileName(
+  devices: Ref<DiscoveredDevice[]>,
+  deviceId: string,
+  displayName: string
+): void {
+  const id = deviceId.trim()
+  const name = displayName.trim()
+  if (!id || !name) {
+    return
+  }
+  if (isLocalDiscoveryDeviceId(id)) {
+    return
+  }
+  const now = Date.now()
+  const existing = devices.value.find((d) => d.deviceId === id)
+  if (!existing) {
+    return
+  }
+  const updated: DiscoveredDevice = {
+    ...existing,
+    name,
+    lastSeenAt: Math.max(existing.lastSeenAt ?? 0, now)
+  }
+  const others = devices.value.filter((d) => d.deviceId !== id)
+  devices.value = sortDevices([...others, updated])
+}
+
 export function upsertDiscoveredDevice(
   devices: Ref<DiscoveredDevice[]>,
   incoming: DiscoveredDevice
 ): void {
+  if (isLocalDiscoveryDeviceId(incoming.deviceId)) {
+    devices.value = sortDevices(
+      devices.value.filter((device) => device.deviceId !== incoming.deviceId)
+    )
+    return
+  }
   const host = normalizeHost(incoming.ipAddress)
   const existing =
     devices.value.find((device) => device.deviceId === incoming.deviceId) ??
@@ -123,7 +175,7 @@ export function upsertDiscoveredDevice(
   const merged: DiscoveredDevice = {
     ...existing,
     ...incoming,
-    deviceId: existing.connectable && !incoming.connectable ? existing.deviceId : incoming.deviceId,
+    deviceId: pickStableLanDeviceId(existing, incoming),
     name: pickPreferredName(existing.name, incoming.name),
     connectable: Boolean(existing.connectable || incoming.connectable),
     source:

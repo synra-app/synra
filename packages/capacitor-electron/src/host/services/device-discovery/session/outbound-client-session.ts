@@ -58,7 +58,12 @@ export function createOutboundClientSession(
   let state: OutboundState = { state: 'idle' }
   let lastHeartbeatAt = 0
   let resolveHello:
-    | ((result: { sessionId: string; displayName?: string; remoteDeviceId?: string }) => void)
+    | ((result: {
+        sessionId: string
+        displayName?: string
+        remoteDeviceId?: string
+        pairedPeerDeviceIds?: string[]
+      }) => void)
     | undefined
   let rejectHello: ((reason: unknown) => void) | undefined
 
@@ -103,6 +108,18 @@ export function createOutboundClientSession(
     })
   }
 
+  const readPairedPeerDeviceIdsFromHelloAckPayload = (
+    payload: Record<string, unknown>
+  ): string[] => {
+    const raw = payload.pairedPeerDeviceIds
+    if (!Array.isArray(raw)) {
+      return []
+    }
+    return raw
+      .filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
+      .map((id) => id.trim())
+  }
+
   const handleFrame = (frame: LanFrame) => {
     if (frame.type === 'helloAck' && resolveHello && frame.sessionId) {
       const payload =
@@ -117,10 +134,12 @@ export function createOutboundClientSession(
         typeof payload.sourceDeviceId === 'string' && payload.sourceDeviceId.length > 0
           ? payload.sourceDeviceId
           : undefined
+      const pairedPeerDeviceIds = readPairedPeerDeviceIdsFromHelloAckPayload(payload)
       resolveHello({
         sessionId: frame.sessionId,
         displayName,
-        remoteDeviceId
+        remoteDeviceId,
+        pairedPeerDeviceIds
       })
       resolveHello = undefined
       rejectHello = undefined
@@ -241,6 +260,7 @@ export function createOutboundClientSession(
         sessionId: string
         displayName?: string
         remoteDeviceId?: string
+        pairedPeerDeviceIds?: string[]
       }>((resolve, reject) => {
         resolveHello = resolve
         rejectHello = reject
@@ -302,7 +322,8 @@ export function createOutboundClientSession(
           deviceId: openOptions.deviceId,
           host: openOptions.host,
           port: openOptions.port,
-          displayName: helloAck.displayName
+          displayName: helloAck.displayName,
+          pairedPeerDeviceIds: helloAck.pairedPeerDeviceIds ?? []
         },
         transport: 'tcp'
       })

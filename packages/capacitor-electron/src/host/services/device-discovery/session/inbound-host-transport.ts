@@ -16,7 +16,7 @@ import {
   UDP_DISCOVERY_PORT
 } from '../core/constants'
 import { hashDeviceId, localDisplayName } from '../core/device-identity'
-import { normalizeRemoteIp, pickPrimarySourceHostIp } from '../core/network'
+import { normalizeRemoteIp, peerAddressFromSocket, pickPrimarySourceHostIp } from '../core/network'
 import type { HostEventBus } from '../events/host-event-bus'
 import {
   LAN_APP_ID,
@@ -39,6 +39,7 @@ type InboundHostTransportOptions = {
   eventBus: HostEventBus
   resolveLocalDeviceUuid: () => string
   port?: number
+  readPairedPeerDeviceIds?: () => string[]
 }
 
 const UDP_OFFLINE_ANNOUNCEMENT_TYPE = 'offline'
@@ -181,8 +182,8 @@ export function createInboundHostTransport(
           ? payload.sourceDeviceId
           : (frame.sessionId ?? randomUUID())
       const sessionId = frame.sessionId ?? randomUUID()
-      const normalizedIp = normalizeRemoteIp(socket.remoteAddress)
-      const remote = `${normalizedIp ?? 'unknown'}:${String(socket.remotePort ?? 0)}`
+      const peerHost = peerAddressFromSocket(socket.remoteAddress)
+      const remote = `${peerHost ?? 'unknown'}:${String(socket.remotePort ?? 0)}`
       sessions.set(sessionId, {
         sessionId,
         socket,
@@ -192,6 +193,7 @@ export function createInboundHostTransport(
         openedAt: Date.now(),
         lastActiveAt: Date.now()
       })
+      const pairedPeerDeviceIds = options.readPairedPeerDeviceIds?.() ?? []
       await writeFrame(socket, {
         version: LAN_PROTOCOL_VERSION,
         type: 'helloAck',
@@ -203,7 +205,8 @@ export function createInboundHostTransport(
         payload: {
           sourceDeviceId: options.resolveLocalDeviceUuid(),
           sourceHostIp: normalizeRemoteIp(socket.localAddress),
-          displayName: localDisplayName()
+          displayName: localDisplayName(),
+          pairedPeerDeviceIds
         }
       })
       options.eventBus.publish({
@@ -213,7 +216,14 @@ export function createInboundHostTransport(
         payload: {
           direction: 'inbound',
           deviceId: hashDeviceId(remoteDeviceId),
-          displayName: typeof payload.displayName === 'string' ? payload.displayName : undefined
+          displayName: typeof payload.displayName === 'string' ? payload.displayName : undefined,
+          pairedPeerDeviceIds,
+          ...(peerHost
+            ? {
+                host: peerHost,
+                port: options.port ?? DEFAULT_TCP_PORT
+              }
+            : {})
         },
         transport: 'tcp'
       })

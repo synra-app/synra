@@ -128,6 +128,10 @@ export function createElectronMainRuntimeAdapter(): ConnectionRuntimeAdapter {
           const direction =
             pl.direction === 'inbound' || pl.direction === 'outbound' ? pl.direction : undefined
           const displayName = typeof pl.displayName === 'string' ? pl.displayName : undefined
+          const pairedRaw = pl.pairedPeerDeviceIds
+          const pairedPeerDeviceIds = Array.isArray(pairedRaw)
+            ? pairedRaw.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
+            : undefined
           const fallbackRemote = typeof event.remote === 'string' ? event.remote : ''
           const [hostPart, portText] = fallbackRemote.split(':')
           const parsedRemotePort = Number.parseInt(portText ?? '', 10)
@@ -142,6 +146,7 @@ export function createElectronMainRuntimeAdapter(): ConnectionRuntimeAdapter {
                 ? parsedRemotePort
                 : undefined,
             displayName: displayName && displayName.length > 0 ? displayName : undefined,
+            pairedPeerDeviceIds,
             transport: event.transport ?? 'tcp'
           })
         }

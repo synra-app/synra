@@ -68,6 +68,10 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
         if let display = result["displayName"] as? String, !display.isEmpty {
             opened["displayName"] = display
         }
+        if let pairedAny = result["pairedPeerDeviceIds"] as? [Any] {
+            let paired = pairedAny.compactMap { $0 as? String }.filter { !$0.isEmpty }
+            opened["pairedPeerDeviceIds"] = paired
+        }
         notifyListeners("sessionOpened", data: opened)
         call.resolve(result)
     }

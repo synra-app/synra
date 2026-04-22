@@ -3,6 +3,7 @@ import {
   BRIDGE_SUPPORTED_PROTOCOL_VERSIONS
 } from '../../shared/protocol/constants'
 import type { RuntimeInfo } from '../../shared/protocol/types'
+import { pickPrimarySourceHostIp } from './device-discovery/core/network'
 
 export type RuntimeInfoServiceOptions = {
   capacitorVersion?: string
@@ -13,6 +14,7 @@ export type RuntimeInfoServiceOptions = {
 export function createRuntimeInfoService(options: RuntimeInfoServiceOptions = {}) {
   return {
     async getRuntimeInfo(): Promise<RuntimeInfo> {
+      const primaryDiscoveryIpv4 = pickPrimarySourceHostIp()
       return {
         protocolVersion: BRIDGE_PROTOCOL_VERSION,
         supportedProtocolVersions: [...BRIDGE_SUPPORTED_PROTOCOL_VERSIONS],
@@ -20,6 +22,7 @@ export function createRuntimeInfoService(options: RuntimeInfoServiceOptions = {}
         electronVersion: options.electronVersion ?? process.versions.electron ?? 'unknown',
         nodeVersion: process.versions.node,
         platform: process.platform,
+        ...(primaryDiscoveryIpv4 ? { primaryDiscoveryIpv4 } : {}),
         capabilities: options.capabilities ?? [
           'runtime.getInfo',
           'runtime.resolveActions',

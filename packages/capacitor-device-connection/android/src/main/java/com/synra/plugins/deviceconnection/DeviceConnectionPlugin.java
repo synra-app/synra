@@ -34,8 +34,26 @@ public class DeviceConnectionPlugin extends Plugin {
   private static final String INSTANCE_UUID_KEY = "synra.preferences.synra.device.instance-uuid";
   private static final String DEVICE_BASIC_INFO_KEY = "synra.preferences.synra.device.basic-info";
   private static final String LEGACY_DEVICE_DISPLAY_NAME_KEY = "synra.preferences.synra.device.display-name";
-  private static final String LEGACY_PREFS_NAME = "synra_device_connection";
-  private static final String LEGACY_PREFS_DEVICE_UUID_KEY = "device_uuid";
+    private static final String LEGACY_PREFS_NAME = "synra_device_connection";
+    private static final String LEGACY_PREFS_DEVICE_UUID_KEY = "device_uuid";
+
+    private static JSONArray pairedPeerDeviceIdsFromHelloAck(JSONObject helloAckPayload) {
+        JSONArray out = new JSONArray();
+        if (helloAckPayload == null) {
+            return out;
+        }
+        JSONArray raw = helloAckPayload.optJSONArray("pairedPeerDeviceIds");
+        if (raw == null) {
+            return out;
+        }
+        for (int i = 0; i < raw.length(); i++) {
+            String id = raw.optString(i, null);
+            if (id != null && !id.isBlank()) {
+                out.put(id.trim());
+            }
+        }
+        return out;
+    }
 
     private final ExecutorService ioExecutor = Executors.newSingleThreadExecutor();
     private final ExecutorService readerExecutor = Executors.newSingleThreadExecutor();
@@ -122,6 +140,7 @@ public class DeviceConnectionPlugin extends Plugin {
                 if (remoteDisplay != null && !remoteDisplay.isBlank()) {
                     result.put("displayName", remoteDisplay.trim());
                 }
+                result.put("pairedPeerDeviceIds", pairedPeerDeviceIdsFromHelloAck(helloAckPayload));
                 notifyListeners("sessionOpened", result);
                 call.resolve(result);
             } catch (Exception error) {

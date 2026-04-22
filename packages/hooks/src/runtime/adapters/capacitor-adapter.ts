@@ -1,6 +1,7 @@
 import { DeviceConnection } from '@synra/capacitor-device-connection'
 import { LanDiscovery } from '@synra/capacitor-lan-discovery'
 import type { ConnectionRuntimeAdapter } from '../adapter'
+import { getHooksRuntimeOptions } from '../config'
 import { HandoffCoordinator } from '../handoff-coordinator'
 import { normalizeHostKey } from '../host-normalization'
 
@@ -162,6 +163,12 @@ export function createCapacitorRuntimeAdapter(): ConnectionRuntimeAdapter {
           return
         }
         inboundSessionIds.add(event.sessionId)
+        const pairedInbound = (event as { pairedPeerDeviceIds?: unknown }).pairedPeerDeviceIds
+        const pairedPeerDeviceIds = Array.isArray(pairedInbound)
+          ? pairedInbound.filter(
+              (id): id is string => typeof id === 'string' && id.trim().length > 0
+            )
+          : undefined
         listener({
           sessionId: event.sessionId,
           deviceId: event.deviceId,
@@ -172,9 +179,12 @@ export function createCapacitorRuntimeAdapter(): ConnectionRuntimeAdapter {
           displayName:
             typeof event.displayName === 'string' && event.displayName.length > 0
               ? event.displayName
-              : undefined
+              : undefined,
+          ...(pairedPeerDeviceIds !== undefined ? { pairedPeerDeviceIds } : {})
         })
-        if (!shouldPreferPcHost || !event.host) {
+        const allowLanHandoff =
+          getHooksRuntimeOptions().enableMobileLanDeviceConnectionHandoff === true
+        if (!allowLanHandoff || !shouldPreferPcHost || !event.host) {
           return
         }
         const reverseHost = event.host

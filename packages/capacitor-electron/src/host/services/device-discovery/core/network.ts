@@ -53,3 +53,22 @@ export function normalizeRemoteIp(value: string | undefined): string | undefined
   }
   return normalized
 }
+
+/**
+ * Best-effort peer address for UI / discovery merge when only a TCP socket is available.
+ * Prefer mapped IPv4; otherwise return the trimmed remote (e.g. IPv6 literal).
+ */
+export function peerAddressFromSocket(remoteAddress: string | undefined): string | undefined {
+  if (!remoteAddress) {
+    return undefined
+  }
+  const trimmed = remoteAddress.trim()
+  if (trimmed.length === 0) {
+    return undefined
+  }
+  const v4 = normalizeRemoteIp(trimmed)
+  if (v4) {
+    return v4
+  }
+  return trimmed.replace(/^::ffff:/i, '')
+}

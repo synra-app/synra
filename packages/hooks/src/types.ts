@@ -28,6 +28,11 @@ export type RuntimeOpenSessionInput = {
   deviceId: string
   host: string
   port: number
+  /**
+   * When true, `openSession` failures do not populate the shared transport `error` ref (best-effort
+   * auto-reconnect while the peer host is still starting its listener).
+   */
+  suppressGlobalError?: boolean
 }
 
 export type SynraDiscoveryStartOptions = {

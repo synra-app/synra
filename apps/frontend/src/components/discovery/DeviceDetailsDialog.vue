@@ -1,14 +1,17 @@
 <script setup lang="ts">
-import type { DiscoveredDevice } from '@synra/capacitor-lan-discovery'
+import type { DisplayDevice } from '@synra/hooks'
 import AppButton from '../base/AppButton.vue'
 
 const props = defineProps<{
   visible: boolean
-  device: DiscoveredDevice | null
+  device: DisplayDevice | null
+  loading: boolean
+  actionPending: boolean
 }>()
 
 const emit = defineEmits<{
   close: []
+  unpair: [device: DisplayDevice]
 }>()
 
 function formatTimestamp(value: number | undefined): string {
@@ -18,10 +21,7 @@ function formatTimestamp(value: number | undefined): string {
   return new Date(value).toLocaleString()
 }
 
-function readOptionalField(
-  device: DiscoveredDevice | null,
-  field: 'direction' | 'platform'
-): string {
+function readOptionalField(device: DisplayDevice | null, field: 'direction' | 'platform'): string {
   if (!device) {
     return '-'
   }
@@ -30,6 +30,12 @@ function readOptionalField(
     return '-'
   }
   return value
+}
+
+function emitUnpair(): void {
+  if (props.device) {
+    emit('unpair', props.device)
+  }
 }
 </script>
 
@@ -68,6 +74,13 @@ function readOptionalField(
           <p class="text-muted-2">Direction: {{ readOptionalField(device, 'direction') }}</p>
           <p class="text-muted-2">Platform: {{ readOptionalField(device, 'platform') }}</p>
         </div>
+      </div>
+
+      <div
+        v-if="device.isPaired"
+        class="mt-5 flex flex-wrap justify-end gap-2 border-t border-white/10 pt-4"
+      >
+        <AppButton :disabled="loading || actionPending" @click="emitUnpair">Unpair</AppButton>
       </div>
     </div>
   </div>

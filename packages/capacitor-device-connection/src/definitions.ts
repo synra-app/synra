@@ -31,6 +31,8 @@ export type OpenSessionResult = {
   sessionId: string
   state: SessionState
   transport: ConnectionTransport
+  /** From peer helloAck: LAN ids they still treat as paired partners (may be empty). */
+  pairedPeerDeviceIds?: string[]
 }
 
 export type CloseSessionOptions = {
@@ -100,6 +102,8 @@ export type SessionOpenedEvent = {
   port?: number
   /** Optional display name from hello / helloAck handshake metadata. */
   displayName?: string
+  /** From helloAck: LAN device ids this peer still keeps as paired partners (may be empty). */
+  pairedPeerDeviceIds?: string[]
 }
 
 export type SessionClosedEvent = {

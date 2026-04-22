@@ -22,6 +22,8 @@ import Network
     private let deviceBasicInfoDefaultsKey = "synra.preferences.synra.device.basic-info"
     /// Legacy display-name; read once to migrate into basic-info.
     private let legacyDeviceDisplayNameDefaultsKey = "synra.preferences.synra.device.display-name"
+    /// SynraPreferences JSON for paired peers (`synra.device.paired-peers`).
+    private let pairedDevicesDefaultsKey = "synra.preferences.synra.device.paired-peers"
     private let legacyLanDeviceUuidKey = "synra.lan-discovery.device-uuid"
     private var state: String = "idle"
     private var startedAt: Int?
@@ -163,7 +165,9 @@ import Network
         for (deviceId, device) in devices {
             let outcome = probeDevice(host: device.ipAddress, port: targetPort, timeoutMs: targetTimeout)
             var updated = device.withConnectable(outcome.connectable, outcome.error)
-            if let remote = outcome.remoteDeviceId, !remote.isEmpty, remote != device.deviceId {
+            let canonRemote = outcome.remoteDeviceId.map { canonicalLanDeviceId(fromWireSourceDeviceId: $0) } ?? ""
+            let canonExisting = canonicalLanDeviceId(fromWireSourceDeviceId: device.deviceId)
+            if !canonRemote.isEmpty, canonRemote != canonExisting {
                 devices.removeValue(forKey: deviceId)
                 let trimmedDisplay = outcome.remoteDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 let nextName: String
@@ -173,7 +177,7 @@ import Network
                     nextName = updated.name
                 }
                 updated = DeviceRecord(
-                    deviceId: remote,
+                    deviceId: canonRemote,
                     name: nextName,
                     ipAddress: updated.ipAddress,
                     source: updated.source,
@@ -249,10 +253,11 @@ import Network
                 continue
             }
             let display = outcome.remoteDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let remoteId = outcome.remoteDeviceId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            guard !display.isEmpty, !remoteId.isEmpty else {
+            let remoteRaw = outcome.remoteDeviceId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !display.isEmpty, !remoteRaw.isEmpty else {
                 continue
             }
+            let remoteId = canonicalLanDeviceId(fromWireSourceDeviceId: remoteRaw)
             devices[remoteId] = DeviceRecord(
                 deviceId: remoteId,
                 name: display,
@@ -509,6 +514,7 @@ import Network
                 var helloAckPayload: [String: Any] = [
                     "sourceDeviceId": self.localDeviceUuid(),
                     "displayName": self.localSynraDisplayName(),
+                    "pairedPeerDeviceIds": self.readPairedPeerDeviceIdsFromDefaults(),
                 ]
                 if let selfIp = self.primarySourceHostIpv4(), !selfIp.isEmpty {
                     helloAckPayload["sourceHostIp"] = selfIp
@@ -539,12 +545,13 @@ import Network
                 let (host, _) = self.describeHostPort(current.connection.endpoint)
                 var opened: [String: Any] = [
                     "sessionId": sessionId,
-                    "deviceId": sourceDeviceId,
+                    "deviceId": self.canonicalLanDeviceId(fromWireSourceDeviceId: sourceDeviceId),
                     "direction": "inbound",
                     "transport": "tcp",
                     "host": host as Any,
                     // Always report host TCP server port for reverse-connect handoff.
                     "port": Int(self.defaultTcpPort),
+                    "pairedPeerDeviceIds": self.readPairedPeerDeviceIdsFromDefaults(),
                 ]
                 if let peerDisplayName, !peerDisplayName.isEmpty {
                     opened["displayName"] = peerDisplayName
@@ -1025,6 +1032,26 @@ import Network
         defaults.set(str, forKey: deviceBasicInfoDefaultsKey)
     }
 
+    private func readPairedPeerDeviceIdsFromDefaults() -> [String] {
+        let defaults = UserDefaults.standard
+        guard let raw = defaults.string(forKey: pairedDevicesDefaultsKey), !raw.isEmpty,
+              let data = raw.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let items = obj["items"] as? [Any]
+        else {
+            return []
+        }
+        return items.compactMap { entry -> String? in
+            guard let row = entry as? [String: Any],
+                  let id = row["deviceId"] as? String
+            else {
+                return nil
+            }
+            let trimmed = id.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+    }
+
     private func localDeviceUuid() -> String {
         let defaults = UserDefaults.standard
         if let existing = defaults.string(forKey: unifiedDeviceUuidDefaultsKey), !existing.isEmpty {
@@ -1050,6 +1077,18 @@ import Network
         let digest = Insecure.SHA1.hash(data: Data(value.utf8))
         let prefix = digest.map { String(format: "%02x", $0) }.joined().prefix(12)
         return "device-\(prefix)"
+    }
+
+    /// Peers may send raw instance UUID in helloAck; Synra lists + pairing use `device-` + 12 hex (SHA-1 prefix).
+    private func canonicalLanDeviceId(fromWireSourceDeviceId raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            return trimmed
+        }
+        if trimmed.hasPrefix("device-"), trimmed.count >= "device-".count + 8 {
+            return trimmed
+        }
+        return hashDeviceId(trimmed)
     }
 
     private func probeDevice(host: String, port: UInt16, timeoutMs: Int) -> ProbeOutcome {
@@ -1092,7 +1131,9 @@ import Network
                             let remote = payload?["sourceDeviceId"] as? String
                             let trimmedRemote = remote?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                             let localId = self.localDeviceUuid()
-                            if !trimmedRemote.isEmpty, trimmedRemote == localId {
+                            let canonRemote = self.canonicalLanDeviceId(fromWireSourceDeviceId: trimmedRemote)
+                            let canonLocal = self.canonicalLanDeviceId(fromWireSourceDeviceId: localId)
+                            if !trimmedRemote.isEmpty, canonRemote == canonLocal {
                                 let ackName = (payload?["displayName"] as? String)?
                                     .trimmingCharacters(in: .whitespacesAndNewlines)
                                 outcome = ProbeOutcome(
@@ -1107,7 +1148,7 @@ import Network
                                 outcome = ProbeOutcome(
                                     connectable: true,
                                     error: nil,
-                                    remoteDeviceId: trimmedRemote.isEmpty ? nil : trimmedRemote,
+                                    remoteDeviceId: trimmedRemote.isEmpty ? nil : canonRemote,
                                     remoteDisplayName: (ackName?.isEmpty == false) ? ackName : nil
                                 )
                             }

@@ -29,6 +29,7 @@ import { createDeviceRegistry } from './device-discovery/state/device-registry'
 type DeviceDiscoveryServiceOptions = {
   onHostEvent?: (event: DeviceDiscoveryHostEvent) => void
   resolveLocalDeviceUuid?: () => string
+  readPairedPeerDeviceIds?: () => string[]
 }
 
 export interface DeviceDiscoveryService {
@@ -46,6 +47,7 @@ export function createDeviceDiscoveryService(
   options: DeviceDiscoveryServiceOptions = {}
 ): DeviceDiscoveryService {
   const resolveLocalDeviceUuid = options.resolveLocalDeviceUuid ?? getOrCreateLocalDeviceUuid
+  const readPairedPeerDeviceIds = options.readPairedPeerDeviceIds
   const registry = createDeviceRegistry()
   const eventBus = createHostEventBus(options.onHostEvent)
   const orchestrator = createDiscoveryOrchestrator({
@@ -59,7 +61,8 @@ export function createDeviceDiscoveryService(
   })
   const inboundTransport = createInboundHostTransport({
     eventBus,
-    resolveLocalDeviceUuid
+    resolveLocalDeviceUuid,
+    readPairedPeerDeviceIds
   })
   const outboundSession = createOutboundClientSession({
     eventBus,

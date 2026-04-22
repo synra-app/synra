@@ -6,7 +6,6 @@ import type {
   SynraConnectionSendInput
 } from '../types'
 import type { ConnectionRuntimeAdapter } from './adapter'
-import type { DesktopHandoffState } from './desktop-handoff'
 import type { ConnectedSessionsBook } from './connected-sessions-book'
 
 const OPEN_SESSION_ERROR_MESSAGE = 'Failed to open session.'
@@ -15,46 +14,49 @@ const SEND_MESSAGE_ERROR_MESSAGE = 'Failed to send message.'
 
 export function createSessionOperationsModule(options: {
   adapter: ConnectionRuntimeAdapter
-  isMobileRuntime: boolean
-  loading: Ref<boolean>
   error: Ref<string | null>
   sessionState: Ref<RuntimeSessionState>
-  handoff: DesktopHandoffState
   sessionsBook: ConnectedSessionsBook
 }): {
   openSession(options: RuntimeOpenSessionInput): Promise<void>
   closeSession(sessionId?: string): Promise<void>
   sendMessage(input: SynraConnectionSendInput): Promise<void>
 } {
-  const { adapter, isMobileRuntime, loading, error, sessionState, handoff, sessionsBook } = options
+  const { adapter, error, sessionState, sessionsBook } = options
 
-  let openSessionInFlight = false
+  const openSessionInflightKeys = new Set<string>()
+
+  function openSessionInflightKey(openOptions: RuntimeOpenSessionInput): string {
+    const host = openOptions.host.trim().toLowerCase()
+    const port = openOptions.port > 0 ? openOptions.port : 32100
+    return `${openOptions.deviceId}:${host}:${port}`
+  }
 
   async function openSession(openOptions: RuntimeOpenSessionInput): Promise<void> {
-    if (openSessionInFlight) {
+    const key = openSessionInflightKey(openOptions)
+    if (openSessionInflightKeys.has(key)) {
       return
     }
-    openSessionInFlight = true
-    loading.value = true
+    openSessionInflightKeys.add(key)
+    const suppressGlobalError = openOptions.suppressGlobalError === true
     try {
-      if (!isMobileRuntime && openOptions.host) {
-        // On desktop, "connect" means finishing mobile->PC reverse link (chain B).
-        // The initial PC->mobile channel (chain A) is only a handoff signal.
-        handoff.pendingHandoffHosts.add(openOptions.host)
-      }
-      await adapter.openSession(openOptions)
+      await adapter.openSession({
+        deviceId: openOptions.deviceId,
+        host: openOptions.host,
+        port: openOptions.port
+      })
       error.value = null
     } catch (unknownError) {
-      error.value = unknownToErrorMessage(unknownError, OPEN_SESSION_ERROR_MESSAGE)
+      if (!suppressGlobalError) {
+        error.value = unknownToErrorMessage(unknownError, OPEN_SESSION_ERROR_MESSAGE)
+      }
       throw unknownError
     } finally {
-      openSessionInFlight = false
-      loading.value = false
+      openSessionInflightKeys.delete(key)
     }
   }
 
   async function closeSession(sessionId?: string): Promise<void> {
-    loading.value = true
     try {
       await adapter.closeSession(sessionId)
       const shouldClearCurrentSession =
@@ -72,13 +74,10 @@ export function createSessionOperationsModule(options: {
       error.value = null
     } catch (unknownError) {
       error.value = unknownToErrorMessage(unknownError, CLOSE_SESSION_ERROR_MESSAGE)
-    } finally {
-      loading.value = false
     }
   }
 
   async function sendMessage(input: SynraConnectionSendInput): Promise<void> {
-    loading.value = true
     try {
       sessionsBook.touchSessionActivity(input.sessionId, Date.now(), 'outbound')
       await adapter.sendMessage({
@@ -91,8 +90,6 @@ export function createSessionOperationsModule(options: {
     } catch (unknownError) {
       error.value = unknownToErrorMessage(unknownError, SEND_MESSAGE_ERROR_MESSAGE)
       throw unknownError
-    } finally {
-      loading.value = false
     }
   }
 

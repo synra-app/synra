@@ -17,4 +17,5 @@ const SynraPreferences = registerPlugin<SynraPreferencesPlugin>('SynraPreference
 
 export * from './constants'
 export * from './definitions'
+export * from './paired-devices-payload'
 export { SynraPreferences }

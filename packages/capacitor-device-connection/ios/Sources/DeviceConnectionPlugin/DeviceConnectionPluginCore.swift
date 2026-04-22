@@ -11,6 +11,15 @@ public final class DeviceConnectionPluginCore: NSObject {
     private let legacyDeviceDisplayNameDefaultsKey = "synra.preferences.synra.device.display-name"
     private let legacyDeviceUuidStorageKey = "synra.device-connection.device-uuid"
 
+    private func pairedPeerDeviceIds(from helloAckPayload: [String: Any]?) -> [String] {
+        guard let raw = helloAckPayload?["pairedPeerDeviceIds"] as? [Any] else {
+            return []
+        }
+        return raw.compactMap { $0 as? String }.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter {
+            !$0.isEmpty
+        }
+    }
+
     private var sessionState = SessionState()
     private var connection: NWConnection?
 
@@ -53,6 +62,7 @@ public final class DeviceConnectionPluginCore: NSObject {
         let semaphore = DispatchSemaphore(value: 0)
         var opened = false
         var openError: String?
+        var capturedPairedPeerIds: [String] = []
         let generatedSessionId = UUID().uuidString
 
         let helloPayload: Any? = {
@@ -105,6 +115,7 @@ public final class DeviceConnectionPluginCore: NSObject {
                     }
                     let ackDisplay = (helloAckPayload?["displayName"] as? String)?
                         .trimmingCharacters(in: .whitespacesAndNewlines)
+                    let pairedPeerIds = self.pairedPeerDeviceIds(from: helloAckPayload)
                     self.sessionState.peerDisplayName =
                         (ackDisplay?.isEmpty == false) ? ackDisplay : nil
                     self.sessionState.state = "open"
@@ -112,6 +123,7 @@ public final class DeviceConnectionPluginCore: NSObject {
                     self.sessionState.sessionId = (response["sessionId"] as? String) ?? generatedSessionId
                     self.sessionState.openedAt = self.now()
                     opened = true
+                    capturedPairedPeerIds = pairedPeerIds
                     self.startReceiveLoop(on: nwConnection)
                     semaphore.signal()
                 }
@@ -135,6 +147,7 @@ public final class DeviceConnectionPluginCore: NSObject {
                 "sessionId": sessionState.sessionId ?? generatedSessionId,
                 "state": sessionState.state,
                 "transport": "tcp",
+                "pairedPeerDeviceIds": capturedPairedPeerIds,
             ]
             if let name = sessionState.peerDisplayName, !name.isEmpty {
                 payload["displayName"] = name

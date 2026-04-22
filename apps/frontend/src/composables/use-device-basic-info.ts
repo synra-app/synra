@@ -3,14 +3,15 @@ import {
   SynraPreferences,
   type SynraDeviceBasicInfo
 } from '@synra/capacitor-preferences'
-import { useTransport } from '@synra/hooks'
+import { getHooksRuntimeOptions, useTransport } from '@synra/hooks'
+import { ensureDeviceInstanceUuid } from '../lib/device-instance-uuid'
 import { parseDeviceNameFromBasicInfo } from '../lib/device-basic-info'
+import { hashDeviceIdFromInstanceUuid } from '../lib/hash-device-id'
 
 type BasicInfoSaveStatus = 'idle' | 'saving' | 'success' | 'error'
 type BasicInfoLoadStatus = 'idle' | 'loading' | 'ready' | 'error'
 
 const DEVICE_NAME_MAX_LENGTH = 64
-const BASIC_INFO_UPDATED_CHANNEL = 'system.device-basic-info.updated'
 
 function validateDeviceName(input: string): string {
   const normalized = input.trim()
@@ -24,7 +25,7 @@ function validateDeviceName(input: string): string {
 }
 
 export function useDeviceBasicInfo() {
-  const { connectedDeviceIds, sendToDevice } = useTransport()
+  const { broadcastDeviceProfileToOpenSessions } = useTransport()
 
   const deviceName = ref('')
   const loadStatus = ref<BasicInfoLoadStatus>('idle')
@@ -60,27 +61,25 @@ export function useDeviceBasicInfo() {
   }
 
   async function notifyConnectedDevices(nextDeviceName: string): Promise<number> {
-    const failures: string[] = []
-    const payload = {
-      deviceName: nextDeviceName,
-      updatedAt: Date.now()
+    let deviceLanId = getHooksRuntimeOptions().localDiscoveryDeviceId
+    if (typeof deviceLanId !== 'string' || deviceLanId.length === 0) {
+      try {
+        const uuid = await ensureDeviceInstanceUuid()
+        deviceLanId = await hashDeviceIdFromInstanceUuid(uuid)
+      } catch {
+        return 1
+      }
     }
-    const targets = [...connectedDeviceIds.value]
-
-    await Promise.all(
-      targets.map(async (deviceId) => {
-        try {
-          await sendToDevice(deviceId, {
-            channel: BASIC_INFO_UPDATED_CHANNEL,
-            payload
-          })
-        } catch {
-          failures.push(deviceId)
-        }
+    try {
+      await broadcastDeviceProfileToOpenSessions({
+        deviceId: deviceLanId,
+        displayName: nextDeviceName,
+        updatedAt: Date.now()
       })
-    )
-
-    return failures.length
+      return 0
+    } catch {
+      return 1
+    }
   }
 
   async function saveBasicInfo(): Promise<void> {

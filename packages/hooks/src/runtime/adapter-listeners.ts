@@ -3,11 +3,19 @@ import type { Ref } from 'vue'
 import type { RuntimeSessionState } from '../types'
 import type { ConnectionRuntimeAdapter } from './adapter'
 import type { ConnectedSessionsBook } from './connected-sessions-book'
-import type { DesktopHandoffState } from './desktop-handoff'
-import { upsertDiscoveredDevice, upsertDiscoveredPeerFromSession } from './discovered-device-upsert'
+import {
+  applyRemoteDeviceProfileName,
+  upsertDiscoveredDevice,
+  upsertDiscoveredPeerFromSession
+} from './discovered-device-upsert'
+import {
+  DEVICE_PROFILE_UPDATED_MESSAGE_TYPE,
+  isDeviceProfileUpdatedPayload
+} from './device-profile'
 import { normalizeHost } from './host-normalization'
 import { sortDevices } from './device-sort'
 import type { MessageListenersRegistry } from './message-listeners'
+import { getHooksRuntimeOptions, isLocalDiscoveryDeviceId } from './config'
 
 export async function registerAdapterListeners(options: {
   adapter: ConnectionRuntimeAdapter
@@ -16,23 +24,27 @@ export async function registerAdapterListeners(options: {
   sessionState: Ref<RuntimeSessionState>
   error: Ref<string | null>
   sessionsBook: ConnectedSessionsBook
-  handoff: DesktopHandoffState
   messageRegistry: MessageListenersRegistry
 }): Promise<void> {
-  const {
-    adapter,
-    isMobileRuntime,
-    devices,
-    sessionState,
-    error,
-    sessionsBook,
-    handoff,
-    messageRegistry
-  } = options
+  const { adapter, isMobileRuntime, devices, sessionState, error, sessionsBook, messageRegistry } =
+    options
 
   const { emitIncomingMessage } = messageRegistry
 
   await adapter.addDeviceConnectableUpdatedListener((event) => {
+    if (isLocalDiscoveryDeviceId(event.device.deviceId)) {
+      devices.value = sortDevices(
+        devices.value.filter((device) => device.deviceId !== event.device.deviceId)
+      )
+      return
+    }
+    const exclude = getHooksRuntimeOptions().shouldExcludeDiscoveredDevice
+    if (typeof exclude === 'function' && exclude(event.device.deviceId)) {
+      devices.value = sortDevices(
+        devices.value.filter((device) => device.deviceId !== event.device.deviceId)
+      )
+      return
+    }
     upsertDiscoveredDevice(devices, event.device)
   })
 
@@ -64,21 +76,7 @@ export async function registerAdapterListeners(options: {
 
     upsertDiscoveredPeerFromSession(devices, event)
 
-    if (!isMobileRuntime && inferredDirection === 'outbound' && event.host) {
-      if (handoff.pendingHandoffHosts.has(event.host)) {
-        handoff.handoffOutboundSessionIdByHost.set(event.host, event.sessionId)
-        return
-      }
-    }
-
     if (!isMobileRuntime && inferredDirection === 'inbound' && event.host) {
-      handoff.pendingHandoffHosts.delete(event.host)
-      const handoffSessionId = handoff.handoffOutboundSessionIdByHost.get(event.host)
-      if (handoffSessionId && handoffSessionId !== event.sessionId) {
-        handoff.handoffOutboundSessionIdByHost.delete(event.host)
-        sessionsBook.markConnectionClosed(handoffSessionId, Date.now())
-        void adapter.closeSession(handoffSessionId).catch(() => undefined)
-      }
       const staleOutboundSessionIds = sessionsBook.findOpenSessionIdsByHostDirection(
         event.host,
         'outbound',
@@ -123,17 +121,25 @@ export async function registerAdapterListeners(options: {
       },
       { immediate: true }
     )
+
+    const pairedFromEvent = (event as { pairedPeerDeviceIds?: unknown }).pairedPeerDeviceIds
+    const sync = getHooksRuntimeOptions().onHandshakePairedPeerIds
+    if (
+      typeof sync === 'function' &&
+      typeof event.deviceId === 'string' &&
+      event.deviceId.length > 0 &&
+      Array.isArray(pairedFromEvent)
+    ) {
+      const ids = pairedFromEvent.filter(
+        (id): id is string => typeof id === 'string' && id.trim().length > 0
+      )
+      sync(event.deviceId, ids, {
+        sessionId: typeof event.sessionId === 'string' ? event.sessionId : undefined
+      })
+    }
   })
 
   await adapter.addSessionClosedListener((event) => {
-    if (event.sessionId) {
-      for (const [host, handoffSessionId] of handoff.handoffOutboundSessionIdByHost.entries()) {
-        if (handoffSessionId === event.sessionId) {
-          handoff.handoffOutboundSessionIdByHost.delete(host)
-          handoff.pendingHandoffHosts.delete(host)
-        }
-      }
-    }
     const currentSessionId = sessionState.value.sessionId
     const shouldAffectPrimarySession =
       !currentSessionId || !event.sessionId || currentSessionId === event.sessionId
@@ -160,6 +166,16 @@ export async function registerAdapterListeners(options: {
 
   await adapter.addMessageReceivedListener((event) => {
     sessionsBook.touchSessionActivity(event.sessionId, Date.now(), 'inbound')
+    if (
+      event.messageType === DEVICE_PROFILE_UPDATED_MESSAGE_TYPE &&
+      isDeviceProfileUpdatedPayload(event.payload)
+    ) {
+      applyRemoteDeviceProfileName(devices, event.payload.deviceId, event.payload.displayName)
+      const patch = getHooksRuntimeOptions().onRemoteDeviceProfile
+      if (typeof patch === 'function') {
+        patch(event.payload.deviceId, event.payload.displayName)
+      }
+    }
     emitIncomingMessage(event)
   })
 
