@@ -108,15 +108,13 @@ async function probeSingle(
           end(false, { connectCheckError: 'MISSING_DISPLAY_NAME' })
           return
         }
-        const ackSessionId =
-          typeof frame.sessionId === 'string' && frame.sessionId.length > 0 ? frame.sessionId : ''
-        if (options.probeSocketRegistry && ackSessionId.length > 0) {
+        if (options.probeSocketRegistry) {
           socket.off('data', onProbeData)
           socket.off('error', onProbeError)
           options.probeSocketRegistry.register(registryKey, {
             socket,
             codec,
-            sessionId: ackSessionId,
+            deviceId: peerDeviceId ? hashDeviceId(peerDeviceId) : device.deviceId,
             displayName: ackDisplayName
           })
           socket.on('error', () => {
@@ -156,7 +154,9 @@ async function probeSingle(
       const connect: LanFrame = {
         version: LAN_PROTOCOL_VERSION,
         type: 'connect',
-        sessionId: randomUUID(),
+        requestId: randomUUID(),
+        sourceDeviceId: options.localDeviceId,
+        targetDeviceId: device.deviceId,
         timestamp: Date.now(),
         appId: LAN_APP_ID,
         protocolVersion: LAN_PROTOCOL_VERSION,

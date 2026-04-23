@@ -18,7 +18,7 @@ type SynraTransportOutgoing = {
 
 type SynraTransportIncoming = {
   fromDeviceId?: string
-  sessionId?: string
+  requestId?: string
   channel: string
   payload: unknown
   receivedAt: number
@@ -136,8 +136,8 @@ export function useTransport() {
       return undefined
     }
     const openedSession = findTransportReadySessionByPeer(deviceId)
-    if (openedSession?.sessionId) {
-      return openedSession.sessionId
+    if (openedSession?.deviceId) {
+      return openedSession.deviceId
     }
     await runtime.openSession({
       deviceId: target.deviceId,
@@ -146,18 +146,14 @@ export function useTransport() {
       suppressGlobalError: connectOptions?.suppressGlobalError
     })
     const byPeer = findTransportReadySessionByPeer(deviceId)
-    if (byPeer?.sessionId) {
-      return byPeer.sessionId
+    if (byPeer?.deviceId) {
+      return byPeer.deviceId
     }
     const snapshot = runtime.sessionState.value
-    if (
-      typeof snapshot.sessionId === 'string' &&
-      snapshot.deviceId === deviceId &&
-      snapshot.state === 'open'
-    ) {
-      return snapshot.sessionId
+    if (snapshot.deviceId === deviceId && snapshot.state === 'open') {
+      return snapshot.deviceId
     }
-    return findTransportReadySessionByPeer(deviceId)?.sessionId
+    return findTransportReadySessionByPeer(deviceId)?.deviceId
   }
 
   async function connectToDeviceAt(
@@ -172,8 +168,8 @@ export function useTransport() {
     }
     const resolvedPort = port > 0 ? port : 32100
     const openedSession = findTransportReadySessionByPeer(deviceId)
-    if (openedSession?.sessionId) {
-      return openedSession.sessionId
+    if (openedSession?.deviceId) {
+      return openedSession.deviceId
     }
     await runtime.openSession({
       deviceId,
@@ -182,18 +178,14 @@ export function useTransport() {
       suppressGlobalError: connectOptions?.suppressGlobalError
     })
     const byPeer = findTransportReadySessionByPeer(deviceId)
-    if (byPeer?.sessionId) {
-      return byPeer.sessionId
+    if (byPeer?.deviceId) {
+      return byPeer.deviceId
     }
     const snapshot = runtime.sessionState.value
-    if (
-      typeof snapshot.sessionId === 'string' &&
-      snapshot.deviceId === deviceId &&
-      snapshot.state === 'open'
-    ) {
-      return snapshot.sessionId
+    if (snapshot.deviceId === deviceId && snapshot.state === 'open') {
+      return snapshot.deviceId
     }
-    return findTransportReadySessionByPeer(deviceId)?.sessionId
+    return findTransportReadySessionByPeer(deviceId)?.deviceId
   }
 
   async function disconnectDevice(deviceId: string): Promise<void> {
@@ -215,30 +207,33 @@ export function useTransport() {
       return
     }
     for (const session of liveSessions) {
-      await runtime.closeSession(session.sessionId)
+      await runtime.closeSession(session.deviceId)
     }
   }
 
-  async function resolveSessionId(deviceId: string): Promise<string | undefined> {
+  async function resolveTargetDeviceId(deviceId: string): Promise<string | undefined> {
     const opened = findTransportReadySessionByPeer(deviceId)
-    if (opened?.sessionId) {
-      return opened.sessionId
+    if (opened?.deviceId) {
+      return opened.deviceId
     }
-    const openedSessionId = await connectToDevice(deviceId)
-    if (openedSessionId) {
-      return openedSessionId
+    const openedDeviceId = await connectToDevice(deviceId)
+    if (openedDeviceId) {
+      return openedDeviceId
     }
     const connected = findTransportReadySessionByPeer(deviceId)
-    return connected?.sessionId
+    return connected?.deviceId
   }
 
   async function sendToDevice(deviceId: string, message: SynraTransportOutgoing): Promise<void> {
-    const sessionId = await resolveSessionId(deviceId)
-    if (!sessionId) {
+    const targetDeviceId = await resolveTargetDeviceId(deviceId)
+    if (!targetDeviceId) {
       throw new Error(`Device ${deviceId} is not connected.`)
     }
+    const requestId = crypto.randomUUID()
     await runtime.sendMessage({
-      sessionId,
+      requestId,
+      sourceDeviceId: 'local-device',
+      targetDeviceId,
       messageType: 'custom.chat.text',
       payload: {
         channel: message.channel ?? 'default',
@@ -251,13 +246,15 @@ export function useTransport() {
     profile: DeviceProfileUpdatedPayload
   ): Promise<void> {
     const sessions = runtime.connectedSessions.value.filter(
-      (s) => s.transport === 'ready' && typeof s.sessionId === 'string' && s.sessionId.length > 0
+      (s) => s.transport === 'ready' && typeof s.deviceId === 'string' && s.deviceId.length > 0
     )
     await Promise.all(
       sessions.map((s) =>
         runtime
           .sendLanEvent({
-            sessionId: s.sessionId as string,
+            requestId: crypto.randomUUID(),
+            sourceDeviceId: 'local-device',
+            targetDeviceId: s.deviceId,
             eventName: 'device.displayName.changed',
             payload: { deviceId: profile.deviceId, displayName: profile.displayName }
           })
@@ -287,13 +284,19 @@ export function useTransport() {
   }
 
   async function sendConnectionMessage(input: {
-    sessionId: string
+    requestId: string
+    sourceDeviceId: string
+    targetDeviceId: string
+    replyToRequestId?: string
     messageType: SynraMessageType
     payload: unknown
     messageId?: string
   }): Promise<void> {
     await runtime.sendMessage({
-      sessionId: input.sessionId,
+      requestId: input.requestId,
+      sourceDeviceId: input.sourceDeviceId,
+      targetDeviceId: input.targetDeviceId,
+      replyToRequestId: input.replyToRequestId,
       messageType: input.messageType,
       payload: input.payload,
       messageId: input.messageId
@@ -326,8 +329,8 @@ export function useTransport() {
       const body = 'body' in payload ? payload.body : message.payload
       void Promise.resolve(
         handler({
-          fromDeviceId: message.deviceId,
-          sessionId: message.sessionId,
+          fromDeviceId: message.sourceDeviceId,
+          requestId: message.requestId,
           channel,
           payload: body,
           receivedAt: message.timestamp

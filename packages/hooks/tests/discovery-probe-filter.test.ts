@@ -20,8 +20,9 @@ const ghostMdns: DiscoveredDevice = {
   name: '192.168.77.97',
   ipAddress: '192.168.77.97',
   port: 32100,
-  source: 'mdns',
-  connectable: false,
+  source: 'probe',
+  connectable: true,
+  connectCheckAt: 1,
   discoveredAt: 1,
   lastSeenAt: 1
 }
@@ -38,7 +39,7 @@ function createProbeFilterAdapter(probe: ProbeSynraPeersResult): ConnectionRunti
       return probe
     },
     async openSession(_options: OpenSessionOptions) {
-      return { sessionId: 's1', state: 'open' as const, transport: 'tcp' as const }
+      return { deviceId: _options.deviceId, state: 'open' as const, transport: 'tcp' as const }
     },
     async closeSession() {},
     async sendMessage() {},
@@ -142,6 +143,26 @@ test('startDiscovery maps successful probe to canonical device id', async () => 
   expect(transport.peers.value[0]?.deviceId).toBe('device-real-peer')
   expect(transport.peers.value[0]?.connectable).toBe(true)
   expect(transport.peers.value[0]?.source).toBe('probe')
+  resetHooksRuntimeOptions()
+  resetConnectionRuntime()
+})
+
+test('startDiscovery keeps discovery silent when probe call fails', async () => {
+  const adapter = createProbeFilterAdapter({
+    results: []
+  })
+  adapter.probeSynraPeers = async () => {
+    throw new Error('targets is required.')
+  }
+  configureHooksRuntime({
+    adapterFactory: () => adapter
+  })
+  resetConnectionRuntime()
+  const transport = useTransport()
+  await transport.ensureReady()
+  await transport.startScan()
+  expect(transport.peers.value).toEqual([])
+  expect(transport.error.value).toBeNull()
   resetHooksRuntimeOptions()
   resetConnectionRuntime()
 })

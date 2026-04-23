@@ -26,7 +26,7 @@ function createScanOnlyAdapter(
       return { state: 'scanning' as const, devices: [...lastListedDevices] }
     },
     async openSession(_options: OpenSessionOptions) {
-      return { sessionId: 's1', state: 'open' as const, transport: 'tcp' as const }
+      return { deviceId: _options.deviceId, state: 'open' as const, transport: 'tcp' as const }
     },
     async closeSession() {},
     async sendMessage() {},
@@ -83,8 +83,9 @@ test('startDiscovery drops session-sourced peers when scan does not include them
         deviceId: 'device-other',
         name: 'Other',
         ipAddress: '192.168.1.20',
-        source: 'mdns',
+        source: 'probe',
         connectable: true,
+        connectCheckAt: 1,
         discoveredAt: 1,
         lastSeenAt: 1
       }
@@ -99,7 +100,6 @@ test('startDiscovery drops session-sourced peers when scan does not include them
   expect(transport.peers.value.map((p) => p.deviceId)).toEqual([])
 
   adapter.emitInboundSessionOpened({
-    sessionId: 'in-1',
     deviceId: sessionPeer.deviceId,
     host: sessionPeer.ipAddress,
     port: 32100,
@@ -121,8 +121,9 @@ test('session open can promote source, but rescan still uses fresh discovery sna
         deviceId: 'device-android',
         name: 'Android',
         ipAddress: '192.168.1.30',
-        source: 'mdns',
+        source: 'probe',
         connectable: true,
+        connectCheckAt: 1,
         discoveredAt: 1,
         lastSeenAt: 1
       }
@@ -136,10 +137,9 @@ test('session open can promote source, but rescan still uses fresh discovery sna
   await transport.ensureReady()
   await transport.startScan()
   expect(transport.peers.value.map((p) => p.deviceId)).toEqual(['device-android'])
-  expect(transport.peers.value[0]?.source).toBe('mdns')
+  expect(transport.peers.value[0]?.source).toBe('probe')
 
   adapter.emitInboundSessionOpened({
-    sessionId: 'in-android-1',
     deviceId: 'device-android',
     host: '192.168.1.30',
     port: 32100,

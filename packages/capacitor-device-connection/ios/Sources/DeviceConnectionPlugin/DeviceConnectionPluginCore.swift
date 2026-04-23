@@ -7,7 +7,7 @@ import Network
 public final class DeviceConnectionPluginCore: NSObject {
     internal let appId = "synra"
     internal let protocolVersion = "1.0"
-    private let sessionAckTimeoutMs = 3000
+    private let sessionAckTimeoutMs = 6000
     private let unifiedDeviceUuidDefaultsKey = "synra.preferences.synra.device.instance-uuid"
     private let deviceBasicInfoDefaultsKey = "synra.preferences.synra.device.basic-info"
     private let legacyDeviceDisplayNameDefaultsKey = "synra.preferences.synra.device.display-name"
@@ -44,13 +44,13 @@ public final class DeviceConnectionPluginCore: NSObject {
 
         if sessionState.state == "open", let replacedSessionId = sessionState.sessionId {
             onSessionClosed?([
-                "sessionId": replacedSessionId,
+                "deviceId": sessionState.deviceId as Any,
                 "reason": "replaced",
                 "transport": "tcp",
             ])
         }
 
-        closeSession(sessionId: nil)
+        closeSession(targetDeviceId: nil)
 
         sessionState.state = "connecting"
         sessionState.deviceId = deviceId
@@ -145,7 +145,7 @@ public final class DeviceConnectionPluginCore: NSObject {
         if opened {
             var payload: [String: Any] = [
                 "success": true,
-                "sessionId": sessionState.sessionId ?? generatedSessionId,
+                "deviceId": sessionState.deviceId as Any,
                 "state": sessionState.state,
                 "transport": "tcp",
             ]
@@ -165,19 +165,19 @@ public final class DeviceConnectionPluginCore: NSObject {
         return nil
     }
 
-    public func closeSession(sessionId: String?) -> [String: Any] {
-        let sid = sessionId ?? sessionState.sessionId
+    public func closeSession(targetDeviceId: String?) -> [String: Any] {
+        let sid = inboundConnections.first(where: { $0.value.canonicalDeviceId == targetDeviceId })?.value.sessionId ?? sessionState.sessionId
         if let sid {
             if let inboundId = inboundConnections.first(where: { $0.value.sessionId == sid })?.key {
                 closeSynraInboundConnection(connectionId: inboundId, reason: "closed-by-client", emitSessionClosed: true)
                 return [
                     "success": true,
-                    "sessionId": sid,
+                    "targetDeviceId": targetDeviceId as Any,
                     "transport": "tcp",
                 ]
             }
         }
-        if let sid = sessionId ?? sessionState.sessionId {
+        if let sid = sid {
             let closeFrame = frame(type: "close", sessionId: sid, messageId: nil, payload: nil)
             if let conn = connection {
                 sendFrame(closeFrame, through: conn)
@@ -189,22 +189,31 @@ public final class DeviceConnectionPluginCore: NSObject {
         sessionState.closedAt = now()
         return [
             "success": true,
-            "sessionId": sessionId ?? sessionState.sessionId as Any,
+            "targetDeviceId": targetDeviceId as Any,
             "transport": "tcp",
         ]
     }
 
     public func sendMessage(
-        sessionId: String,
+        requestId: String,
+        sourceDeviceId: String,
+        targetDeviceId: String,
+        replyToRequestId: String?,
         messageType: String,
         payload: Any,
         messageId: String?
     ) -> [String: Any]? {
         let targetMessageId = messageId ?? UUID().uuidString
         let envelope: [String: Any] = [
+            "requestId": requestId,
+            "sourceDeviceId": sourceDeviceId,
+            "targetDeviceId": targetDeviceId,
+            "replyToRequestId": replyToRequestId as Any,
             "messageType": messageType,
             "payload": payload,
         ]
+        let sessionId = inboundConnections.first(where: { $0.value.canonicalDeviceId == targetDeviceId })?.value.sessionId ?? sessionState.sessionId
+        guard let sessionId else { return nil }
         let messageFrame = frame(
             type: "message",
             sessionId: sessionId,
@@ -216,7 +225,7 @@ public final class DeviceConnectionPluginCore: NSObject {
             return [
                 "success": true,
                 "messageId": targetMessageId,
-                "sessionId": sessionId,
+                "targetDeviceId": targetDeviceId,
                 "transport": "tcp",
             ]
         }
@@ -229,19 +238,26 @@ public final class DeviceConnectionPluginCore: NSObject {
         return [
             "success": true,
             "messageId": targetMessageId,
-            "sessionId": sessionId,
+            "targetDeviceId": targetDeviceId,
             "transport": "tcp",
         ]
     }
 
     public func sendLanEvent(
-        sessionId: String,
+        requestId: String,
+        sourceDeviceId: String,
+        targetDeviceId: String,
+        replyToRequestId: String?,
         eventName: String,
         payload: Any?,
         eventId: String?,
         schemaVersion: Int?
     ) -> [String: Any]? {
         var envelope: [String: Any] = [
+            "requestId": requestId,
+            "sourceDeviceId": sourceDeviceId,
+            "targetDeviceId": targetDeviceId,
+            "replyToRequestId": replyToRequestId as Any,
             "eventName": eventName,
         ]
         if let payload {
@@ -253,6 +269,8 @@ public final class DeviceConnectionPluginCore: NSObject {
         if let schemaVersion {
             envelope["schemaVersion"] = schemaVersion
         }
+        let sessionId = inboundConnections.first(where: { $0.value.canonicalDeviceId == targetDeviceId })?.value.sessionId ?? sessionState.sessionId
+        guard let sessionId else { return nil }
         let eventFrame = frame(
             type: "event",
             sessionId: sessionId,
@@ -263,7 +281,7 @@ public final class DeviceConnectionPluginCore: NSObject {
             sendFrame(eventFrame, through: inbound.connection)
             return [
                 "success": true,
-                "sessionId": sessionId,
+                "targetDeviceId": targetDeviceId,
                 "transport": "tcp",
             ]
         }
@@ -275,15 +293,15 @@ public final class DeviceConnectionPluginCore: NSObject {
         sendFrame(eventFrame, through: conn)
         return [
             "success": true,
-            "sessionId": sessionId,
+            "targetDeviceId": targetDeviceId,
             "transport": "tcp",
         ]
     }
 
-    public func getSessionState(sessionId: String?) -> [String: Any] {
-        if let sessionId, let currentSessionId = sessionState.sessionId, sessionId != currentSessionId {
+    public func getSessionState(targetDeviceId: String?) -> [String: Any] {
+        if let targetDeviceId, let currentDeviceId = sessionState.deviceId, targetDeviceId != currentDeviceId {
             return [
-                "sessionId": sessionId,
+                "deviceId": targetDeviceId,
                 "state": "closed",
                 "transport": "tcp",
                 "closedAt": now(),
@@ -499,7 +517,7 @@ public final class DeviceConnectionPluginCore: NSObject {
                 self.connection = nil
                 if shouldNotifyClosed, let closedSessionId, !closedSessionId.isEmpty {
                     self.onSessionClosed?([
-                        "sessionId": closedSessionId,
+                        "deviceId": self.sessionState.deviceId as Any,
                         "reason": "socket-closed",
                         "transport": "tcp",
                     ])
@@ -513,7 +531,7 @@ public final class DeviceConnectionPluginCore: NSObject {
                 self.connection?.cancel()
                 self.connection = nil
                 self.onSessionClosed?([
-                    "sessionId": frame["sessionId"] as Any,
+                    "deviceId": self.sessionState.deviceId as Any,
                     "reason": "peer-closed",
                     "transport": "tcp",
                 ])
@@ -522,7 +540,10 @@ public final class DeviceConnectionPluginCore: NSObject {
             if frame["type"] as? String == "message" {
                 let payload = frame["payload"] as? [String: Any]
                 self.onMessageReceived?([
-                    "sessionId": frame["sessionId"] as Any,
+                    "requestId": payload?["requestId"] as Any,
+                    "sourceDeviceId": payload?["sourceDeviceId"] as Any,
+                    "targetDeviceId": payload?["targetDeviceId"] as Any,
+                    "replyToRequestId": payload?["replyToRequestId"] as Any,
                     "messageId": frame["messageId"] as Any,
                     "messageType": payload?["messageType"] as? String ?? "transport.message.received",
                     "payload": payload?["payload"] as Any,
@@ -531,7 +552,8 @@ public final class DeviceConnectionPluginCore: NSObject {
                 ])
             } else if frame["type"] as? String == "ack" {
                 self.onMessageAck?([
-                    "sessionId": frame["sessionId"] as Any,
+                    "targetDeviceId": frame["targetDeviceId"] as Any ?? self.sessionState.deviceId as Any,
+                    "requestId": frame["requestId"] as Any,
                     "messageId": frame["messageId"] as Any,
                     "timestamp": frame["timestamp"] as? Int ?? self.now(),
                     "transport": "tcp",
@@ -540,14 +562,17 @@ public final class DeviceConnectionPluginCore: NSObject {
                 let pl = frame["payload"] as? [String: Any]
                 let name = pl?["eventName"] as? String ?? ""
                 self.onLanWireEventReceived?([
-                    "sessionId": frame["sessionId"] as Any,
+                    "requestId": pl?["requestId"] as Any,
+                    "sourceDeviceId": pl?["sourceDeviceId"] as Any,
+                    "targetDeviceId": pl?["targetDeviceId"] as Any,
+                    "replyToRequestId": pl?["replyToRequestId"] as Any,
                     "eventName": name,
                     "eventPayload": pl?["payload"] as Any,
                     "transport": "tcp",
                 ])
             } else if frame["type"] as? String == "error" {
                 self.onTransportError?([
-                    "sessionId": frame["sessionId"] as Any,
+                    "deviceId": self.sessionState.deviceId as Any,
                     "code": "TRANSPORT_IO_ERROR",
                     "message": frame["error"] as? String ?? "Unknown transport error",
                     "transport": "tcp",
@@ -571,7 +596,6 @@ private struct SessionState {
 
     func toDictionary() -> [String: Any] {
         [
-            "sessionId": sessionId as Any,
             "deviceId": deviceId as Any,
             "host": host as Any,
             "port": port as Any,

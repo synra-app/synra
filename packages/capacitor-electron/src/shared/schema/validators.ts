@@ -88,7 +88,10 @@ export function validateResolveActionsPayload(
 }
 
 export function validateRuntimeExecutePayload(payload: unknown): payload is {
-  sessionId: string
+  requestId: string
+  sourceDeviceId: string
+  targetDeviceId: string
+  replyToRequestId?: string
   input: { type: string; raw: string }
   action: {
     actionId: string
@@ -100,8 +103,12 @@ export function validateRuntimeExecutePayload(payload: unknown): payload is {
 } {
   return (
     isObject(payload) &&
-    typeof payload.sessionId === 'string' &&
-    payload.sessionId.length > 0 &&
+    typeof payload.requestId === 'string' &&
+    payload.requestId.length > 0 &&
+    typeof payload.sourceDeviceId === 'string' &&
+    payload.sourceDeviceId.length > 0 &&
+    typeof payload.targetDeviceId === 'string' &&
+    payload.targetDeviceId.length > 0 &&
     isObject(payload.input) &&
     typeof payload.input.type === 'string' &&
     typeof payload.input.raw === 'string' &&
@@ -248,7 +255,10 @@ export function validateDiscoveryOpenSessionPayload(payload: unknown): payload i
 }
 
 export function validateDiscoverySendMessagePayload(payload: unknown): payload is {
-  sessionId: string
+  requestId: string
+  sourceDeviceId: string
+  targetDeviceId: string
+  replyToRequestId?: string
   messageType: string
   payload: unknown
   messageId?: string
@@ -257,7 +267,13 @@ export function validateDiscoverySendMessagePayload(payload: unknown): payload i
     return false
   }
 
-  if (typeof payload.sessionId !== 'string' || payload.sessionId.length === 0) {
+  if (typeof payload.requestId !== 'string' || payload.requestId.length === 0) {
+    return false
+  }
+  if (typeof payload.sourceDeviceId !== 'string' || payload.sourceDeviceId.length === 0) {
+    return false
+  }
+  if (typeof payload.targetDeviceId !== 'string' || payload.targetDeviceId.length === 0) {
     return false
   }
 
@@ -277,7 +293,10 @@ export function validateDiscoverySendMessagePayload(payload: unknown): payload i
 }
 
 export function validateDiscoverySendLanEventPayload(payload: unknown): payload is {
-  sessionId: string
+  requestId: string
+  sourceDeviceId: string
+  targetDeviceId: string
+  replyToRequestId?: string
   eventName: string
   payload?: unknown
   eventId?: string
@@ -286,7 +305,13 @@ export function validateDiscoverySendLanEventPayload(payload: unknown): payload 
   if (!isObject(payload)) {
     return false
   }
-  if (typeof payload.sessionId !== 'string' || payload.sessionId.length === 0) {
+  if (typeof payload.requestId !== 'string' || payload.requestId.length === 0) {
+    return false
+  }
+  if (typeof payload.sourceDeviceId !== 'string' || payload.sourceDeviceId.length === 0) {
+    return false
+  }
+  if (typeof payload.targetDeviceId !== 'string' || payload.targetDeviceId.length === 0) {
     return false
   }
   if (typeof payload.eventName !== 'string' || payload.eventName.length === 0) {

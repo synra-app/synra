@@ -65,19 +65,22 @@ export function createDiscoveryOrchestrator(
       const activeStrategies = options.strategies.filter((strategy) =>
         activeKinds.has(strategy.kind)
       )
-      const discovered = await Promise.all(
-        activeStrategies.map((strategy) =>
-          strategy.discover({
+      const discoveredByStrategy = await Promise.all(
+        activeStrategies.map(async (strategy) => {
+          const rows = await strategy.discover({
             options: startOptions,
             timeoutMs,
             localDeviceUuid: options.resolveLocalDeviceUuid()
           })
-        )
+          return { strategy: strategy.kind, rows }
+        })
       )
+      const discovered = discoveredByStrategy.map((row) => row.rows)
       options.registry.merge(discovered.flat())
 
       const probePort = startOptions.port ?? DEFAULT_TCP_PORT
-      const probed = await probeDevices(options.registry.list(), {
+      const probeInputs = options.registry.list()
+      const probed = await probeDevices(probeInputs, {
         localDeviceId: options.resolveLocalDeviceUuid(),
         port: probePort,
         timeoutMs: startOptions.timeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS,
@@ -98,7 +101,7 @@ export function createDiscoveryOrchestrator(
             typeof device.name === 'string' && device.name.trim().length > 0
               ? device.name.trim()
               : device.deviceId
-          return { ...device, name }
+          return { ...device, name, source: 'probe' as const }
         })
       options.registry.merge(accepted)
       const keepProbeSockets = new Set(accepted.map((d) => `${d.ipAddress}:${probePort}`))

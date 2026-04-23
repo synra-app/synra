@@ -30,6 +30,8 @@ export type LanDeviceDisplayNameChangedPayload = {
 export type LanPairingRequestPayload = {
   /** Opaque token or nonce for matching response. */
   requestId: string
+  sourceDeviceId: string
+  targetDeviceId: string
   initiator: {
     deviceId: string
     name: string
@@ -43,6 +45,9 @@ export type LanPairingRequestPayload = {
 
 export type LanPairingResponsePayload = {
   requestId: string
+  sourceDeviceId: string
+  targetDeviceId: string
+  replyToRequestId?: string
   accepted: boolean
   reason?: string
 }

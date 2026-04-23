@@ -20,7 +20,6 @@ export type OpenSessionOptions = {
 export type SessionState = 'idle' | 'connecting' | 'open' | 'closed' | 'error'
 
 export type SessionSnapshot = {
-  sessionId?: string
   deviceId?: string
   host?: string
   port?: number
@@ -34,7 +33,7 @@ export type SessionSnapshot = {
 
 export type OpenSessionResult = {
   success: true
-  sessionId: string
+  deviceId: string
   state: SessionState
   transport: ConnectionTransport
   /** Raw `connectAck` JSON payload from the peer (protocol-level; app interprets keys). */
@@ -42,18 +41,21 @@ export type OpenSessionResult = {
 }
 
 export type CloseSessionOptions = {
-  sessionId?: string
+  targetDeviceId?: string
   transport?: ConnectionTransport
 }
 
 export type CloseSessionResult = {
   success: true
-  sessionId?: string
+  targetDeviceId?: string
   transport: ConnectionTransport
 }
 
 export type SendMessageOptions = {
-  sessionId: string
+  requestId: string
+  sourceDeviceId: string
+  targetDeviceId: string
+  replyToRequestId?: string
   messageType: SynraMessageType
   payload: unknown
   messageId?: string
@@ -63,12 +65,15 @@ export type SendMessageOptions = {
 export type SendMessageResult = {
   success: true
   messageId: string
-  sessionId: string
+  targetDeviceId: string
   transport: ConnectionTransport
 }
 
 export type SendLanEventOptions = {
-  sessionId: string
+  requestId: string
+  sourceDeviceId: string
+  targetDeviceId: string
+  replyToRequestId?: string
   eventName: string
   payload?: unknown
   eventId?: string
@@ -78,12 +83,12 @@ export type SendLanEventOptions = {
 
 export type SendLanEventResult = {
   success: true
-  sessionId: string
+  targetDeviceId: string
   transport: ConnectionTransport
 }
 
 export type GetSessionStateOptions = {
-  sessionId?: string
+  targetDeviceId?: string
   transport?: ConnectionTransport
 }
 
@@ -104,7 +109,7 @@ export type HostEvent = {
     | 'host.member.offline'
     | 'host.heartbeat.timeout'
   remote: string
-  sessionId?: string
+  deviceId?: string
   messageId?: string
   messageType?: SynraMessageType
   code?: string
@@ -117,9 +122,8 @@ export type PullHostEventsResult = {
 }
 
 export type SessionOpenedEvent = {
-  sessionId: string
+  deviceId: string
   transport: ConnectionTransport
-  deviceId?: string
   direction?: 'inbound' | 'outbound'
   host?: string
   port?: number
@@ -155,6 +159,7 @@ export type SynraProbeResult = {
 export const SYNRA_PROBE_EMBEDDED_IN_DISCOVERY = 'SYNRA_PROBE_EMBEDDED_IN_DISCOVERY' as const
 
 export type ProbeSynraPeersOptions = {
+  /** Empty targets are allowed and should resolve with `results: []` (silent no-op). */
   targets: SynraProbeTarget[]
   timeoutMs?: number
 }
@@ -164,21 +169,26 @@ export type ProbeSynraPeersResult = {
 }
 
 export type LanWireEventReceivedEvent = {
-  sessionId: string
+  requestId: string
+  sourceDeviceId: string
+  targetDeviceId: string
+  replyToRequestId?: string
   eventName: string
   eventPayload: unknown
-  fromDeviceId?: string
   transport: ConnectionTransport
 }
 
 export type SessionClosedEvent = {
-  sessionId?: string
+  deviceId?: string
   transport: ConnectionTransport
   reason?: string
 }
 
 export type MessageReceivedEvent = {
-  sessionId: string
+  requestId: string
+  sourceDeviceId: string
+  targetDeviceId: string
+  replyToRequestId?: string
   messageId?: string
   messageType: SynraMessageType
   payload: unknown
@@ -187,14 +197,15 @@ export type MessageReceivedEvent = {
 }
 
 export type MessageAckEvent = {
-  sessionId: string
+  targetDeviceId: string
+  requestId: string
   messageId: string
   timestamp: number
   transport: ConnectionTransport
 }
 
 export type TransportErrorEvent = {
-  sessionId?: string
+  deviceId?: string
   code?: string
   message: string
   transport: ConnectionTransport

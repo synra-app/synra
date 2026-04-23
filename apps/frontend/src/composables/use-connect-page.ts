@@ -74,23 +74,35 @@ export function useConnectPage() {
     mergePairedAndDiscoveredDevices(pairedRecords.value, discoveredIpv4Peers.value)
   )
 
+  function deriveDeviceTone(input: {
+    isPending: boolean
+    isPairedReady: boolean
+  }): 'yellow' | 'green' | 'gray' {
+    const { isPending, isPairedReady } = input
+    if (isPending) {
+      return 'yellow'
+    }
+    if (isPairedReady) {
+      return 'green'
+    }
+    return 'gray'
+  }
+
   const linkToneByDeviceId = computed(() => {
     const transportPending = getPairedLinkPhases().value
     const pairAwaiting = getPairAwaitingAcceptDeviceIds().value
-    const tones: Record<string, 'red' | 'yellow' | 'green' | 'gray'> = {}
+    const pendingActions = new Set(pendingDeviceActionIds.value)
+    const pairedReady = new Set(appReadyDeviceIds.value)
+    const tones: Record<string, 'yellow' | 'green' | 'gray'> = {}
     for (const device of displayDevices.value) {
-      const id = device.deviceId
-      const rowPending = pendingDeviceActionIds.value.includes(id)
-      const anyPending = rowPending || transportPending.has(id) || pairAwaiting.has(id)
-      if (anyPending) {
-        tones[id] = 'yellow'
-      } else if (appReadyDeviceIds.value.includes(id)) {
-        tones[id] = 'green'
-      } else if (device.isPaired) {
-        tones[id] = 'red'
-      } else {
-        tones[id] = 'gray'
-      }
+      const deviceId = device.deviceId
+      tones[deviceId] = deriveDeviceTone({
+        isPending:
+          pendingActions.has(deviceId) ||
+          transportPending.has(deviceId) ||
+          pairAwaiting.has(deviceId),
+        isPairedReady: pairedReady.has(deviceId)
+      })
     }
     return tones
   })
@@ -133,8 +145,8 @@ export function useConnectPage() {
     addPendingDeviceAction(device.deviceId)
     setPairAwaitingAccept(device.deviceId, true)
     try {
-      const sessionId = await store.connectToDevice(device.deviceId)
-      if (!sessionId) {
+      const targetDeviceId = await store.connectToDevice(device.deviceId)
+      if (!targetDeviceId) {
         pairingStore.pushFeedback('Could not open session for pairing.')
         setPairAwaitingAccept(device.deviceId, false)
         getConnectionRuntime().setAppLinkForDevice(
@@ -149,9 +161,16 @@ export function useConnectPage() {
       const selfOnLan = await resolveSelfOnLanForPairing()
       const initiator = await buildLocalPairInitiatorProfile(selfOnLan)
       await store.sendLanEvent({
-        sessionId,
+        requestId,
+        sourceDeviceId: initiator.deviceId,
+        targetDeviceId,
         eventName: 'pairing.request',
-        payload: { requestId, initiator }
+        payload: {
+          requestId,
+          sourceDeviceId: initiator.deviceId,
+          targetDeviceId,
+          initiator
+        }
       })
     } catch {
       pairingStore.pushFeedback('Pairing request failed.')
@@ -176,10 +195,13 @@ export function useConnectPage() {
       const openedSession = connectedSessions.value.find(
         (session) => session.transport === 'ready' && session.deviceId === device.deviceId
       )
-      if (openedSession?.sessionId) {
+      if (openedSession?.deviceId) {
+        const requestId = crypto.randomUUID()
         await store
           .sendLanEvent({
-            sessionId: openedSession.sessionId,
+            requestId,
+            sourceDeviceId: 'local-device',
+            targetDeviceId: device.deviceId,
             eventName: 'pairing.unpairRequired',
             payload: {
               mode: 'stale',
@@ -212,7 +234,6 @@ export function useConnectPage() {
 
   return {
     displayDevices,
-    appReadyDeviceIds,
     error,
     feedbackMessage,
     linkToneByDeviceId,

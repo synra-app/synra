@@ -27,11 +27,6 @@ export type HooksRuntimeOptions = {
    * Used to drop stale paired rows and surface the peer in discovery UI.
    */
   repairStalePairingAfterInboundFreshConnect?: (event: SessionOpenedEvent) => void | Promise<void>
-  /**
-   * When true, emit `[discovery-pair-debug]` JSON logs for session handshake → pairing sync.
-   * Also enabled if `localStorage SYNRA_DEBUG_PAIR_HANDSHAKE=1`, `SYNRA_DEBUG_PAIR_HANDSHAKE=1`, or `globalThis.__SYNRA_DEBUG_PAIR_HANDSHAKE === true`.
-   */
-  enableDiscoveryPairHandshakeDebug?: boolean
 }
 
 let configuredOptions: HooksRuntimeOptions = {}

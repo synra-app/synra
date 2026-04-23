@@ -1,11 +1,5 @@
 import type { PluginAction, ShareInput, SynraActionPlugin } from '@synra/plugin-sdk'
-import type {
-  ProtocolEnvelope,
-  ProtocolPayloadByType,
-  SynraActionReceipt,
-  SynraErrorCode,
-  SynraRuntimeMessage
-} from '@synra/protocol'
+import type { SynraActionReceipt, SynraErrorCode, SynraRuntimeMessage } from '@synra/protocol'
 import type {
   ResolveRuntimeActionsResult,
   RuntimeActionCandidate,
@@ -15,7 +9,10 @@ import type {
 export type RuntimeMessageEmitter = (message: SynraRuntimeMessage) => void | Promise<void>
 
 export type ExecuteSelectedOptions = {
-  sessionId: string
+  requestId: string
+  replyToRequestId?: string
+  sourceDeviceId: string
+  targetDeviceId: string
   input: ShareInput
   action: PluginAction
   messageId?: string
@@ -43,13 +40,11 @@ function createMessageId(traceId: string, stage: string): string {
   return `${traceId}:${stage}:${randomPart}`
 }
 
-function createRuntimeMessage<TType extends keyof ProtocolPayloadByType>(
-  input: Omit<ProtocolEnvelope<TType, ProtocolPayloadByType[TType]>, 'protocolVersion'>
-): ProtocolEnvelope<TType, ProtocolPayloadByType[TType]> {
+function createRuntimeMessage(input: Record<string, unknown>): SynraRuntimeMessage {
   return {
     ...input,
     protocolVersion: RUNTIME_PROTOCOL_VERSION
-  }
+  } as SynraRuntimeMessage
 }
 
 function withTimeout<T>(task: Promise<T>, timeoutMs: number): Promise<T> {
@@ -158,7 +153,6 @@ export function createPluginRuntimeService(
 
       const received = createRuntimeMessage({
         messageId: createMessageId(traceId, 'received'),
-        sessionId: options.sessionId,
         timestamp: now(),
         type: 'runtime.received',
         payload: {
@@ -170,7 +164,6 @@ export function createPluginRuntimeService(
       if (!plugin) {
         const runtimeError = createRuntimeMessage({
           messageId: createMessageId(traceId, 'error'),
-          sessionId: options.sessionId,
           timestamp: now(),
           type: 'runtime.error',
           payload: {
@@ -194,7 +187,6 @@ export function createPluginRuntimeService(
 
       const started = createRuntimeMessage({
         messageId: createMessageId(traceId, 'started'),
-        sessionId: options.sessionId,
         timestamp: now(),
         type: 'runtime.started',
         payload: {
@@ -214,7 +206,6 @@ export function createPluginRuntimeService(
         )
         const finished = createRuntimeMessage({
           messageId: createMessageId(traceId, 'finished'),
-          sessionId: options.sessionId,
           timestamp: now(),
           type: 'runtime.finished',
           payload: {
@@ -252,7 +243,6 @@ export function createPluginRuntimeService(
 
         const finished = createRuntimeMessage({
           messageId: createMessageId(traceId, 'finished'),
-          sessionId: options.sessionId,
           timestamp: now(),
           type: 'runtime.finished',
           payload: {

@@ -14,23 +14,31 @@ export function createMessageListenersRegistry(): MessageListenersRegistry {
     const normalized: SynraConnectionMessage = {
       eventId: resolveMessageEventId({
         type: 'messageReceived',
-        sessionId: event.sessionId,
+        requestId: event.requestId,
+        sourceDeviceId: event.sourceDeviceId,
+        targetDeviceId: event.targetDeviceId,
         messageId: event.messageId,
         timestamp: event.timestamp
       }),
-      sessionId: event.sessionId,
+      requestId: event.requestId,
+      sourceDeviceId: event.sourceDeviceId,
+      targetDeviceId: event.targetDeviceId,
+      replyToRequestId: event.replyToRequestId,
       messageType: event.messageType,
       payload: event.payload,
       messageId: event.messageId,
-      timestamp: event.timestamp,
-      deviceId
+      timestamp: event.timestamp
     }
 
     for (const listener of listeners) {
-      if (listener.filter?.sessionId && listener.filter.sessionId !== normalized.sessionId) {
+      if (listener.filter?.requestId && listener.filter.requestId !== normalized.requestId) {
         continue
       }
-      if (listener.filter?.deviceId && listener.filter.deviceId !== normalized.deviceId) {
+      if (
+        listener.filter?.deviceId &&
+        listener.filter.deviceId !== normalized.sourceDeviceId &&
+        listener.filter.deviceId !== deviceId
+      ) {
         continue
       }
       if (listener.filter?.messageType && listener.filter.messageType !== normalized.messageType) {

@@ -18,7 +18,7 @@ function createStaticScanAdapter(devices: DiscoveredDevice[]): ConnectionRuntime
       return { state: 'scanning' as const, devices: [...devices] }
     },
     async openSession(_options: OpenSessionOptions) {
-      return { sessionId: 's1', state: 'open' as const, transport: 'tcp' as const }
+      return { deviceId: _options.deviceId, state: 'open' as const, transport: 'tcp' as const }
     },
     async closeSession() {},
     async sendMessage() {},
@@ -60,6 +60,7 @@ test('startDiscovery omits device matching localDiscoveryDeviceId', async () => 
     ipAddress: '192.168.1.2',
     source: 'probe',
     connectable: true,
+    connectCheckAt: 1,
     discoveredAt: 1,
     lastSeenAt: 1
   }
@@ -69,6 +70,7 @@ test('startDiscovery omits device matching localDiscoveryDeviceId', async () => 
     ipAddress: '192.168.1.3',
     source: 'probe',
     connectable: true,
+    connectCheckAt: 1,
     discoveredAt: 1,
     lastSeenAt: 1
   }

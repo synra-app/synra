@@ -18,7 +18,10 @@ export type LanFrame = {
     | 'heartbeat'
     | 'hostRetire'
     | 'memberOffline'
-  sessionId?: string
+  requestId?: string
+  sourceDeviceId?: string
+  targetDeviceId?: string
+  replyToRequestId?: string
   messageId?: string
   timestamp: number
   appId?: string

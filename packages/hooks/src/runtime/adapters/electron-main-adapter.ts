@@ -43,11 +43,11 @@ type MainHooksBridge = {
   listDiscoveredDevices: () => Promise<ListDiscoveredDevicesResult>
   openSession: (
     options: OpenSessionOptions
-  ) => Promise<{ sessionId: string; state: SessionState; transport: 'tcp' }>
-  closeSession: (sessionId?: string) => Promise<unknown>
+  ) => Promise<{ deviceId: string; state: SessionState; transport: 'tcp' }>
+  closeSession: (deviceId?: string) => Promise<unknown>
   sendMessage: (options: SendMessageOptions) => Promise<unknown>
   sendLanEvent: (options: SendLanEventOptions) => Promise<unknown>
-  getSessionState: (sessionId?: string) => Promise<GetSessionStateResult>
+  getSessionState: (deviceId?: string) => Promise<GetSessionStateResult>
   onHostEvent: (listener: (event: HostEvent) => void) => () => void
 }
 
@@ -89,8 +89,8 @@ export function createElectronMainRuntimeAdapter(): ConnectionRuntimeAdapter {
       }))
     }),
     openSession: (options) => bridge.openSession(options),
-    closeSession: async (sessionId) => {
-      await bridge.closeSession(sessionId)
+    closeSession: async (deviceId) => {
+      await bridge.closeSession(deviceId)
     },
     sendMessage: async (options) => {
       await bridge.sendMessage(options)
@@ -98,7 +98,7 @@ export function createElectronMainRuntimeAdapter(): ConnectionRuntimeAdapter {
     sendLanEvent: async (options) => {
       await bridge.sendLanEvent(options)
     },
-    getSessionState: (sessionId) => bridge.getSessionState(sessionId),
+    getSessionState: (deviceId) => bridge.getSessionState(deviceId),
     addDeviceConnectableUpdatedListener: async (
       listener: (event: DeviceConnectableUpdatedEvent) => void
     ) =>
@@ -136,17 +136,30 @@ export function createElectronMainRuntimeAdapter(): ConnectionRuntimeAdapter {
       }),
     addMessageReceivedListener: async (listener: (event: MessageReceivedEvent) => void) =>
       addHostListener((event) => {
-        if (event.type === 'transport.message.received' && event.sessionId) {
+        if (event.type === 'transport.message.received') {
+          const payload =
+            event.payload && typeof event.payload === 'object'
+              ? (event.payload as Record<string, unknown>)
+              : {}
+          const requestId = typeof payload.requestId === 'string' ? payload.requestId : ''
+          const sourceDeviceId =
+            typeof payload.sourceDeviceId === 'string' ? payload.sourceDeviceId : ''
+          const targetDeviceId =
+            typeof payload.targetDeviceId === 'string' ? payload.targetDeviceId : ''
+          if (!requestId || !sourceDeviceId || !targetDeviceId) {
+            return
+          }
           listener({
-            sessionId: event.sessionId,
+            requestId,
+            sourceDeviceId,
+            targetDeviceId,
+            replyToRequestId:
+              typeof payload.replyToRequestId === 'string' ? payload.replyToRequestId : undefined,
             messageId: event.messageId,
             messageType:
               mapMessageTypeFromHostEvent(event) ??
               ('transport.message.received' as SendMessageOptions['messageType']),
-            payload:
-              event.payload && typeof event.payload === 'object' && 'payload' in event.payload
-                ? (event.payload as { payload: unknown }).payload
-                : event.payload,
+            payload: 'payload' in payload ? payload.payload : event.payload,
             timestamp: event.timestamp,
             transport: event.transport
           })
@@ -154,9 +167,20 @@ export function createElectronMainRuntimeAdapter(): ConnectionRuntimeAdapter {
       }),
     addMessageAckListener: async (listener: (event: MessageAckEvent) => void) =>
       addHostListener((event) => {
-        if (event.type === 'transport.message.ack' && event.sessionId && event.messageId) {
+        if (event.type === 'transport.message.ack' && event.messageId) {
+          const payload =
+            event.payload && typeof event.payload === 'object'
+              ? (event.payload as Record<string, unknown>)
+              : {}
+          const requestId = typeof payload.requestId === 'string' ? payload.requestId : ''
+          const targetDeviceId =
+            typeof payload.targetDeviceId === 'string' ? payload.targetDeviceId : ''
+          if (!requestId || !targetDeviceId) {
+            return
+          }
           listener({
-            sessionId: event.sessionId,
+            targetDeviceId,
+            requestId,
             messageId: event.messageId,
             timestamp: event.timestamp,
             transport: event.transport

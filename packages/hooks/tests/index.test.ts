@@ -29,8 +29,9 @@ function createMockAdapter(): ConnectionRuntimeAdapter {
       deviceId: 'device-a',
       name: 'Device A',
       ipAddress: '127.0.0.1',
-      source: 'manual',
+      source: 'probe',
       connectable: true,
+      connectCheckAt: Date.now(),
       discoveredAt: Date.now(),
       lastSeenAt: Date.now()
     }
@@ -48,7 +49,6 @@ function createMockAdapter(): ConnectionRuntimeAdapter {
     },
     async openSession(options: OpenSessionOptions) {
       const event: SessionOpenedEvent = {
-        sessionId: `session-${options.deviceId}`,
         deviceId: options.deviceId,
         host: options.host,
         port: options.port,
@@ -56,12 +56,15 @@ function createMockAdapter(): ConnectionRuntimeAdapter {
         direction: 'inbound'
       }
       sessionOpenedListener?.(event)
-      return { sessionId: event.sessionId, state: 'open', transport: 'tcp' }
+      return { deviceId: event.deviceId, state: 'open', transport: 'tcp' }
     },
     async closeSession() {},
     async sendMessage(options: SendMessageOptions) {
       messageListener?.({
-        sessionId: options.sessionId,
+        requestId: options.requestId,
+        sourceDeviceId: options.sourceDeviceId,
+        targetDeviceId: options.targetDeviceId,
+        replyToRequestId: options.replyToRequestId,
         messageType: options.messageType,
         payload: options.payload,
         timestamp: Date.now(),
@@ -70,7 +73,7 @@ function createMockAdapter(): ConnectionRuntimeAdapter {
       })
     },
     async sendLanEvent(_options: SendLanEventOptions) {},
-    async getSessionState(_sessionId?: string): Promise<GetSessionStateResult> {
+    async getSessionState(_deviceId?: string): Promise<GetSessionStateResult> {
       return { state: 'idle', transport: 'tcp' }
     },
     async addDeviceConnectableUpdatedListener(
@@ -144,8 +147,9 @@ test('transport error closes connected session state', async () => {
               deviceId: 'device-a',
               name: 'Device A',
               ipAddress: '192.168.1.10',
-              source: 'mdns' as const,
+              source: 'probe' as const,
               connectable: true,
+              connectCheckAt: Date.now(),
               discoveredAt: Date.now(),
               lastSeenAt: Date.now()
             }
@@ -160,8 +164,9 @@ test('transport error closes connected session state', async () => {
               deviceId: 'device-a',
               name: 'Device A',
               ipAddress: '192.168.1.10',
-              source: 'mdns' as const,
+              source: 'probe' as const,
               connectable: true,
+              connectCheckAt: Date.now(),
               discoveredAt: Date.now(),
               lastSeenAt: Date.now()
             }
@@ -170,7 +175,6 @@ test('transport error closes connected session state', async () => {
       },
       async openSession(options: OpenSessionOptions) {
         const openedEvent: SessionOpenedEvent = {
-          sessionId: 'session-device-a',
           deviceId: options.deviceId,
           host: options.host,
           port: options.port,
@@ -178,7 +182,7 @@ test('transport error closes connected session state', async () => {
           direction: 'outbound'
         }
         sessionOpenedListener?.(openedEvent)
-        return { sessionId: openedEvent.sessionId, state: 'open', transport: 'tcp' as const }
+        return { deviceId: openedEvent.deviceId, state: 'open', transport: 'tcp' as const }
       },
       async closeSession() {},
       async sendMessage() {},
@@ -222,7 +226,7 @@ test('transport error closes connected session state', async () => {
   expect(transport.transportReadyDeviceIds.value).toContain('device-a')
 
   transportErrorListener?.({
-    sessionId: 'session-device-a',
+    deviceId: 'device-a',
     code: 'SOCKET_CLOSED',
     message: 'socket closed',
     transport: 'tcp'
@@ -230,7 +234,7 @@ test('transport error closes connected session state', async () => {
 
   expect(transport.transportReadyDeviceIds.value).not.toContain('device-a')
   expect(
-    transport.connectedSessions.value.find((session) => session.sessionId === 'session-device-a')
+    transport.connectedSessions.value.find((session) => session.deviceId === 'device-a')
   ).toMatchObject({ transport: 'dead' })
 })
 
@@ -249,8 +253,9 @@ test('startScan clears peer list when discovery returns empty', async () => {
                 deviceId: 'device-a',
                 name: 'Device A',
                 ipAddress: '192.168.1.10',
-                source: 'mdns',
+                source: 'probe',
                 connectable: true,
+                connectCheckAt: Date.now(),
                 discoveredAt: Date.now(),
                 lastSeenAt: Date.now()
               }
@@ -308,4 +313,116 @@ test('startScan clears peer list when discovery returns empty', async () => {
 
   await transport.startScan()
   expect(transport.peers.value).toEqual([])
+})
+
+test('session is not open error marks transport dead and reconnects', async () => {
+  let openCounter = 0
+  let sessionOpenedListener: ((event: SessionOpenedEvent) => void) | undefined
+  configureHooksRuntime({
+    resolveSynraConnectType: () => 'fresh',
+    adapterFactory: () => ({
+      async startDiscovery() {
+        return {
+          state: 'scanning' as const,
+          devices: [
+            {
+              deviceId: 'device-a',
+              name: 'Device A',
+              ipAddress: '192.168.1.10',
+              source: 'probe' as const,
+              connectable: true,
+              connectCheckAt: Date.now(),
+              discoveredAt: Date.now(),
+              lastSeenAt: Date.now()
+            }
+          ]
+        }
+      },
+      async listDiscoveredDevices() {
+        return {
+          state: 'scanning' as const,
+          devices: [
+            {
+              deviceId: 'device-a',
+              name: 'Device A',
+              ipAddress: '192.168.1.10',
+              source: 'probe' as const,
+              connectable: true,
+              connectCheckAt: Date.now(),
+              discoveredAt: Date.now(),
+              lastSeenAt: Date.now()
+            }
+          ]
+        }
+      },
+      async openSession(options: OpenSessionOptions) {
+        openCounter += 1
+        sessionOpenedListener?.({
+          deviceId: options.deviceId,
+          host: options.host,
+          port: options.port,
+          transport: 'tcp',
+          direction: 'outbound'
+        })
+        return {
+          deviceId: options.deviceId,
+          state: 'open',
+          transport: 'tcp'
+        }
+      },
+      async closeSession() {},
+      async sendMessage() {},
+      async sendLanEvent() {
+        throw new Error('Session is not open.')
+      },
+      async getSessionState(): Promise<GetSessionStateResult> {
+        return { state: 'idle', transport: 'tcp' }
+      },
+      async addDeviceConnectableUpdatedListener() {
+        return { remove: async () => {} }
+      },
+      async addDeviceLostListener() {
+        return { remove: async () => {} }
+      },
+      async addSessionOpenedListener(listener: (event: SessionOpenedEvent) => void) {
+        sessionOpenedListener = listener
+        return { remove: async () => {} }
+      },
+      async addSessionClosedListener() {
+        return { remove: async () => {} }
+      },
+      async addMessageReceivedListener() {
+        return { remove: async () => {} }
+      },
+      async addMessageAckListener() {
+        return { remove: async () => {} }
+      },
+      async addTransportErrorListener() {
+        return { remove: async () => {} }
+      },
+      async addLanWireEventReceivedListener() {
+        return { remove: async () => {} }
+      }
+    })
+  })
+  resetConnectionRuntime()
+  const transport = useTransport()
+  await transport.ensureReady()
+  await transport.startScan()
+
+  const firstDeviceId = await transport.connectToDevice('device-a')
+  expect(firstDeviceId).toBe('device-a')
+  await expect(
+    transport.sendLanEvent({
+      requestId: 'r1',
+      sourceDeviceId: 'device-self',
+      targetDeviceId: 'device-a',
+      eventName: 'pairing.request',
+      payload: { requestId: 'r1' }
+    })
+  ).rejects.toThrow('Session is not open.')
+
+  const secondDeviceId = await transport.connectToDevice('device-a')
+  expect(secondDeviceId).toBe('device-a')
+  expect(openCounter).toBeGreaterThanOrEqual(1)
 })

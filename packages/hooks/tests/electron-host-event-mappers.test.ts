@@ -15,7 +15,7 @@ describe('electron host event mappers', () => {
       timestamp: Date.now(),
       type: 'transport.session.opened',
       remote: '10.0.0.102:32100',
-      sessionId: 's1',
+      deviceId: 'device-a',
       payload: {
         deviceId: 'device-a',
         direction: 'inbound',
@@ -27,7 +27,6 @@ describe('electron host event mappers', () => {
     }
 
     expect(mapSessionOpenedHostEvent(event)).toEqual({
-      sessionId: 's1',
       deviceId: 'device-a',
       direction: 'inbound',
       host: '10.0.0.102',
@@ -44,19 +43,22 @@ describe('electron host event mappers', () => {
       timestamp: Date.now(),
       type: 'transport.lan.event.received',
       remote: '10.0.0.2:32100',
-      sessionId: 's9',
       payload: {
+        requestId: 'r1',
+        sourceDeviceId: 'peer-1',
+        targetDeviceId: 'device-self',
         eventName: 'pairing.request',
-        payload: { requestId: 'r1' },
-        fromDeviceId: 'peer-1'
+        payload: { requestId: 'r1' }
       },
       transport: 'tcp'
     }
     expect(mapLanWireEventReceivedHostEvent(event)).toEqual({
-      sessionId: 's9',
+      requestId: 'r1',
+      sourceDeviceId: 'peer-1',
+      targetDeviceId: 'device-self',
+      replyToRequestId: undefined,
       eventName: 'pairing.request',
       eventPayload: { requestId: 'r1' },
-      fromDeviceId: 'peer-1',
       transport: 'tcp'
     })
   })
@@ -67,7 +69,7 @@ describe('electron host event mappers', () => {
       timestamp: Date.now(),
       type: 'transport.session.closed',
       remote: '10.0.0.102:32100',
-      sessionId: 's1',
+      deviceId: 'device-a',
       payload: { reason: 'peer-closed' },
       transport: 'tcp'
     }
@@ -76,14 +78,14 @@ describe('electron host event mappers', () => {
       timestamp: Date.now(),
       type: 'host.heartbeat.timeout',
       remote: '10.0.0.102:32100',
-      sessionId: 's2',
+      deviceId: 'device-a',
       code: 'INBOUND_HEARTBEAT_TIMEOUT',
       transport: 'tcp'
     }
 
     expect(mapSessionClosedHostEvent(closed)?.reason).toBe('peer-closed')
     expect(mapSessionClosedHostEvent(timeout)).toEqual({
-      sessionId: 's2',
+      deviceId: 'device-a',
       reason: 'INBOUND_HEARTBEAT_TIMEOUT',
       transport: 'tcp'
     })
@@ -95,7 +97,7 @@ describe('electron host event mappers', () => {
       timestamp: Date.now(),
       type: 'transport.error',
       remote: '10.0.0.102:32100',
-      sessionId: 's3',
+      deviceId: 'device-a',
       code: 'SOCKET_ERROR',
       payload: { message: 'broken pipe' },
       transport: 'tcp'
@@ -105,13 +107,13 @@ describe('electron host event mappers', () => {
       timestamp: Date.now(),
       type: 'transport.message.received',
       remote: '10.0.0.102:32100',
-      sessionId: 's3',
+      deviceId: 'device-a',
       messageType: 'custom.chat.text',
       transport: 'tcp'
     }
 
     expect(mapTransportErrorHostEvent(transportError)).toEqual({
-      sessionId: 's3',
+      deviceId: 'device-a',
       code: 'SOCKET_ERROR',
       message: 'broken pipe',
       transport: 'tcp'

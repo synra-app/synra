@@ -102,8 +102,8 @@ export function createDeviceDiscoveryService(
   const resolveSessionState = async (
     queryOptions: DeviceSessionGetStateOptions = {}
   ): Promise<DeviceSessionSnapshot> => {
-    if (queryOptions.sessionId) {
-      const inboundState = inboundTransport.getSessionState(queryOptions.sessionId)
+    if (queryOptions.targetDeviceId) {
+      const inboundState = inboundTransport.getSessionState(queryOptions.targetDeviceId)
       if (inboundState) {
         return inboundState
       }
@@ -138,30 +138,32 @@ export function createDeviceDiscoveryService(
       return outboundSession.open(openOptions)
     },
     async closeSession(closeOptions = {}) {
-      const targetSessionId = closeOptions.sessionId
-      if (!targetSessionId) {
+      const targetDeviceId = closeOptions.targetDeviceId
+      if (!targetDeviceId) {
         await outboundSession.close(closeOptions)
         await inboundTransport.closeSession()
         return {
           success: true,
-          sessionId: undefined,
+          targetDeviceId: undefined,
           transport: 'tcp'
         }
       }
       const outboundState = await outboundSession.getState()
-      if (outboundState.sessionId === targetSessionId) {
+      if (outboundState.deviceId === targetDeviceId) {
         return outboundSession.close(closeOptions)
       }
-      await inboundTransport.closeSession(targetSessionId)
+      await inboundTransport.closeSession(targetDeviceId)
       return {
         success: true,
-        sessionId: targetSessionId,
+        targetDeviceId,
         transport: 'tcp'
       }
     },
     async sendMessage(sendOptions) {
-      const outboundState = await outboundSession.getState({ sessionId: sendOptions.sessionId })
-      if (outboundState.state === 'open' && outboundState.sessionId === sendOptions.sessionId) {
+      const outboundState = await outboundSession.getState({
+        targetDeviceId: sendOptions.targetDeviceId
+      })
+      if (outboundState.state === 'open' && outboundState.deviceId === sendOptions.targetDeviceId) {
         return outboundSession.sendMessage(sendOptions)
       }
       const sentViaInbound = await inboundTransport.sendMessage(sendOptions)
@@ -171,13 +173,15 @@ export function createDeviceDiscoveryService(
       return {
         success: true,
         messageId: sendOptions.messageId ?? `${Date.now()}`,
-        sessionId: sendOptions.sessionId,
+        targetDeviceId: sendOptions.targetDeviceId,
         transport: 'tcp'
       }
     },
     async sendLanEvent(sendOptions) {
-      const outboundState = await outboundSession.getState({ sessionId: sendOptions.sessionId })
-      if (outboundState.state === 'open' && outboundState.sessionId === sendOptions.sessionId) {
+      const outboundState = await outboundSession.getState({
+        targetDeviceId: sendOptions.targetDeviceId
+      })
+      if (outboundState.state === 'open' && outboundState.deviceId === sendOptions.targetDeviceId) {
         return outboundSession.sendLanEvent(sendOptions)
       }
       const sentViaInbound = await inboundTransport.sendLanEvent(sendOptions)
@@ -186,7 +190,7 @@ export function createDeviceDiscoveryService(
       }
       return {
         success: true,
-        sessionId: sendOptions.sessionId,
+        targetDeviceId: sendOptions.targetDeviceId,
         transport: 'tcp'
       }
     },

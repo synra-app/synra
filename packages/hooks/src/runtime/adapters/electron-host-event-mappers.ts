@@ -34,7 +34,7 @@ function normalizeTransportErrorMessage(payload: unknown): string {
 }
 
 export function mapSessionOpenedHostEvent(event: HostEvent): SessionOpenedEvent | undefined {
-  if (event.type !== 'transport.session.opened' || !event.sessionId) {
+  if (event.type !== 'transport.session.opened') {
     return undefined
   }
   const payload =
@@ -58,8 +58,7 @@ export function mapSessionOpenedHostEvent(event: HostEvent): SessionOpenedEvent 
   const parsedRemotePort = Number.parseInt(portText ?? '', 10)
 
   return {
-    sessionId: event.sessionId,
-    deviceId,
+    deviceId: deviceId ?? '',
     direction,
     host: hostFromPayload ?? (hostPart.length > 0 ? hostPart : undefined),
     port: Number.isFinite(portFromPayload)
@@ -76,7 +75,7 @@ export function mapSessionOpenedHostEvent(event: HostEvent): SessionOpenedEvent 
 export function mapLanWireEventReceivedHostEvent(
   event: HostEvent
 ): LanWireEventReceivedEvent | undefined {
-  if (event.type !== 'transport.lan.event.received' || !event.sessionId) {
+  if (event.type !== 'transport.lan.event.received') {
     return undefined
   }
   const pl =
@@ -84,26 +83,38 @@ export function mapLanWireEventReceivedHostEvent(
       ? (event.payload as Record<string, unknown>)
       : {}
   const eventName = typeof pl.eventName === 'string' ? pl.eventName : ''
+  const requestId = typeof pl.requestId === 'string' ? pl.requestId : ''
+  const sourceDeviceId = typeof pl.sourceDeviceId === 'string' ? pl.sourceDeviceId : ''
+  const targetDeviceId = typeof pl.targetDeviceId === 'string' ? pl.targetDeviceId : ''
+  if (!requestId || !sourceDeviceId || !targetDeviceId) {
+    return undefined
+  }
   return {
-    sessionId: event.sessionId,
+    requestId,
+    sourceDeviceId,
+    targetDeviceId,
+    replyToRequestId: typeof pl.replyToRequestId === 'string' ? pl.replyToRequestId : undefined,
     eventName,
     eventPayload: pl.payload,
-    fromDeviceId: typeof pl.fromDeviceId === 'string' ? pl.fromDeviceId : undefined,
     transport: event.transport ?? 'tcp'
   }
 }
 
 export function mapSessionClosedHostEvent(event: HostEvent): SessionClosedEvent | undefined {
   if (event.type === 'transport.session.closed') {
+    const payload =
+      event.payload && typeof event.payload === 'object'
+        ? (event.payload as Record<string, unknown>)
+        : {}
     return {
-      sessionId: event.sessionId,
+      deviceId: typeof payload.deviceId === 'string' ? payload.deviceId : event.deviceId,
       reason: readReasonFromPayload(event.payload) ?? 'peer-closed',
       transport: event.transport
     }
   }
   if (event.type === 'host.heartbeat.timeout') {
     return {
-      sessionId: event.sessionId,
+      deviceId: event.deviceId,
       reason: event.code ?? 'host-heartbeat-timeout',
       transport: event.transport
     }
@@ -114,7 +125,7 @@ export function mapSessionClosedHostEvent(event: HostEvent): SessionClosedEvent 
 export function mapTransportErrorHostEvent(event: HostEvent): TransportErrorEvent | undefined {
   if (event.type === 'transport.error') {
     return {
-      sessionId: event.sessionId,
+      deviceId: event.deviceId,
       code: event.code,
       message: normalizeTransportErrorMessage(event.payload),
       transport: event.transport
@@ -122,7 +133,7 @@ export function mapTransportErrorHostEvent(event: HostEvent): TransportErrorEven
   }
   if (event.type === 'host.heartbeat.timeout') {
     return {
-      sessionId: event.sessionId,
+      deviceId: event.deviceId,
       code: event.code ?? 'HOST_HEARTBEAT_TIMEOUT',
       message: 'Peer heartbeat timeout.',
       transport: event.transport

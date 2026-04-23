@@ -12,6 +12,7 @@ import {
   DEVICE_PROFILE_UPDATED_MESSAGE_TYPE,
   isDeviceProfileUpdatedPayload
 } from './device-profile'
+import { shouldExposeDiscoveredDevice } from './discovery-exposure'
 import { normalizeHost } from './host-normalization'
 import { sortDevices } from './device-sort'
 import type { MessageListenersRegistry } from './message-listeners'
@@ -27,6 +28,24 @@ function shouldSuppressTransportErrorMessage(message: string | undefined): boole
   }
   const normalized = message.toLowerCase()
   return normalized.includes('econnrefused')
+}
+
+function removeDeviceByIdentity(
+  devices: Ref<DiscoveredDevice[]>,
+  identity: { deviceId?: string; ipAddress?: string }
+): void {
+  const normalizedIp = normalizeHost(identity.ipAddress ?? '')
+  devices.value = sortDevices(
+    devices.value.filter((device) => {
+      if (identity.deviceId && device.deviceId === identity.deviceId) {
+        return false
+      }
+      if (normalizedIp.length > 0 && normalizeHost(device.ipAddress) === normalizedIp) {
+        return false
+      }
+      return true
+    })
+  )
 }
 
 export async function registerAdapterListeners(options: {
@@ -46,7 +65,7 @@ export async function registerAdapterListeners(options: {
     sessionState,
     error,
     sessionsBook,
-    connectedSessions,
+    connectedSessions: _connectedSessions,
     messageRegistry,
     lanWireRegistry
   } = options
@@ -55,16 +74,19 @@ export async function registerAdapterListeners(options: {
 
   await adapter.addDeviceConnectableUpdatedListener((event) => {
     if (isLocalDiscoveryDeviceId(event.device.deviceId)) {
-      devices.value = sortDevices(
-        devices.value.filter((device) => device.deviceId !== event.device.deviceId)
-      )
+      removeDeviceByIdentity(devices, { deviceId: event.device.deviceId })
       return
     }
     const exclude = getHooksRuntimeOptions().shouldExcludeDiscoveredDevice
     if (typeof exclude === 'function' && exclude(event.device.deviceId)) {
-      devices.value = sortDevices(
-        devices.value.filter((device) => device.deviceId !== event.device.deviceId)
-      )
+      removeDeviceByIdentity(devices, { deviceId: event.device.deviceId })
+      return
+    }
+    if (!shouldExposeDiscoveredDevice(event.device)) {
+      removeDeviceByIdentity(devices, {
+        deviceId: event.device.deviceId,
+        ipAddress: event.device.ipAddress
+      })
       return
     }
     upsertDiscoveredDevice(devices, event.device)
@@ -74,18 +96,7 @@ export async function registerAdapterListeners(options: {
     if (!event.deviceId && !event.ipAddress) {
       return
     }
-    const normalizedIp = normalizeHost(event.ipAddress ?? '')
-    devices.value = sortDevices(
-      devices.value.filter((device) => {
-        if (event.deviceId && device.deviceId === event.deviceId) {
-          return false
-        }
-        if (normalizedIp.length > 0 && normalizeHost(device.ipAddress) === normalizedIp) {
-          return false
-        }
-        return true
-      })
-    )
+    removeDeviceByIdentity(devices, event)
   })
 
   await adapter.addSessionOpenedListener((event) => {
@@ -110,11 +121,11 @@ export async function registerAdapterListeners(options: {
       }
     }
 
-    const currentSessionId = sessionState.value.sessionId
+    const currentDeviceId = sessionState.value.deviceId
     const currentDirection = sessionState.value.direction === 'inbound' ? 'inbound' : 'outbound'
     const shouldReplacePrimarySession =
-      !currentSessionId ||
-      currentSessionId === event.sessionId ||
+      !currentDeviceId ||
+      currentDeviceId === event.deviceId ||
       inferredDirection === 'inbound' ||
       (inferredDirection === 'outbound' && currentDirection !== 'inbound') ||
       sessionState.value.state !== 'open'
@@ -123,7 +134,6 @@ export async function registerAdapterListeners(options: {
         sessionState,
         {
           ...sessionState.value,
-          sessionId: event.sessionId,
           deviceId: event.deviceId,
           host: event.host,
           port: event.port,
@@ -136,10 +146,9 @@ export async function registerAdapterListeners(options: {
     }
     sessionsBook.upsertConnectedSession(
       {
-        sessionId: event.sessionId,
+        deviceId: event.deviceId ?? '',
         transport: 'ready',
         app: 'pending',
-        deviceId: event.deviceId,
         host: event.host,
         port: event.port,
         openedAt: Date.now(),
@@ -151,17 +160,16 @@ export async function registerAdapterListeners(options: {
   })
 
   await adapter.addSessionClosedListener((event) => {
-    const currentSessionId = sessionState.value.sessionId
+    const currentDeviceId = sessionState.value.deviceId
     const shouldAffectPrimarySession =
-      !currentSessionId || !event.sessionId || currentSessionId === event.sessionId
+      !currentDeviceId || !event.deviceId || currentDeviceId === event.deviceId
     if (shouldAffectPrimarySession) {
-      const shouldClearCurrentSession = !currentSessionId || currentSessionId === event.sessionId
+      const shouldClearCurrentSession = !currentDeviceId || currentDeviceId === event.deviceId
       setSessionStateWithTransitionLog(
         sessionState,
         shouldClearCurrentSession
           ? {
               ...sessionState.value,
-              sessionId: undefined,
               deviceId: undefined,
               host: undefined,
               port: undefined,
@@ -176,7 +184,7 @@ export async function registerAdapterListeners(options: {
         { reason: 'session_closed_event' }
       )
     }
-    const closedOpen = sessionsBook.markTransportDead(event.sessionId, Date.now())
+    const closedOpen = sessionsBook.markTransportDead(event.deviceId, Date.now())
     const closedDeviceId = closedOpen?.deviceId
     if (typeof closedDeviceId === 'string' && closedDeviceId.trim().length > 0) {
       setPairAwaitingAccept(closedDeviceId, false)
@@ -185,10 +193,8 @@ export async function registerAdapterListeners(options: {
   })
 
   await adapter.addLanWireEventReceivedListener((event) => {
-    sessionsBook.touchSessionActivity(event.sessionId, Date.now(), 'inbound')
-    const row = connectedSessions.value.find((s) => s.sessionId === event.sessionId)
-    const resolvedFromId = row?.deviceId ?? event.fromDeviceId
-    lanWireRegistry.emitLanWireEvent(event, resolvedFromId)
+    sessionsBook.touchSessionActivity(event.sourceDeviceId, Date.now(), 'inbound')
+    lanWireRegistry.emitLanWireEvent(event, event.sourceDeviceId)
     if (event.eventName === 'device.displayName.changed' && event.eventPayload !== undefined) {
       const pl =
         event.eventPayload && typeof event.eventPayload === 'object'
@@ -207,7 +213,7 @@ export async function registerAdapterListeners(options: {
   })
 
   await adapter.addMessageReceivedListener((event) => {
-    sessionsBook.touchSessionActivity(event.sessionId, Date.now(), 'inbound')
+    sessionsBook.touchSessionActivity(event.sourceDeviceId, Date.now(), 'inbound')
     if (
       event.messageType === DEVICE_PROFILE_UPDATED_MESSAGE_TYPE &&
       isDeviceProfileUpdatedPayload(event.payload)
@@ -222,28 +228,25 @@ export async function registerAdapterListeners(options: {
   })
 
   await adapter.addMessageAckListener((event) => {
-    sessionsBook.touchSessionActivity(event.sessionId, Date.now(), 'outbound')
+    sessionsBook.touchSessionActivity(event.targetDeviceId, Date.now(), 'outbound')
   })
 
   await adapter.addTransportErrorListener((event) => {
     const now = Date.now()
-    const transportErrorSessionId =
-      typeof event.sessionId === 'string' && event.sessionId.length > 0
-        ? event.sessionId
-        : undefined
-    if (transportErrorSessionId) {
-      const currentSessionId = sessionState.value.sessionId
+    const transportErrorDeviceId =
+      typeof event.deviceId === 'string' && event.deviceId.length > 0 ? event.deviceId : undefined
+    if (transportErrorDeviceId) {
+      const currentDeviceId = sessionState.value.deviceId
       const shouldAffectPrimarySession =
-        !currentSessionId || currentSessionId === transportErrorSessionId
+        !currentDeviceId || currentDeviceId === transportErrorDeviceId
       if (shouldAffectPrimarySession) {
         const shouldClearCurrentSession =
-          !currentSessionId || currentSessionId === transportErrorSessionId
+          !currentDeviceId || currentDeviceId === transportErrorDeviceId
         setSessionStateWithTransitionLog(
           sessionState,
           shouldClearCurrentSession
             ? {
                 ...sessionState.value,
-                sessionId: undefined,
                 deviceId: undefined,
                 host: undefined,
                 port: undefined,
@@ -258,7 +261,7 @@ export async function registerAdapterListeners(options: {
           { reason: 'transport_error_event' }
         )
       }
-      sessionsBook.markTransportDead(transportErrorSessionId, now)
+      sessionsBook.markTransportDead(transportErrorDeviceId, now)
     }
     if (shouldSuppressTransportErrorMessage(event.message)) {
       return
@@ -268,13 +271,12 @@ export async function registerAdapterListeners(options: {
 
   const snapshot = await adapter.getSessionState()
   setSessionStateWithTransitionLog(sessionState, snapshot, { reason: 'adapter_snapshot' })
-  if (snapshot.state === 'open' && snapshot.sessionId) {
+  if (snapshot.state === 'open' && snapshot.deviceId) {
     sessionsBook.upsertConnectedSession(
       {
-        sessionId: snapshot.sessionId,
+        deviceId: snapshot.deviceId,
         transport: 'ready',
         app: 'pending',
-        deviceId: snapshot.deviceId,
         host: snapshot.host,
         port: snapshot.port,
         openedAt: snapshot.openedAt,

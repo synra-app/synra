@@ -42,10 +42,10 @@ export class ConnectedSessionsBook {
 
     this.connectedSessions.value = nextView
 
-    const retainedIds = new Set(nextView.map((item) => item.sessionId))
-    for (const sessionId of this.connectedSessionMap.keys()) {
-      if (!retainedIds.has(sessionId)) {
-        this.connectedSessionMap.delete(sessionId)
+    const retainedIds = new Set(nextView.map((item) => item.deviceId))
+    for (const deviceId of this.connectedSessionMap.keys()) {
+      if (!retainedIds.has(deviceId)) {
+        this.connectedSessionMap.delete(deviceId)
       }
     }
   }
@@ -74,14 +74,14 @@ export class ConnectedSessionsBook {
     next: RuntimeConnectedSession,
     options: { immediate?: boolean } = {}
   ): void {
-    const current = this.connectedSessionMap.get(next.sessionId)
+    const current = this.connectedSessionMap.get(next.deviceId)
     const merged = current
       ? {
           ...current,
           ...next
         }
       : next
-    this.connectedSessionMap.set(next.sessionId, merged)
+    this.connectedSessionMap.set(next.deviceId, merged)
 
     this.scheduleConnectedSessionsRebuild(Boolean(options.immediate))
   }
@@ -91,13 +91,13 @@ export class ConnectedSessionsBook {
    * transport was still usable, so callers can clear pairing UI keyed by `deviceId`.
    */
   markTransportDead(
-    sessionId: string | undefined,
+    deviceId: string | undefined,
     reasonAt: number
   ): RuntimeConnectedSession | undefined {
-    if (!sessionId) {
+    if (!deviceId) {
       return undefined
     }
-    const current = this.connectedSessionMap.get(sessionId)
+    const current = this.connectedSessionMap.get(deviceId)
     if (!current) {
       return undefined
     }
@@ -126,11 +126,11 @@ export class ConnectedSessionsBook {
   }
 
   setSessionAppLink(
-    sessionId: string,
+    deviceId: string,
     app: AppLinkState,
     options: { lastAppError?: string; immediate?: boolean } = {}
   ): void {
-    const current = this.connectedSessionMap.get(sessionId)
+    const current = this.connectedSessionMap.get(deviceId)
     if (!current || current.transport === 'dead') {
       return
     }
@@ -159,17 +159,17 @@ export class ConnectedSessionsBook {
         continue
       }
       if (session.deviceId === trimmed) {
-        this.setSessionAppLink(session.sessionId, app, { ...options, immediate: true })
+        this.setSessionAppLink(session.deviceId, app, { ...options, immediate: true })
       }
     }
   }
 
   touchSessionActivity(
-    sessionId: string,
+    deviceId: string,
     updatedAt: number,
     fallbackDirection: 'inbound' | 'outbound'
   ): void {
-    const existing = this.connectedSessionMap.get(sessionId)
+    const existing = this.connectedSessionMap.get(deviceId)
     if (!existing || existing.transport !== 'ready') {
       return
     }

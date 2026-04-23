@@ -1,3 +1,4 @@
+import { lookup } from 'node:dns/promises'
 import { Bonjour } from 'bonjour-service'
 import type { DiscoveredDevice } from '../../../../../shared/protocol/types'
 import { DEFAULT_MDNS_SERVICE_TYPE } from '../../core/constants'
@@ -30,11 +31,38 @@ export function createMdnsDiscoveryStrategy(): DiscoveryStrategy {
     async discover(context: DiscoveryContext): Promise<DiscoveredDevice[]> {
       const typeSpec = parseMdnsServiceType(context.options.mdnsServiceType)
       const devicesByIp = new Map<string, DiscoveredDevice>()
+      const pendingHostnameResolutions: Promise<void>[] = []
       const bonjour = new Bonjour()
       const browser = bonjour.find({
         type: typeSpec.type,
         protocol: typeSpec.protocol
       })
+      const pushCandidate = (candidate: string | undefined, port?: number) => {
+        const normalizedIp = normalizeRemoteIp(candidate)
+        if (normalizedIp && !normalizedIp.includes(':')) {
+          devicesByIp.set(normalizedIp, toProbeCandidate(normalizedIp, 'mdns', port))
+          return
+        }
+        if (!candidate || candidate.trim().length === 0) {
+          return
+        }
+        // Some Android NSD stacks expose hostnames (e.g. *.local) instead of IPv4 addresses.
+        // Resolve hostname to IPv4 so Electron can still probe Synra peers.
+        const hostname = candidate.trim().replace(/\.$/, '')
+        if (hostname.includes(':')) {
+          return
+        }
+        pendingHostnameResolutions.push(
+          lookup(hostname, { family: 4 })
+            .then((resolved) => {
+              const ip = normalizeRemoteIp(resolved.address)
+              if (ip && !ip.includes(':')) {
+                devicesByIp.set(ip, toProbeCandidate(ip, 'mdns', port))
+              }
+            })
+            .catch(() => undefined)
+        )
+      }
       const onUp = (service: {
         addresses?: string[]
         referer?: { address?: string }
@@ -52,11 +80,7 @@ export function createMdnsDiscoveryStrategy(): DiscoveryStrategy {
           service.host ?? ''
         ]
         for (const candidate of candidates) {
-          const normalizedIp = normalizeRemoteIp(candidate)
-          if (!normalizedIp || normalizedIp.length === 0 || normalizedIp.includes(':')) {
-            continue
-          }
-          devicesByIp.set(normalizedIp, toProbeCandidate(normalizedIp, 'mdns', service.port))
+          pushCandidate(candidate, service.port)
         }
       }
       browser.on('up', onUp)
@@ -67,6 +91,7 @@ export function createMdnsDiscoveryStrategy(): DiscoveryStrategy {
 
       browser.stop()
       bonjour.destroy()
+      await Promise.allSettled(pendingHostnameResolutions)
       return [...devicesByIp.values()]
     }
   }

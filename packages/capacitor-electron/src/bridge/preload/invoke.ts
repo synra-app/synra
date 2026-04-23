@@ -63,7 +63,7 @@ function validatePayload(method: string, payload: unknown): void {
   if (method === BRIDGE_METHODS.runtimeExecute && !validateRuntimeExecutePayload(payload)) {
     throw new BridgeError(
       BRIDGE_ERROR_CODES.invalidParams,
-      'runtime.execute expects { sessionId, input, action }.'
+      'runtime.execute expects { requestId, sourceDeviceId, targetDeviceId, input, action }.'
     )
   }
 
@@ -80,7 +80,7 @@ function validatePayload(method: string, payload: unknown): void {
   ) {
     throw new BridgeError(
       BRIDGE_ERROR_CODES.invalidParams,
-      'connection.sendMessage expects { sessionId, messageType, payload, messageId? }.'
+      'connection.sendMessage expects { requestId, sourceDeviceId, targetDeviceId, messageType, payload, messageId? }.'
     )
   }
 
@@ -90,7 +90,7 @@ function validatePayload(method: string, payload: unknown): void {
   ) {
     throw new BridgeError(
       BRIDGE_ERROR_CODES.invalidParams,
-      'connection.sendLanEvent expects { sessionId, eventName, payload?, eventId?, schemaVersion? }.'
+      'connection.sendLanEvent expects { requestId, sourceDeviceId, targetDeviceId, eventName, payload?, eventId?, schemaVersion? }.'
     )
   }
 }

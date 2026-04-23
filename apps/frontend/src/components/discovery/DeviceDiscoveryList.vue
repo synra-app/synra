@@ -8,7 +8,7 @@ defineProps<{
   devices: DisplayDevice[]
   loading: boolean
   actionPendingDeviceIds: string[]
-  linkToneByDeviceId: Record<string, 'red' | 'yellow' | 'green' | 'gray'>
+  linkToneByDeviceId: Record<string, 'yellow' | 'green' | 'gray'>
 }>()
 
 const emit = defineEmits<{
@@ -35,15 +35,12 @@ function onUnpair(device: DisplayDevice): void {
   closeDetails()
 }
 
-function dotClass(tone: 'red' | 'yellow' | 'green' | 'gray' | undefined): string {
+function dotClass(tone: 'yellow' | 'green' | 'gray' | undefined): string {
   if (tone === 'green') {
     return 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.7)]'
   }
   if (tone === 'yellow') {
     return 'bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.7)]'
-  }
-  if (tone === 'red') {
-    return 'bg-rose-500 shadow-[0_0_6px_rgba(244,63,94,0.55)]'
   }
   return 'bg-slate-500 shadow-[0_0_5px_rgba(148,163,184,0.45)]'
 }

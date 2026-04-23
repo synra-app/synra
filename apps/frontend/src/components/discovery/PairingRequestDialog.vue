@@ -49,9 +49,18 @@ async function onAccept(): Promise<void> {
         : recordBase
     )
     await lanStore.sendLanEvent({
-      sessionId: current.sessionId,
+      requestId: crypto.randomUUID(),
+      sourceDeviceId: current.targetDeviceId,
+      targetDeviceId: current.sourceDeviceId,
+      replyToRequestId: current.requestId,
       eventName: 'pairing.response',
-      payload: { requestId: current.requestId, accepted: true }
+      payload: {
+        requestId: crypto.randomUUID(),
+        sourceDeviceId: current.targetDeviceId,
+        targetDeviceId: current.sourceDeviceId,
+        replyToRequestId: current.requestId,
+        accepted: true
+      }
     })
     setPairAwaitingAccept(current.initiator.deviceId, false)
     pairingStore.bumpPairedList()
@@ -69,9 +78,19 @@ async function onReject(): Promise<void> {
   busy.value = true
   try {
     await lanStore.sendLanEvent({
-      sessionId: current.sessionId,
+      requestId: crypto.randomUUID(),
+      sourceDeviceId: current.targetDeviceId,
+      targetDeviceId: current.sourceDeviceId,
+      replyToRequestId: current.requestId,
       eventName: 'pairing.response',
-      payload: { requestId: current.requestId, accepted: false, reason: 'Declined' }
+      payload: {
+        requestId: crypto.randomUUID(),
+        sourceDeviceId: current.targetDeviceId,
+        targetDeviceId: current.sourceDeviceId,
+        replyToRequestId: current.requestId,
+        accepted: false,
+        reason: 'Declined'
+      }
     })
   } catch {
     // Session may already be half-closed; still tear down UI and TCP below.

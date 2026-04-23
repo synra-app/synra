@@ -4,8 +4,8 @@ import type { LengthPrefixedJsonCodec } from '../protocol/lan-frame.codec'
 export type ProbeSocketLease = {
   socket: Socket
   codec: LengthPrefixedJsonCodec
-  /** Synra session id from connect / connectAck. */
-  sessionId: string
+  /** Peer hashed device id identified during probe. */
+  deviceId?: string
   displayName?: string
 }
 

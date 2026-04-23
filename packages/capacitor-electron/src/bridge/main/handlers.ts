@@ -36,7 +36,10 @@ export function createBridgeHandlers(deps: BridgeHandlerDependencies): BridgeHan
       deps.pluginRuntimeService.resolveActions(request.payload.input),
     [BRIDGE_METHODS.runtimeExecute]: async (request) =>
       deps.pluginRuntimeService.executeSelected({
-        sessionId: request.payload.sessionId,
+        requestId: request.payload.requestId,
+        sourceDeviceId: request.payload.sourceDeviceId,
+        targetDeviceId: request.payload.targetDeviceId,
+        replyToRequestId: request.payload.replyToRequestId,
         input: request.payload.input,
         action: request.payload.action,
         messageId: request.payload.messageId,

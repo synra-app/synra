@@ -3,7 +3,6 @@ import type { SynraMessageType } from '@synra/protocol'
 
 export type RuntimeSessionState = {
   state: 'idle' | 'connecting' | 'open' | 'closed' | 'error'
-  sessionId?: string
   deviceId?: string
   host?: string
   port?: number
@@ -16,14 +15,13 @@ export type RuntimeSessionState = {
 /** Physical TCP + Synra transport: `ready` means socket is up and usable for frames. */
 export type TransportLinkState = 'idle' | 'handshaking' | 'ready' | 'dead'
 
-/** Application-level link (pairing, gating, UI). Does not imply TCP is open. */
+/** Application-level link (pairing, gating, UI). Does not imply TCP is open or any specific color. */
 export type AppLinkState = 'disconnected' | 'pending' | 'connected' | 'failed'
 
 export type RuntimeConnectedSession = {
-  sessionId: string
+  deviceId: string
   transport: TransportLinkState
   app: AppLinkState
-  deviceId?: string
   host?: string
   port?: number
   openedAt?: number
@@ -65,43 +63,53 @@ export type SynraDiscoveryStartOptions = {
 
 export type SynraConnectionMessage = {
   eventId: string
-  sessionId: string
+  requestId: string
+  sourceDeviceId: string
+  targetDeviceId: string
+  replyToRequestId?: string
   messageType: SynraMessageType
   payload: unknown
   messageId?: string
   timestamp: number
-  deviceId?: string
 }
 
 export type SynraConnectionFilter = {
-  sessionId?: string
+  requestId?: string
   deviceId?: string
   messageType?: SynraMessageType
 }
 
 export type SynraConnectionSendInput = {
-  sessionId: string
+  requestId: string
+  sourceDeviceId: string
+  targetDeviceId: string
+  replyToRequestId?: string
   messageType: SynraMessageType
   payload: unknown
   messageId?: string
 }
 
 export type SynraLanWireEvent = {
-  sessionId: string
+  requestId: string
+  sourceDeviceId: string
+  targetDeviceId: string
+  replyToRequestId?: string
   eventName: string
   payload: unknown
-  fromDeviceId?: string
   transport: 'tcp'
 }
 
 export type SynraLanWireFilter = {
-  sessionId?: string
+  requestId?: string
   deviceId?: string
   eventName?: string
 }
 
 export type SynraLanWireSendInput = {
-  sessionId: string
+  requestId: string
+  sourceDeviceId: string
+  targetDeviceId: string
+  replyToRequestId?: string
   eventName: string
   payload?: unknown
   eventId?: string

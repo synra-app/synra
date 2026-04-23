@@ -159,7 +159,6 @@ extension DeviceConnectionPluginCore {
                 }
                 let incomingSynraConnectPayload: [String: Any] = connectPayload ?? [:]
                 let opened: [String: Any] = [
-                    "sessionId": sessionId,
                     "deviceId": canonicalForOpened,
                     "direction": "inbound",
                     "transport": "tcp",
@@ -187,7 +186,10 @@ extension DeviceConnectionPluginCore {
                 let payload = frame["payload"] as? [String: Any]
                 let messageId = frame["messageId"] as? String
                 self.onMessageReceived?([
-                    "sessionId": establishedSessionId,
+                    "requestId": payload?["requestId"] as Any,
+                    "sourceDeviceId": payload?["sourceDeviceId"] as Any,
+                    "targetDeviceId": payload?["targetDeviceId"] as Any,
+                    "replyToRequestId": payload?["replyToRequestId"] as Any,
                     "messageId": messageId as Any,
                     "messageType": payload?["messageType"] as? String ?? "transport.message.received",
                     "payload": payload?["payload"] as Any,
@@ -208,7 +210,10 @@ extension DeviceConnectionPluginCore {
                 let pl = frame["payload"] as? [String: Any]
                 let name = pl?["eventName"] as? String ?? ""
                 self.onLanWireEventReceived?([
-                    "sessionId": establishedSessionId,
+                    "requestId": pl?["requestId"] as Any,
+                    "sourceDeviceId": pl?["sourceDeviceId"] as Any,
+                    "targetDeviceId": pl?["targetDeviceId"] as Any,
+                    "replyToRequestId": pl?["replyToRequestId"] as Any,
                     "eventName": name,
                     "eventPayload": pl?["payload"] as Any,
                     "transport": "tcp",
@@ -245,7 +250,7 @@ extension DeviceConnectionPluginCore {
         }
         if emitSessionClosed, context.sessionId != nil {
             onSessionClosed?([
-                "sessionId": context.sessionId as Any,
+                "deviceId": context.canonicalDeviceId as Any,
                 "reason": reason,
                 "transport": "tcp",
             ])

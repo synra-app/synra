@@ -3,7 +3,6 @@ export * from './lan-events'
 export const PROTOCOL_VERSION = '1.0' as const
 
 export type DeviceId = string
-export type SessionId = string
 export type TraceId = string
 export type MessageId = string
 export type ActionId = string
@@ -23,8 +22,6 @@ export type TransportMessageType =
   | 'transport.message.ack'
   | 'transport.error'
 
-export type ClusterSessionMessageType = 'session.open' | 'session.close' | 'session.keepalive'
-
 export type RelayMessageType = 'relay.request' | 'relay.ack' | 'relay.result'
 
 export type ClusterHostMessageType =
@@ -43,7 +40,6 @@ export type CustomMessageType = `custom.${string}`
 export type SynraMessageType =
   | LegacySynraMessageType
   | TransportMessageType
-  | ClusterSessionMessageType
   | RelayMessageType
   | ClusterHostMessageType
   | ElectionMessageType
@@ -99,21 +95,23 @@ export type ActionFailedPayload = {
 }
 
 export type TransportSessionOpenedPayload = {
-  sessionId: SessionId
-  deviceId?: DeviceId
+  deviceId: DeviceId
   host?: string
   port?: number
   openedAt: number
 }
 
 export type TransportSessionClosedPayload = {
-  sessionId: SessionId
+  deviceId: DeviceId
   closedAt: number
   reason?: string
 }
 
 export type TransportMessageReceivedPayload = {
-  sessionId: SessionId
+  requestId: string
+  sourceDeviceId: DeviceId
+  targetDeviceId: DeviceId
+  replyToRequestId?: string
   messageId?: MessageId
   messageType: SynraMessageType
   payload: unknown
@@ -122,13 +120,14 @@ export type TransportMessageReceivedPayload = {
 }
 
 export type TransportMessageAckPayload = {
-  sessionId: SessionId
+  requestId: string
+  targetDeviceId: DeviceId
   messageId: MessageId
   timestamp: number
 }
 
 export type TransportErrorPayload = {
-  sessionId?: SessionId
+  deviceId?: DeviceId
   code: SynraErrorCode | 'TRANSPORT_IO_ERROR'
   message: string
   retryable?: boolean
@@ -138,17 +137,6 @@ export type TransportErrorPayload = {
 export type SessionOpenPayload = {
   nodeId: DeviceId
   requestedAt: number
-}
-
-export type SessionClosePayload = {
-  sessionId: SessionId
-  reason?: string
-  closedAt: number
-}
-
-export type SessionKeepalivePayload = {
-  sessionId: SessionId
-  sentAt: number
 }
 
 export type RelayRequestPayload = {
@@ -184,7 +172,7 @@ export type HostRetirePayload = {
 
 export type HostMemberOfflinePayload = {
   nodeId: DeviceId
-  sessionId?: SessionId
+  requestId?: string
   offlineAt: number
   reason?: string
 }
@@ -227,8 +215,6 @@ export type SynraCrossDevicePayloadByType = {
   'transport.message.ack': TransportMessageAckPayload
   'transport.error': TransportErrorPayload
   'session.open': SessionOpenPayload
-  'session.close': SessionClosePayload
-  'session.keepalive': SessionKeepalivePayload
   'relay.request': RelayRequestPayload
   'relay.ack': RelayAckPayload
   'relay.result': RelayResultPayload
@@ -248,8 +234,9 @@ export type SynraCrossDeviceMessage<
   TPayload = SynraCrossDevicePayloadByType[TType]
 > = {
   protocolVersion: typeof PROTOCOL_VERSION
+  requestId: string
+  replyToRequestId?: string
   messageId: MessageId
-  sessionId: SessionId
   traceId: TraceId
   type: TType
   sentAt: number
@@ -261,8 +248,9 @@ export type SynraCrossDeviceMessage<
 
 export type ProtocolEnvelope<TType extends ProtocolMessageType, TPayload> = {
   protocolVersion: typeof PROTOCOL_VERSION
+  requestId: string
+  replyToRequestId?: string
   messageId: MessageId
-  sessionId: SessionId
   timestamp: number
   type: TType
   payload: TPayload

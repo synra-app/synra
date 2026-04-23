@@ -5,7 +5,8 @@ import type { PairInitiatorProfile } from '../lib/pair-protocol'
 
 export type PairingIncoming = {
   requestId: string
-  sessionId: string
+  sourceDeviceId: string
+  targetDeviceId: string
   initiator: PairInitiatorProfile
 }
 

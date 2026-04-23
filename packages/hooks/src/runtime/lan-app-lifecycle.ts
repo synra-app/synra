@@ -3,6 +3,7 @@ import type { Ref } from 'vue'
 import type { RuntimeConnectedSession } from '../types'
 import type { ConnectionRuntimeAdapter } from './adapter'
 import { getHooksRuntimeOptions, isLocalDiscoveryDeviceId } from './config'
+import { filterExposedDiscoveredDevices } from './discovery-exposure'
 import { sortDevices } from './device-sort'
 import { normalizeHost } from './host-normalization'
 import { pruneStalePairAwaitingForOpenSessions } from './pair-awaiting-prune'
@@ -31,12 +32,14 @@ export async function registerLanTransportAppLifecycle(options: {
     const exclude = getHooksRuntimeOptions().shouldExcludeDiscoveredDevice
     const shouldDrop = (deviceId: string) =>
       isLocalDiscoveryDeviceId(deviceId) || (typeof exclude === 'function' && exclude(deviceId))
-    const rows = list.devices
-      .filter((d) => !shouldDrop(d.deviceId))
-      .map((d) => ({
-        ...d,
-        ipAddress: normalizeHost(d.ipAddress)
-      }))
+    const rows = filterExposedDiscoveredDevices(
+      list.devices
+        .filter((d) => !shouldDrop(d.deviceId))
+        .map((d) => ({
+          ...d,
+          ipAddress: normalizeHost(d.ipAddress)
+        }))
+    )
     options.devices.value = sortDevices(rows)
     pruneStalePairAwaitingForOpenSessions(options.devices, options.connectedSessions)
   })

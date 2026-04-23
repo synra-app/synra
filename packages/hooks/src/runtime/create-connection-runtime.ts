@@ -32,10 +32,10 @@ export type ConnectionRuntime = {
   ensureListeners(): Promise<void>
   startDiscovery(options?: SynraDiscoveryStartOptions): Promise<void>
   openSession(options: RuntimeOpenSessionInput): Promise<void>
-  closeSession(sessionId?: string): Promise<void>
+  closeSession(deviceId?: string): Promise<void>
   sendMessage(input: SynraConnectionSendInput): Promise<void>
   sendLanEvent(input: SynraLanWireSendInput): Promise<void>
-  setSessionAppLink(sessionId: string, app: AppLinkState, lastAppError?: string): void
+  setSessionAppLink(deviceId: string, app: AppLinkState, lastAppError?: string): void
   setAppLinkForDevice(deviceId: string, app: AppLinkState, lastAppError?: string): void
   onMessage(
     handler: (message: SynraConnectionMessage) => void | Promise<void>,
@@ -120,8 +120,8 @@ export function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): Conn
     listenersRegistered = true
   }
 
-  function setSessionAppLink(sessionId: string, app: AppLinkState, lastAppError?: string): void {
-    sessionsBook.setSessionAppLink(sessionId, app, { lastAppError, immediate: true })
+  function setSessionAppLink(deviceId: string, app: AppLinkState, lastAppError?: string): void {
+    sessionsBook.setSessionAppLink(deviceId, app, { lastAppError, immediate: true })
   }
 
   function setAppLinkForDevice(deviceId: string, app: AppLinkState, lastAppError?: string): void {

@@ -18,16 +18,6 @@ export async function registerPairingProtocol(pinia: Pinia): Promise<void> {
   const runtime = getConnectionRuntime()
   await runtime.ensureListeners()
   const pairingStore = usePairingStore(pinia)
-  const findDeviceIdByTransportReadySessionId = (sessionId: string): string | undefined => {
-    const match = runtime.connectedSessions.value.find(
-      (session) =>
-        session.sessionId === sessionId &&
-        session.transport === 'ready' &&
-        typeof session.deviceId === 'string' &&
-        session.deviceId.length > 0
-    )
-    return match?.deviceId
-  }
   const unpairLocalOnly = async (deviceId: string, reason: string): Promise<void> => {
     await removePairedDeviceRecord(deviceId)
     const next = await listPairedDeviceRecords()
@@ -49,7 +39,8 @@ export async function registerPairingProtocol(pinia: Pinia): Promise<void> {
       }
       pairingStore.setIncoming({
         requestId: evt.payload.requestId,
-        sessionId: evt.sessionId,
+        sourceDeviceId: evt.sourceDeviceId,
+        targetDeviceId: evt.targetDeviceId,
         initiator: evt.payload.initiator
       })
       setPairAwaitingAccept(evt.payload.initiator.deviceId, true)
@@ -63,7 +54,12 @@ export async function registerPairingProtocol(pinia: Pinia): Promise<void> {
       if (!pl || typeof pl !== 'object') {
         return
       }
-      const requestId = (pl as { requestId?: unknown }).requestId
+      const requestIdCandidate = (pl as { replyToRequestId?: unknown; requestId?: unknown })
+        .replyToRequestId
+      const requestId =
+        typeof requestIdCandidate === 'string'
+          ? requestIdCandidate
+          : (pl as { requestId?: unknown }).requestId
       const accepted = (pl as { accepted?: unknown }).accepted
       if (typeof requestId !== 'string' || typeof accepted !== 'boolean') {
         return
@@ -100,14 +96,11 @@ export async function registerPairingProtocol(pinia: Pinia): Promise<void> {
         setPairedDeviceConnecting(rejected.target.deviceId, false)
         runtime.setAppLinkForDevice(rejected.target.deviceId, 'failed', 'Pairing was declined.')
       } else {
-        const sid = evt.sessionId
-        if (typeof sid === 'string' && sid.length > 0) {
-          const deviceId = findDeviceIdByTransportReadySessionId(sid)
-          if (deviceId) {
-            setPairAwaitingAccept(deviceId, false)
-            setPairedDeviceConnecting(deviceId, false)
-            runtime.setAppLinkForDevice(deviceId, 'failed', 'Pairing was declined.')
-          }
+        const declinedDeviceId = evt.sourceDeviceId
+        if (declinedDeviceId) {
+          setPairAwaitingAccept(declinedDeviceId, false)
+          setPairedDeviceConnecting(declinedDeviceId, false)
+          runtime.setAppLinkForDevice(declinedDeviceId, 'failed', 'Pairing was declined.')
         }
       }
       const reason =
@@ -151,7 +144,7 @@ export async function registerPairingProtocol(pinia: Pinia): Promise<void> {
 
   runtime.onLanWireEvent(
     async (evt) => {
-      const deviceId = findDeviceIdByTransportReadySessionId(evt.sessionId)
+      const deviceId = evt.sourceDeviceId
       if (!deviceId) {
         return
       }

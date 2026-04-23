@@ -16,6 +16,14 @@ const CLOSE_SESSION_ERROR_MESSAGE = 'Failed to close session.'
 const SEND_MESSAGE_ERROR_MESSAGE = 'Failed to send message.'
 const SEND_LAN_EVENT_ERROR_MESSAGE = 'Failed to send LAN event.'
 
+function isSessionNotOpenFailure(unknownError: unknown): boolean {
+  const message = unknownToErrorMessage(unknownError, '')
+  if (message.length === 0) {
+    return false
+  }
+  return message.toLowerCase().includes('session is not open')
+}
+
 export function createSessionOperationsModule(options: {
   adapter: ConnectionRuntimeAdapter
   error: Ref<string | null>
@@ -23,7 +31,7 @@ export function createSessionOperationsModule(options: {
   sessionsBook: ConnectedSessionsBook
 }): {
   openSession(options: RuntimeOpenSessionInput): Promise<void>
-  closeSession(sessionId?: string): Promise<void>
+  closeSession(deviceId?: string): Promise<void>
   sendMessage(input: SynraConnectionSendInput): Promise<void>
   sendLanEvent(input: SynraLanWireSendInput): Promise<void>
 } {
@@ -70,16 +78,15 @@ export function createSessionOperationsModule(options: {
     }
   }
 
-  async function closeSession(sessionId?: string): Promise<void> {
+  async function closeSession(deviceId?: string): Promise<void> {
     try {
-      await adapter.closeSession(sessionId)
+      await adapter.closeSession(deviceId)
       const shouldClearCurrentSession =
-        !sessionState.value.sessionId || !sessionId || sessionState.value.sessionId === sessionId
+        !sessionState.value.deviceId || !deviceId || sessionState.value.deviceId === deviceId
       setSessionStateWithTransitionLog(
         sessionState,
         {
           ...sessionState.value,
-          sessionId: shouldClearCurrentSession ? undefined : sessionState.value.sessionId,
           deviceId: shouldClearCurrentSession ? undefined : sessionState.value.deviceId,
           host: shouldClearCurrentSession ? undefined : sessionState.value.host,
           port: shouldClearCurrentSession ? undefined : sessionState.value.port,
@@ -88,7 +95,7 @@ export function createSessionOperationsModule(options: {
         },
         { reason: 'manual_close_session' }
       )
-      sessionsBook.markTransportDead(sessionId, Date.now())
+      sessionsBook.markTransportDead(deviceId, Date.now())
       error.value = null
     } catch (unknownError) {
       error.value = unknownToErrorMessage(unknownError, CLOSE_SESSION_ERROR_MESSAGE)
@@ -97,15 +104,36 @@ export function createSessionOperationsModule(options: {
 
   async function sendMessage(input: SynraConnectionSendInput): Promise<void> {
     try {
-      sessionsBook.touchSessionActivity(input.sessionId, Date.now(), 'outbound')
+      sessionsBook.touchSessionActivity(input.targetDeviceId, Date.now(), 'outbound')
       await adapter.sendMessage({
-        sessionId: input.sessionId,
+        requestId: input.requestId,
+        sourceDeviceId: input.sourceDeviceId,
+        targetDeviceId: input.targetDeviceId,
+        replyToRequestId: input.replyToRequestId,
         messageId: input.messageId,
         messageType: input.messageType,
         payload: input.payload
       })
       error.value = null
     } catch (unknownError) {
+      if (isSessionNotOpenFailure(unknownError)) {
+        const now = Date.now()
+        sessionsBook.markTransportDead(input.targetDeviceId, now)
+        if (!sessionState.value.deviceId || sessionState.value.deviceId === input.targetDeviceId) {
+          setSessionStateWithTransitionLog(
+            sessionState,
+            {
+              ...sessionState.value,
+              deviceId: undefined,
+              host: undefined,
+              port: undefined,
+              state: 'closed',
+              closedAt: now
+            },
+            { reason: 'send_message_connection_not_open' }
+          )
+        }
+      }
       error.value = unknownToErrorMessage(unknownError, SEND_MESSAGE_ERROR_MESSAGE)
       throw unknownError
     }
@@ -113,9 +141,12 @@ export function createSessionOperationsModule(options: {
 
   async function sendLanEvent(input: SynraLanWireSendInput): Promise<void> {
     try {
-      sessionsBook.touchSessionActivity(input.sessionId, Date.now(), 'outbound')
+      sessionsBook.touchSessionActivity(input.targetDeviceId, Date.now(), 'outbound')
       await adapter.sendLanEvent({
-        sessionId: input.sessionId,
+        requestId: input.requestId,
+        sourceDeviceId: input.sourceDeviceId,
+        targetDeviceId: input.targetDeviceId,
+        replyToRequestId: input.replyToRequestId,
         eventName: input.eventName,
         payload: input.payload,
         eventId: input.eventId,
@@ -123,6 +154,24 @@ export function createSessionOperationsModule(options: {
       })
       error.value = null
     } catch (unknownError) {
+      if (isSessionNotOpenFailure(unknownError)) {
+        const now = Date.now()
+        sessionsBook.markTransportDead(input.targetDeviceId, now)
+        if (!sessionState.value.deviceId || sessionState.value.deviceId === input.targetDeviceId) {
+          setSessionStateWithTransitionLog(
+            sessionState,
+            {
+              ...sessionState.value,
+              deviceId: undefined,
+              host: undefined,
+              port: undefined,
+              state: 'closed',
+              closedAt: now
+            },
+            { reason: 'send_event_connection_not_open' }
+          )
+        }
+      }
       error.value = unknownToErrorMessage(unknownError, SEND_LAN_EVENT_ERROR_MESSAGE)
       throw unknownError
     }

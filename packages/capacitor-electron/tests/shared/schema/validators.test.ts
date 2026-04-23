@@ -63,7 +63,9 @@ describe('shared/schema/validators', () => {
     expect(validateResolveActionsPayload({ input: { type: 'url' } })).toBe(false)
     expect(
       validateRuntimeExecutePayload({
-        sessionId: 'session-1',
+        requestId: 'req-1',
+        sourceDeviceId: 'device-a',
+        targetDeviceId: 'device-b',
         input: { type: 'url', raw: 'https://github.com/synra' },
         action: {
           actionId: 'a1',
@@ -94,7 +96,9 @@ describe('shared/schema/validators', () => {
     expect(validateDiscoveryStartPayload({ manualTargets: [1] })).toBe(false)
     expect(
       validateDiscoverySendMessagePayload({
-        sessionId: 'session-1',
+        requestId: 'req-1',
+        sourceDeviceId: 'device-a',
+        targetDeviceId: 'device-b',
         messageType: 'chat',
         payload: 'hello'
       })

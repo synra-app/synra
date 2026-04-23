@@ -27,7 +27,6 @@ import {
 } from '../protocol/lan-frame.codec'
 
 type InboundSession = {
-  sessionId: string
   socket: Socket
   remote: string
   remoteDeviceId: string
@@ -47,10 +46,10 @@ const UDP_OFFLINE_ANNOUNCEMENT_TYPE = 'offline'
 export interface InboundHostTransport {
   start(): Promise<void>
   stop(): Promise<void>
-  closeSession(sessionId?: string): Promise<void>
+  closeSession(deviceId?: string): Promise<void>
   sendMessage(options: DeviceSessionSendMessageOptions): Promise<boolean>
   sendLanEvent(options: DeviceSessionSendLanEventOptions): Promise<boolean>
-  getSessionState(sessionId?: string): DeviceSessionSnapshot | undefined
+  getSessionState(deviceId?: string): DeviceSessionSnapshot | undefined
   heartbeatTick(): Promise<void>
 }
 
@@ -157,15 +156,15 @@ export function createInboundHostTransport(
   }
 
   const removeBySocket = (socket: Socket, reason: string) => {
-    for (const [sessionId, session] of sessions.entries()) {
+    for (const [deviceId, session] of sessions.entries()) {
       if (session.socket !== socket) {
         continue
       }
-      sessions.delete(sessionId)
+      sessions.delete(deviceId)
       options.eventBus.publish({
         type: 'transport.session.closed',
         remote: session.remote,
-        sessionId,
+        deviceId,
         payload: { reason },
         transport: 'tcp'
       })
@@ -182,7 +181,6 @@ export function createInboundHostTransport(
         typeof payload.sourceDeviceId === 'string' && payload.sourceDeviceId.trim().length > 0
           ? payload.sourceDeviceId.trim()
           : ''
-      const sessionId = frame.sessionId ?? randomUUID()
       const peerHost = peerAddressFromSocket(socket.remoteAddress)
       const remote = `${peerHost ?? 'unknown'}:${String(socket.remotePort ?? 0)}`
       const peerDisplayName =
@@ -195,7 +193,9 @@ export function createInboundHostTransport(
         await writeFrame(socket, {
           version: LAN_PROTOCOL_VERSION,
           type: 'error',
-          sessionId,
+          requestId: frame.requestId ?? randomUUID(),
+          sourceDeviceId: options.resolveLocalDeviceUuid(),
+          targetDeviceId: hashDeviceId(remoteDeviceId || 'unknown'),
           timestamp: Date.now(),
           appId: LAN_APP_ID,
           error: 'CONNECT_INVALID'
@@ -219,7 +219,9 @@ export function createInboundHostTransport(
       await writeFrame(socket, {
         version: LAN_PROTOCOL_VERSION,
         type: 'connectAck',
-        sessionId,
+        requestId: frame.requestId ?? randomUUID(),
+        sourceDeviceId: options.resolveLocalDeviceUuid(),
+        targetDeviceId: hashDeviceId(remoteDeviceId),
         timestamp: Date.now(),
         appId: LAN_APP_ID,
         protocolVersion: LAN_PROTOCOL_VERSION,
@@ -230,11 +232,11 @@ export function createInboundHostTransport(
           displayName: localDisplayName()
         }
       })
-      sessions.set(sessionId, {
-        sessionId,
+      const hashedRemoteDeviceId = hashDeviceId(remoteDeviceId)
+      sessions.set(hashedRemoteDeviceId, {
         socket,
         remote,
-        remoteDeviceId: hashDeviceId(remoteDeviceId),
+        remoteDeviceId: hashedRemoteDeviceId,
         displayName: peerDisplayName,
         openedAt: Date.now(),
         lastActiveAt: Date.now()
@@ -242,10 +244,10 @@ export function createInboundHostTransport(
       options.eventBus.publish({
         type: 'transport.session.opened',
         remote,
-        sessionId,
+        deviceId: hashedRemoteDeviceId,
         payload: {
           direction: 'inbound',
-          deviceId: hashDeviceId(remoteDeviceId),
+          deviceId: hashedRemoteDeviceId,
           displayName: peerDisplayName,
           incomingSynraConnectPayload,
           ...(peerHost
@@ -260,10 +262,10 @@ export function createInboundHostTransport(
       return
     }
 
-    if (!frame.sessionId) {
+    if (!frame.sourceDeviceId) {
       return
     }
-    const session = sessions.get(frame.sessionId)
+    const session = sessions.get(hashDeviceId(frame.sourceDeviceId))
     if (!session) {
       return
     }
@@ -273,7 +275,9 @@ export function createInboundHostTransport(
       await writeFrame(session.socket, {
         version: LAN_PROTOCOL_VERSION,
         type: 'heartbeat',
-        sessionId: session.sessionId,
+        requestId: randomUUID(),
+        sourceDeviceId: options.resolveLocalDeviceUuid(),
+        targetDeviceId: session.remoteDeviceId,
         timestamp: Date.now()
       }).catch(() => undefined)
       return
@@ -282,7 +286,9 @@ export function createInboundHostTransport(
       await writeFrame(session.socket, {
         version: LAN_PROTOCOL_VERSION,
         type: 'ack',
-        sessionId: session.sessionId,
+        requestId: frame.requestId,
+        sourceDeviceId: options.resolveLocalDeviceUuid(),
+        targetDeviceId: session.remoteDeviceId,
         messageId: frame.messageId,
         timestamp: Date.now()
       }).catch(() => undefined)
@@ -295,7 +301,7 @@ export function createInboundHostTransport(
       options.eventBus.publish({
         type: 'transport.message.received',
         remote: session.remote,
-        sessionId: session.sessionId,
+        deviceId: session.remoteDeviceId,
         messageId: frame.messageId,
         messageType,
         payload: frame.payload,
@@ -312,8 +318,12 @@ export function createInboundHostTransport(
       options.eventBus.publish({
         type: 'transport.lan.event.received',
         remote: session.remote,
-        sessionId: session.sessionId,
+        deviceId: session.remoteDeviceId,
         payload: {
+          requestId: frame.requestId,
+          sourceDeviceId: frame.sourceDeviceId,
+          targetDeviceId: frame.targetDeviceId,
+          replyToRequestId: frame.replyToRequestId,
           eventName,
           eventPayload: pl.payload,
           fromDeviceId: session.remoteDeviceId
@@ -323,12 +333,12 @@ export function createInboundHostTransport(
       return
     }
     if (frame.type === 'close') {
-      sessions.delete(session.sessionId)
+      sessions.delete(session.remoteDeviceId)
       session.socket.destroy()
       options.eventBus.publish({
         type: 'transport.session.closed',
         remote: session.remote,
-        sessionId: session.sessionId,
+        deviceId: session.remoteDeviceId,
         payload: { reason: 'REMOTE_CLOSED' },
         transport: 'tcp'
       })
@@ -338,8 +348,12 @@ export function createInboundHostTransport(
       options.eventBus.publish({
         type: 'transport.message.ack',
         remote: session.remote,
-        sessionId: session.sessionId,
+        deviceId: session.remoteDeviceId,
         messageId: frame.messageId,
+        payload: {
+          requestId: frame.requestId,
+          targetDeviceId: frame.targetDeviceId
+        },
         transport: 'tcp'
       })
     }
@@ -468,8 +482,8 @@ export function createInboundHostTransport(
     })
   }
 
-  const closeSessions = async (sessionId?: string): Promise<void> => {
-    const targetIds = sessionId ? [sessionId] : [...sessions.keys()]
+  const closeSessions = async (deviceId?: string): Promise<void> => {
+    const targetIds = deviceId ? [deviceId] : [...sessions.keys()]
     for (const targetId of targetIds) {
       const session = sessions.get(targetId)
       if (!session) {
@@ -478,13 +492,15 @@ export function createInboundHostTransport(
       await writeFrame(session.socket, {
         version: LAN_PROTOCOL_VERSION,
         type: 'close',
-        sessionId: targetId,
+        requestId: randomUUID(),
+        sourceDeviceId: options.resolveLocalDeviceUuid(),
+        targetDeviceId: targetId,
         timestamp: Date.now()
       }).catch(() => undefined)
       options.eventBus.publish({
         type: 'transport.session.closed',
         remote: session.remote,
-        sessionId: targetId,
+        deviceId: targetId,
         payload: { reason: 'LOCAL_CLOSED' },
         transport: 'tcp'
       })
@@ -520,18 +536,21 @@ export function createInboundHostTransport(
         server = undefined
       }
     },
-    async closeSession(sessionId) {
-      await closeSessions(sessionId)
+    async closeSession(deviceId) {
+      await closeSessions(deviceId)
     },
     async sendMessage(sendOptions) {
-      const session = sessions.get(sendOptions.sessionId)
+      const session = sessions.get(sendOptions.targetDeviceId)
       if (!session || session.socket.destroyed) {
         return false
       }
       await writeFrame(session.socket, {
         version: LAN_PROTOCOL_VERSION,
         type: 'message',
-        sessionId: sendOptions.sessionId,
+        requestId: sendOptions.requestId,
+        sourceDeviceId: sendOptions.sourceDeviceId,
+        targetDeviceId: sendOptions.targetDeviceId,
+        replyToRequestId: sendOptions.replyToRequestId,
         messageId: sendOptions.messageId ?? randomUUID(),
         timestamp: Date.now(),
         payload: {
@@ -542,7 +561,7 @@ export function createInboundHostTransport(
       return true
     },
     async sendLanEvent(sendOptions) {
-      const session = sessions.get(sendOptions.sessionId)
+      const session = sessions.get(sendOptions.targetDeviceId)
       if (!session || session.socket.destroyed) {
         return false
       }
@@ -559,20 +578,22 @@ export function createInboundHostTransport(
       await writeFrame(session.socket, {
         version: LAN_PROTOCOL_VERSION,
         type: 'event',
-        sessionId: sendOptions.sessionId,
+        requestId: sendOptions.requestId,
+        sourceDeviceId: sendOptions.sourceDeviceId,
+        targetDeviceId: sendOptions.targetDeviceId,
+        replyToRequestId: sendOptions.replyToRequestId,
         timestamp: Date.now(),
         payload: envelope
       })
       return true
     },
-    getSessionState(sessionId) {
-      if (sessionId) {
-        const target = sessions.get(sessionId)
+    getSessionState(deviceId) {
+      if (deviceId) {
+        const target = sessions.get(deviceId)
         if (!target) {
           return undefined
         }
         return {
-          sessionId: target.sessionId,
           deviceId: target.remoteDeviceId,
           state: 'open',
           direction: 'inbound',
@@ -585,7 +606,6 @@ export function createInboundHostTransport(
         return undefined
       }
       return {
-        sessionId: first.sessionId,
         deviceId: first.remoteDeviceId,
         state: 'open',
         direction: 'inbound',
@@ -595,18 +615,18 @@ export function createInboundHostTransport(
     },
     async heartbeatTick() {
       const now = Date.now()
-      for (const [sessionId, session] of sessions.entries()) {
+      for (const [deviceId, session] of sessions.entries()) {
         if (now - session.lastActiveAt <= DEFAULT_HEARTBEAT_TIMEOUT_MS) {
           continue
         }
         options.eventBus.publish({
           type: 'host.heartbeat.timeout',
           remote: session.remote,
-          sessionId,
+          deviceId,
           code: 'INBOUND_HEARTBEAT_TIMEOUT',
           transport: 'tcp'
         })
-        await closeSessions(sessionId)
+        await closeSessions(deviceId)
       }
     }
   }

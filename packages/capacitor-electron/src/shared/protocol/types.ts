@@ -89,7 +89,10 @@ export type ResolveRuntimeActionsResult = {
 }
 
 export type RuntimeExecuteOptions = {
-  sessionId: string
+  requestId: string
+  sourceDeviceId: string
+  targetDeviceId: string
+  replyToRequestId?: string
   input: ShareInput
   action: PluginAction
   messageId?: string
@@ -169,7 +172,6 @@ export type DeviceSessionState = 'idle' | 'connecting' | 'open' | 'closed' | 'er
 export type ConnectionTransport = 'tcp'
 
 export type DeviceSessionSnapshot = {
-  sessionId?: string
   deviceId?: string
   host?: string
   port?: number
@@ -183,24 +185,27 @@ export type DeviceSessionSnapshot = {
 
 export type DeviceSessionOpenResult = {
   success: true
-  sessionId: string
+  deviceId: string
   state: DeviceSessionState
   transport?: ConnectionTransport
 }
 
 export type DeviceSessionCloseOptions = {
-  sessionId?: string
+  targetDeviceId?: string
   transport?: ConnectionTransport
 }
 
 export type DeviceSessionCloseResult = {
   success: true
-  sessionId?: string
+  targetDeviceId?: string
   transport?: ConnectionTransport
 }
 
 export type DeviceSessionSendMessageOptions = {
-  sessionId: string
+  requestId: string
+  sourceDeviceId: string
+  targetDeviceId: string
+  replyToRequestId?: string
   messageType: SynraMessageType
   payload: unknown
   messageId?: string
@@ -210,12 +215,15 @@ export type DeviceSessionSendMessageOptions = {
 export type DeviceSessionSendMessageResult = {
   success: true
   messageId: string
-  sessionId: string
+  targetDeviceId: string
   transport?: ConnectionTransport
 }
 
 export type DeviceSessionSendLanEventOptions = {
-  sessionId: string
+  requestId: string
+  sourceDeviceId: string
+  targetDeviceId: string
+  replyToRequestId?: string
   eventName: string
   payload?: unknown
   eventId?: string
@@ -225,12 +233,12 @@ export type DeviceSessionSendLanEventOptions = {
 
 export type DeviceSessionSendLanEventResult = {
   success: true
-  sessionId: string
+  targetDeviceId: string
   transport?: ConnectionTransport
 }
 
 export type DeviceSessionGetStateOptions = {
-  sessionId?: string
+  targetDeviceId?: string
   transport?: ConnectionTransport
 }
 
@@ -249,7 +257,7 @@ export type DeviceDiscoveryHostEvent = {
     | 'host.member.offline'
     | 'host.heartbeat.timeout'
   remote: string
-  sessionId?: string
+  deviceId?: string
   messageId?: string
   messageType?: SynraMessageType
   code?: string

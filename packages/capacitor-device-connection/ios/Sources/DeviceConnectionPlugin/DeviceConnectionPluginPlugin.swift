@@ -70,7 +70,7 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
         }
 
         var opened: [String: Any] = [
-            "sessionId": result["sessionId"] as Any,
+            "deviceId": result["deviceId"] as Any,
             "transport": "tcp",
         ]
         if let state = result["state"] as? String {
@@ -90,12 +90,12 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func closeSession(_ call: CAPPluginCall) {
-        let sessionId = call.getString("sessionId")
+        let targetDeviceId = call.getString("targetDeviceId")
         let result = sessionQueue.sync {
-            implementation.closeSession(sessionId: sessionId)
+            implementation.closeSession(targetDeviceId: targetDeviceId)
         }
         notifyListeners("sessionClosed", data: [
-            "sessionId": result["sessionId"] as Any,
+            "deviceId": result["targetDeviceId"] as Any,
             "reason": "closed-by-client",
             "transport": "tcp",
         ])
@@ -104,10 +104,12 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func sendMessage(_ call: CAPPluginCall) {
         guard
-            let sessionId = call.getString("sessionId"),
+            let requestId = call.getString("requestId"),
+            let sourceDeviceId = call.getString("sourceDeviceId"),
+            let targetDeviceId = call.getString("targetDeviceId"),
             let messageType = call.getString("messageType")
         else {
-            call.reject("sessionId/messageType are required.")
+            call.reject("requestId/sourceDeviceId/targetDeviceId/messageType are required.")
             return
         }
 
@@ -115,7 +117,10 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
         let messageId = call.getString("messageId")
         let sendResult: [String: Any]? = sessionQueue.sync {
             implementation.sendMessage(
-                sessionId: sessionId,
+                requestId: requestId,
+                sourceDeviceId: sourceDeviceId,
+                targetDeviceId: targetDeviceId,
+                replyToRequestId: call.getString("replyToRequestId"),
                 messageType: messageType,
                 payload: payload,
                 messageId: messageId
@@ -131,10 +136,12 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func sendLanEvent(_ call: CAPPluginCall) {
         guard
-            let sessionId = call.getString("sessionId"),
+            let requestId = call.getString("requestId"),
+            let sourceDeviceId = call.getString("sourceDeviceId"),
+            let targetDeviceId = call.getString("targetDeviceId"),
             let eventName = call.getString("eventName")
         else {
-            call.reject("sessionId/eventName are required.")
+            call.reject("requestId/sourceDeviceId/targetDeviceId/eventName are required.")
             return
         }
 
@@ -143,7 +150,10 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
         let schemaVersion = call.getInt("schemaVersion")
         let sendResult: [String: Any]? = sessionQueue.sync {
             implementation.sendLanEvent(
-                sessionId: sessionId,
+                requestId: requestId,
+                sourceDeviceId: sourceDeviceId,
+                targetDeviceId: targetDeviceId,
+                replyToRequestId: call.getString("replyToRequestId"),
                 eventName: eventName,
                 payload: payload,
                 eventId: eventId,
@@ -159,9 +169,9 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func getSessionState(_ call: CAPPluginCall) {
-        let sessionId = call.getString("sessionId")
+        let targetDeviceId = call.getString("targetDeviceId")
         let snapshot = sessionQueue.sync {
-            implementation.getSessionState(sessionId: sessionId)
+            implementation.getSessionState(targetDeviceId: targetDeviceId)
         }
         call.resolve(snapshot)
     }
@@ -172,7 +182,7 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func probeSynraPeers(_ call: CAPPluginCall) {
         guard let rawTargets = call.options["targets"] as? [Any], !rawTargets.isEmpty else {
-            call.reject("targets is required.")
+            call.resolve(["results": []])
             return
         }
         let timeoutMs = max(200, call.getInt("timeoutMs") ?? 1500)
@@ -196,7 +206,7 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
             targets.append(row)
         }
         guard !targets.isEmpty else {
-            call.reject("targets must include host for each entry.")
+            call.resolve(["results": []])
             return
         }
         let rows = sessionQueue.sync {

@@ -39,4 +39,3 @@ export {
   getPairAwaitingAcceptDeviceIds,
   setPairAwaitingAccept
 } from './runtime/pair-awaiting-accept'
-export { logDiscoveryPairHandshakeDebug } from './runtime/discovery-pair-handshake-debug'

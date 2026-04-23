@@ -9,7 +9,7 @@ declare global {
       | 'transport.message.ack'
       | 'transport.error'
     remote: string
-    sessionId?: string
+    deviceId?: string
     messageId?: string
     messageType?: string
     code?: string

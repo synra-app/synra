@@ -6,7 +6,8 @@ export function createManualDiscoveryStrategy(): DiscoveryStrategy {
   return {
     kind: 'manual',
     async discover(context: DiscoveryContext): Promise<DiscoveredDevice[]> {
-      return toManualDevices(context.options.manualTargets ?? [])
+      const targets = context.options.manualTargets ?? []
+      return toManualDevices(targets)
     }
   }
 }

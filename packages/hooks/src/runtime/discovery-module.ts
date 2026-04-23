@@ -11,6 +11,7 @@ import type { RuntimeConnectedSession, SynraDiscoveryStartOptions } from '../typ
 import type { ConnectionRuntimeAdapter } from './adapter'
 import { applyHostPairingHintsFromDiscovery } from './apply-host-pairing-hints-from-discovery'
 import { getHooksRuntimeOptions, isLocalDiscoveryDeviceId } from './config'
+import { filterExposedDiscoveredDevices, shouldExposeDiscoveredDevice } from './discovery-exposure'
 import { sortDevices } from './device-sort'
 import { normalizeHost } from './host-normalization'
 import { pruneStalePairAwaitingForOpenSessions } from './pair-awaiting-prune'
@@ -34,11 +35,10 @@ function mergeDiscoveredWithSynraProbes(
     const key = normalizeHost(row.ipAddress)
     const probe = byHost.get(key)
     if (!probe) {
-      merged.push(row)
       continue
     }
     if (!probe.ok) {
-      if (probe.error === SYNRA_PROBE_EMBEDDED_IN_DISCOVERY) {
+      if (probe.error === SYNRA_PROBE_EMBEDDED_IN_DISCOVERY && shouldExposeDiscoveredDevice(row)) {
         merged.push(row)
       }
       continue
@@ -104,26 +104,33 @@ export function createDiscoveryModule(options: {
       }))
 
       const fallbackPort = defaultSynraPort(discoveryOptions)
-      if (typeof adapter.probeSynraPeers === 'function') {
+      if (typeof adapter.probeSynraPeers === 'function' && scanRows.length > 0) {
         const probeWire = discoveryOptions.probeConnectWirePayload ?? defaultProbeWire
-        const { results } = await adapter.probeSynraPeers({
-          targets: scanRows.map((row) => ({
-            host: row.ipAddress,
-            port: row.port ?? fallbackPort,
-            connectWirePayload: probeWire
-          })),
-          timeoutMs: discoveryOptions.timeoutMs ?? 1500
-        })
-        scanRows = mergeDiscoveredWithSynraProbes(scanRows, results, fallbackPort)
-        await applyHostPairingHintsFromDiscovery(
-          results
-            .filter((row) => row.ok && row.wireSourceDeviceId)
-            .map((row) => ({
-              canonicalDeviceId: row.wireSourceDeviceId ?? '',
-              connectAckPayload: row.connectAckPayload
-            }))
-        )
+        const targets = scanRows.map((row) => ({
+          host: row.ipAddress,
+          port: row.port ?? fallbackPort,
+          connectWirePayload: probeWire
+        }))
+        try {
+          const { results } = await adapter.probeSynraPeers({
+            targets,
+            timeoutMs: discoveryOptions.timeoutMs ?? 1500
+          })
+          scanRows = mergeDiscoveredWithSynraProbes(scanRows, results, fallbackPort)
+          await applyHostPairingHintsFromDiscovery(
+            results
+              .filter((row) => row.ok && row.wireSourceDeviceId)
+              .map((row) => ({
+                canonicalDeviceId: row.wireSourceDeviceId ?? '',
+                connectAckPayload: row.connectAckPayload
+              }))
+          )
+        } catch {
+          // Probe failures are treated as silent "not a Synra peer" for discovery UI.
+          scanRows = []
+        }
       }
+      scanRows = filterExposedDiscoveredDevices(scanRows)
 
       devices.value = sortDevices(scanRows)
       pruneStalePairAwaitingForOpenSessions(devices, connectedSessions)

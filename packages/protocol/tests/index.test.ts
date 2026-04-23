@@ -3,8 +3,8 @@ import { PROTOCOL_VERSION, createMessage, createProtocolMessage } from '../src/i
 
 test('createMessage injects protocol version', () => {
   const message = createMessage({
+    requestId: 'req-1',
     messageId: 'm1',
-    sessionId: 's1',
     traceId: 't1',
     type: 'action.selected',
     sentAt: Date.now(),
@@ -19,8 +19,8 @@ test('createMessage injects protocol version', () => {
 
 test('createProtocolMessage injects protocol version for runtime message', () => {
   const message = createProtocolMessage({
+    requestId: 'req-runtime-1',
     messageId: 'm-runtime-1',
-    sessionId: 's1',
     timestamp: Date.now(),
     type: 'runtime.request',
     payload: {
@@ -37,8 +37,8 @@ test('createProtocolMessage injects protocol version for runtime message', () =>
 
 test('runtime.finished failed status carries structured error', () => {
   const finished = createProtocolMessage({
+    requestId: 'req-runtime-2',
     messageId: 'm-runtime-2',
-    sessionId: 's1',
     timestamp: Date.now(),
     type: 'runtime.finished',
     payload: {

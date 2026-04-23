@@ -1,43 +1,15 @@
 import { DeviceConnection } from '@synra/capacitor-device-connection'
 import { LanDiscovery } from '@synra/capacitor-lan-discovery'
 import type { ConnectionRuntimeAdapter } from '../adapter'
-import { normalizeHostKey } from '../host-normalization'
-
-type OutboundSessionMeta = {
-  deviceId: string
-  host: string
-  port: number
-  direction: 'inbound' | 'outbound'
-}
 
 export function createCapacitorRuntimeAdapter(): ConnectionRuntimeAdapter {
-  const outboundSessionMetaById = new Map<string, OutboundSessionMeta>()
-  const pendingOutboundMetaByRemote = new Map<string, OutboundSessionMeta>()
-
   const adapter: ConnectionRuntimeAdapter = {
     startDiscovery: (options) => LanDiscovery.startDiscovery(options),
     listDiscoveredDevices: () => LanDiscovery.getDiscoveredDevices(),
     probeSynraPeers: (options) => DeviceConnection.probeSynraPeers(options),
-    openSession: async (options) => {
-      const pendingMeta: OutboundSessionMeta = {
-        deviceId: options.deviceId,
-        host: options.host,
-        port: options.port,
-        direction: 'outbound'
-      }
-      const pendingKey = normalizeHostKey(options.host, options.port)
-      pendingOutboundMetaByRemote.set(pendingKey, pendingMeta)
-
-      const result = await DeviceConnection.openSession(options)
-      outboundSessionMetaById.set(result.sessionId, pendingMeta)
-      pendingOutboundMetaByRemote.delete(pendingKey)
-      return result
-    },
-    closeSession: async (sessionId) => {
-      if (sessionId) {
-        outboundSessionMetaById.delete(sessionId)
-      }
-      await DeviceConnection.closeSession({ sessionId })
+    openSession: (options) => DeviceConnection.openSession(options),
+    closeSession: async (deviceId) => {
+      await DeviceConnection.closeSession({ targetDeviceId: deviceId })
     },
     sendMessage: async (options) => {
       await DeviceConnection.sendMessage(options)
@@ -45,7 +17,8 @@ export function createCapacitorRuntimeAdapter(): ConnectionRuntimeAdapter {
     sendLanEvent: async (options) => {
       await DeviceConnection.sendLanEvent(options)
     },
-    getSessionState: async (sessionId) => DeviceConnection.getSessionState({ sessionId }),
+    getSessionState: async (deviceId) =>
+      DeviceConnection.getSessionState({ targetDeviceId: deviceId }),
     addDeviceConnectableUpdatedListener: async (listener) => {
       const forward = (event: { device: Parameters<typeof listener>[0]['device'] }) => {
         listener({ device: event.device })
@@ -71,38 +44,18 @@ export function createCapacitorRuntimeAdapter(): ConnectionRuntimeAdapter {
       }),
     addSessionOpenedListener: async (listener) =>
       DeviceConnection.addListener('sessionOpened', (event) => {
-        const metaBySessionId = event.sessionId
-          ? outboundSessionMetaById.get(event.sessionId)
-          : undefined
-        const remoteKey =
-          typeof event.host === 'string' && typeof event.port === 'number'
-            ? normalizeHostKey(event.host, event.port)
-            : undefined
-        const pendingMeta = remoteKey ? pendingOutboundMetaByRemote.get(remoteKey) : undefined
-        const meta = metaBySessionId ?? pendingMeta
         const normalizedDirection: 'inbound' | 'outbound' =
           event.direction === 'inbound' ? 'inbound' : 'outbound'
-        if (event.sessionId && meta) {
-          outboundSessionMetaById.set(event.sessionId, {
-            deviceId: meta.deviceId,
-            host: meta.host,
-            port: meta.port,
-            direction: normalizedDirection
-          })
-        }
-        if (remoteKey && pendingMeta) {
-          pendingOutboundMetaByRemote.delete(remoteKey)
-        }
         if (normalizedDirection === 'inbound' && (!event.deviceId || event.deviceId.length === 0)) {
           return
         }
         listener({
           ...event,
-          deviceId: meta?.deviceId ?? event.deviceId,
+          deviceId: event.deviceId,
           direction: normalizedDirection,
           transport: event.transport ?? 'tcp',
-          host: typeof event.host === 'string' && event.host.length > 0 ? event.host : meta?.host,
-          port: typeof event.port === 'number' ? event.port : meta?.port,
+          host: typeof event.host === 'string' && event.host.length > 0 ? event.host : undefined,
+          port: typeof event.port === 'number' ? event.port : undefined,
           displayName:
             typeof event.displayName === 'string' && event.displayName.length > 0
               ? event.displayName
@@ -119,12 +72,7 @@ export function createCapacitorRuntimeAdapter(): ConnectionRuntimeAdapter {
         })
       }),
     addSessionClosedListener: async (listener) =>
-      DeviceConnection.addListener('sessionClosed', (event) => {
-        if (event.sessionId) {
-          outboundSessionMetaById.delete(event.sessionId)
-        }
-        listener(event)
-      }),
+      DeviceConnection.addListener('sessionClosed', listener),
     addMessageReceivedListener: async (listener) =>
       DeviceConnection.addListener('messageReceived', listener),
     addMessageAckListener: (listener) => DeviceConnection.addListener('messageAck', listener),

@@ -16,6 +16,7 @@ import type {
   SendMessageResult,
   DeviceConnectionPlugin
 } from './definitions'
+import { SYNRA_PROBE_EMBEDDED_IN_DISCOVERY } from './definitions'
 
 type ElectronBridgeTarget = {
   __synraCapElectron?: {
@@ -82,13 +83,26 @@ export class DeviceConnectionElectron extends WebPlugin implements DeviceConnect
         transport: event.transport ?? 'tcp'
       } satisfies HostEvent
       this.notifyListeners('hostEvent', normalized)
-      if (normalized.type === 'transport.message.received' && normalized.sessionId) {
+      if (normalized.type === 'transport.message.received') {
         const envelope =
           normalized.payload && typeof normalized.payload === 'object'
-            ? (normalized.payload as { messageType?: string; payload?: unknown })
+            ? (normalized.payload as {
+                messageType?: string
+                payload?: unknown
+                requestId?: string
+                sourceDeviceId?: string
+                targetDeviceId?: string
+                replyToRequestId?: string
+              })
             : undefined
+        if (!envelope?.requestId || !envelope.sourceDeviceId || !envelope.targetDeviceId) {
+          return
+        }
         this.notifyListeners('messageReceived', {
-          sessionId: normalized.sessionId,
+          requestId: envelope.requestId,
+          sourceDeviceId: envelope.sourceDeviceId,
+          targetDeviceId: envelope.targetDeviceId,
+          replyToRequestId: envelope.replyToRequestId,
           messageId: normalized.messageId,
           messageType: (normalized.messageType ??
             envelope?.messageType ??
@@ -97,18 +111,22 @@ export class DeviceConnectionElectron extends WebPlugin implements DeviceConnect
           timestamp: normalized.timestamp,
           transport: normalized.transport
         })
-      } else if (
-        normalized.type === 'transport.message.ack' &&
-        normalized.sessionId &&
-        normalized.messageId
-      ) {
+      } else if (normalized.type === 'transport.message.ack' && normalized.messageId) {
+        const payload =
+          normalized.payload && typeof normalized.payload === 'object'
+            ? (normalized.payload as { requestId?: string; targetDeviceId?: string })
+            : undefined
+        if (!payload?.requestId || !payload.targetDeviceId) {
+          return
+        }
         this.notifyListeners('messageAck', {
-          sessionId: normalized.sessionId,
+          requestId: payload.requestId,
+          targetDeviceId: payload.targetDeviceId,
           messageId: normalized.messageId,
           timestamp: normalized.timestamp,
           transport: normalized.transport
         })
-      } else if (normalized.type === 'transport.session.opened' && normalized.sessionId) {
+      } else if (normalized.type === 'transport.session.opened') {
         const payload =
           normalized.payload && typeof normalized.payload === 'object'
             ? (normalized.payload as {
@@ -126,7 +144,6 @@ export class DeviceConnectionElectron extends WebPlugin implements DeviceConnect
             ? payload.displayName.trim()
             : undefined
         const opened: Record<string, unknown> = {
-          sessionId: normalized.sessionId,
           transport: normalized.transport,
           deviceId: payload?.deviceId,
           direction: payload?.direction,
@@ -146,26 +163,38 @@ export class DeviceConnectionElectron extends WebPlugin implements DeviceConnect
         this.notifyListeners('sessionOpened', opened)
       } else if (
         normalized.type === 'transport.lan.event.received' &&
-        normalized.sessionId &&
         normalized.payload &&
         typeof normalized.payload === 'object'
       ) {
         const pl = normalized.payload as {
+          requestId?: unknown
+          sourceDeviceId?: unknown
+          targetDeviceId?: unknown
+          replyToRequestId?: unknown
           eventName?: unknown
           eventPayload?: unknown
-          fromDeviceId?: unknown
+        }
+        if (
+          typeof pl.requestId !== 'string' ||
+          typeof pl.sourceDeviceId !== 'string' ||
+          typeof pl.targetDeviceId !== 'string'
+        ) {
+          return
         }
         const eventName = typeof pl.eventName === 'string' ? pl.eventName : ''
         this.notifyListeners('lanWireEventReceived', {
-          sessionId: normalized.sessionId,
+          requestId: pl.requestId,
+          sourceDeviceId: pl.sourceDeviceId,
+          targetDeviceId: pl.targetDeviceId,
+          replyToRequestId:
+            typeof pl.replyToRequestId === 'string' ? pl.replyToRequestId : undefined,
           eventName,
           eventPayload: pl.eventPayload,
-          fromDeviceId: typeof pl.fromDeviceId === 'string' ? pl.fromDeviceId : undefined,
           transport: normalized.transport
         })
       } else if (normalized.type === 'transport.session.closed') {
         this.notifyListeners('sessionClosed', {
-          sessionId: normalized.sessionId,
+          deviceId: normalized.deviceId,
           reason: 'peer-closed',
           transport: normalized.transport
         })
@@ -181,7 +210,7 @@ export class DeviceConnectionElectron extends WebPlugin implements DeviceConnect
                 )
               : 'Transport error'
         this.notifyListeners('transportError', {
-          sessionId: normalized.sessionId,
+          deviceId: normalized.deviceId,
           code: normalized.code,
           message,
           transport: normalized.transport
@@ -203,9 +232,8 @@ export class DeviceConnectionElectron extends WebPlugin implements DeviceConnect
     this.ensureHostEventSubscription()
     const result = await this.invokeBridge('connection.openSession', options)
     this.notifyListeners('sessionOpened', {
-      sessionId: result.sessionId,
+      deviceId: result.deviceId,
       transport: result.transport,
-      deviceId: options.deviceId,
       direction: 'outbound',
       host: options.host,
       port: options.port
@@ -217,7 +245,7 @@ export class DeviceConnectionElectron extends WebPlugin implements DeviceConnect
     this.ensureHostEventSubscription()
     const result = await this.invokeBridge('connection.closeSession', options)
     this.notifyListeners('sessionClosed', {
-      sessionId: result.sessionId,
+      deviceId: result.targetDeviceId,
       reason: 'closed-by-client',
       transport: result.transport
     })
@@ -252,7 +280,7 @@ export class DeviceConnectionElectron extends WebPlugin implements DeviceConnect
         host: target.host,
         port: typeof target.port === 'number' && target.port > 0 ? target.port : portDefault,
         ok: false,
-        error: 'SYNRA_PROBE_USE_DISCOVERY_ON_DESKTOP'
+        error: SYNRA_PROBE_EMBEDDED_IN_DISCOVERY
       }))
     }
   }

@@ -28,7 +28,6 @@ import {
 } from '../protocol/lan-frame.codec'
 
 type OutboundState = {
-  sessionId?: string
   deviceId?: string
   remoteDisplayName?: string
   host?: string
@@ -55,7 +54,6 @@ export interface OutboundClientSession {
 }
 
 type ConnectAckResult = {
-  sessionId: string
   displayName?: string
   remoteDeviceId?: string
 }
@@ -89,7 +87,7 @@ export function createOutboundClientSession(
     options.eventBus.publish({
       type: 'transport.error',
       remote: `${state.host ?? ''}:${String(state.port ?? '')}`,
-      sessionId: state.sessionId,
+      deviceId: state.deviceId,
       code,
       payload,
       transport: 'tcp'
@@ -116,7 +114,7 @@ export function createOutboundClientSession(
     if (
       frame.type === 'connectAck' &&
       resolveConnect &&
-      frame.sessionId &&
+      frame.requestId &&
       frame.appId === LAN_APP_ID
     ) {
       const payload =
@@ -132,7 +130,6 @@ export function createOutboundClientSession(
           ? payload.sourceDeviceId
           : undefined
       resolveConnect({
-        sessionId: frame.sessionId,
         displayName,
         remoteDeviceId
       })
@@ -140,25 +137,30 @@ export function createOutboundClientSession(
       rejectConnect = undefined
       return
     }
-    if (frame.type === 'ack' && frame.sessionId && frame.messageId) {
-      const key = `${frame.sessionId}:${frame.messageId}`
+    if (frame.type === 'ack' && frame.targetDeviceId && frame.messageId) {
+      const key = `${frame.targetDeviceId}:${frame.messageId}`
       const resolve = pendingAcks.get(key)
       pendingAcks.delete(key)
       resolve?.()
       options.eventBus.publish({
         type: 'transport.message.ack',
         remote: `${state.host ?? ''}:${String(state.port ?? '')}`,
-        sessionId: frame.sessionId,
+        deviceId: frame.targetDeviceId,
         messageId: frame.messageId,
+        payload: {
+          requestId: frame.requestId,
+          targetDeviceId: frame.targetDeviceId
+        },
         transport: 'tcp'
       })
       return
     }
-    if (frame.type === 'message' && frame.sessionId) {
+    if (frame.type === 'message' && frame.requestId) {
       void writeFrame({
         version: LAN_PROTOCOL_VERSION,
         type: 'ack',
-        sessionId: frame.sessionId,
+        requestId: frame.requestId,
+        targetDeviceId: state.deviceId,
         messageId: frame.messageId,
         timestamp: Date.now()
       }).catch(() => undefined)
@@ -171,7 +173,7 @@ export function createOutboundClientSession(
       options.eventBus.publish({
         type: 'transport.message.received',
         remote: `${state.host ?? ''}:${String(state.port ?? '')}`,
-        sessionId: frame.sessionId,
+        deviceId: state.deviceId,
         messageId: frame.messageId,
         messageType,
         payload: frame.payload,
@@ -179,7 +181,7 @@ export function createOutboundClientSession(
       })
       return
     }
-    if (frame.type === 'event' && frame.sessionId) {
+    if (frame.type === 'event' && frame.requestId) {
       const pl =
         frame.payload && typeof frame.payload === 'object'
           ? (frame.payload as Record<string, unknown>)
@@ -188,8 +190,12 @@ export function createOutboundClientSession(
       options.eventBus.publish({
         type: 'transport.lan.event.received',
         remote: `${state.host ?? ''}:${String(state.port ?? '')}`,
-        sessionId: frame.sessionId,
+        deviceId: state.deviceId,
         payload: {
+          requestId: frame.requestId,
+          sourceDeviceId: frame.sourceDeviceId,
+          targetDeviceId: frame.targetDeviceId,
+          replyToRequestId: frame.replyToRequestId,
           eventName,
           eventPayload: pl.payload,
           fromDeviceId: state.deviceId
@@ -206,7 +212,7 @@ export function createOutboundClientSession(
       options.eventBus.publish({
         type: frame.type === 'hostRetire' ? 'host.retire' : 'host.member.offline',
         remote: `${state.host ?? ''}:${String(state.port ?? '')}`,
-        sessionId: frame.sessionId,
+        deviceId: state.deviceId,
         payload: frame.payload,
         transport: 'tcp'
       })
@@ -217,7 +223,7 @@ export function createOutboundClientSession(
       options.eventBus.publish({
         type: 'transport.session.closed',
         remote: `${state.host ?? ''}:${String(state.port ?? '')}`,
-        sessionId: frame.sessionId ?? state.sessionId,
+        deviceId: state.deviceId,
         payload: { reason: 'REMOTE_CLOSED' },
         transport: 'tcp'
       })
@@ -269,7 +275,6 @@ export function createOutboundClientSession(
         const now = Date.now()
         lastHeartbeatAt = now
         state = {
-          sessionId: lease.sessionId,
           deviceId: openOptions.deviceId,
           host: openOptions.host,
           port: openOptions.port,
@@ -283,7 +288,7 @@ export function createOutboundClientSession(
         options.eventBus.publish({
           type: 'transport.session.opened',
           remote: `${openOptions.host}:${String(openOptions.port)}`,
-          sessionId: lease.sessionId,
+          deviceId: openOptions.deviceId,
           payload: {
             direction: 'outbound',
             deviceId: openOptions.deviceId,
@@ -295,7 +300,7 @@ export function createOutboundClientSession(
         })
         return {
           success: true,
-          sessionId: lease.sessionId,
+          deviceId: openOptions.deviceId,
           state: 'open',
           transport: 'tcp'
         }
@@ -306,7 +311,6 @@ export function createOutboundClientSession(
       socket = new Socket()
       codec = new LengthPrefixedJsonCodec()
       state = {
-        sessionId: undefined,
         deviceId: openOptions.deviceId,
         host: openOptions.host,
         port: openOptions.port,
@@ -335,7 +339,9 @@ export function createOutboundClientSession(
           const connect: LanFrame = {
             version: LAN_PROTOCOL_VERSION,
             type: 'connect',
-            sessionId: randomUUID(),
+            requestId: randomUUID(),
+            sourceDeviceId: options.resolveLocalDeviceUuid(),
+            targetDeviceId: openOptions.deviceId,
             timestamp: Date.now(),
             appId: LAN_APP_ID,
             protocolVersion: LAN_PROTOCOL_VERSION,
@@ -354,10 +360,20 @@ export function createOutboundClientSession(
           resolve(id)
         }
       }).catch((reason) => {
-        closeWithError(typeof reason === 'string' ? reason : 'SESSION_OPEN_FAILED')
-        throw new BridgeError(BRIDGE_ERROR_CODES.timeout, 'Failed to open discovery session.', {
-          reason
-        })
+        const reasonText =
+          typeof reason === 'string'
+            ? reason
+            : reason instanceof Error
+              ? reason.message
+              : 'SESSION_OPEN_FAILED'
+        closeWithError(reasonText)
+        throw new BridgeError(
+          BRIDGE_ERROR_CODES.timeout,
+          `Failed to open discovery session. reason=${reasonText}`,
+          {
+            reason: reasonText
+          }
+        )
       })
 
       const now = Date.now()
@@ -365,14 +381,13 @@ export function createOutboundClientSession(
       state = {
         ...state,
         state: 'open',
-        sessionId: connectAck.sessionId,
         remoteDisplayName: connectAck.displayName,
         openedAt: now
       }
       options.eventBus.publish({
         type: 'transport.session.opened',
         remote: `${openOptions.host}:${String(openOptions.port)}`,
-        sessionId: connectAck.sessionId,
+        deviceId: openOptions.deviceId,
         payload: {
           direction: 'outbound',
           deviceId: openOptions.deviceId,
@@ -384,30 +399,32 @@ export function createOutboundClientSession(
       })
       return {
         success: true,
-        sessionId: connectAck.sessionId,
+        deviceId: openOptions.deviceId,
         state: 'open',
         transport: 'tcp'
       }
     },
     async close(closeOptions = {}) {
-      const targetSessionId = closeOptions.sessionId ?? state.sessionId
-      if (state.state === 'open' && targetSessionId) {
+      const targetDeviceId = closeOptions.targetDeviceId ?? state.deviceId
+      if (state.state === 'open' && targetDeviceId) {
         await writeFrame({
           version: LAN_PROTOCOL_VERSION,
           type: 'close',
-          sessionId: targetSessionId,
+          requestId: randomUUID(),
+          sourceDeviceId: options.resolveLocalDeviceUuid(),
+          targetDeviceId,
           timestamp: Date.now()
         }).catch(() => undefined)
       }
       closeWithError('SESSION_CLOSED_BY_CLIENT')
       return {
         success: true,
-        sessionId: targetSessionId,
+        targetDeviceId,
         transport: 'tcp'
       }
     },
     async sendLanEvent(sendOptions) {
-      if (state.state !== 'open' || !state.sessionId) {
+      if (state.state !== 'open' || !state.deviceId) {
         throw new BridgeError(BRIDGE_ERROR_CODES.unsupportedOperation, 'Session is not open.')
       }
       const envelope: Record<string, unknown> = {
@@ -423,22 +440,25 @@ export function createOutboundClientSession(
       await writeFrame({
         version: LAN_PROTOCOL_VERSION,
         type: 'event',
-        sessionId: sendOptions.sessionId,
+        requestId: sendOptions.requestId,
+        sourceDeviceId: sendOptions.sourceDeviceId,
+        targetDeviceId: sendOptions.targetDeviceId,
+        replyToRequestId: sendOptions.replyToRequestId,
         timestamp: Date.now(),
         payload: envelope
       })
       return {
         success: true,
-        sessionId: sendOptions.sessionId,
+        targetDeviceId: sendOptions.targetDeviceId,
         transport: 'tcp'
       }
     },
     async sendMessage(sendOptions) {
-      if (state.state !== 'open' || !state.sessionId) {
+      if (state.state !== 'open' || !state.deviceId) {
         throw new BridgeError(BRIDGE_ERROR_CODES.unsupportedOperation, 'Session is not open.')
       }
       const messageId = sendOptions.messageId ?? randomUUID()
-      const key = `${sendOptions.sessionId}:${messageId}`
+      const key = `${sendOptions.targetDeviceId}:${messageId}`
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(() => {
           pendingAcks.delete(key)
@@ -451,7 +471,10 @@ export function createOutboundClientSession(
         void writeFrame({
           version: LAN_PROTOCOL_VERSION,
           type: 'message',
-          sessionId: sendOptions.sessionId,
+          requestId: sendOptions.requestId,
+          sourceDeviceId: sendOptions.sourceDeviceId,
+          targetDeviceId: sendOptions.targetDeviceId,
+          replyToRequestId: sendOptions.replyToRequestId,
           messageId,
           timestamp: Date.now(),
           payload: {
@@ -471,15 +494,15 @@ export function createOutboundClientSession(
       return {
         success: true,
         messageId,
-        sessionId: sendOptions.sessionId,
+        targetDeviceId: sendOptions.targetDeviceId,
         transport: 'tcp'
       }
     },
     async getState(getOptions = {}) {
-      if (getOptions.sessionId && getOptions.sessionId !== state.sessionId) {
+      if (getOptions.targetDeviceId && getOptions.targetDeviceId !== state.deviceId) {
         return {
           state: 'closed',
-          sessionId: getOptions.sessionId,
+          deviceId: getOptions.targetDeviceId,
           closedAt: Date.now(),
           lastError: 'SESSION_NOT_FOUND',
           direction: 'outbound',
@@ -493,14 +516,14 @@ export function createOutboundClientSession(
       }
     },
     async heartbeatTick() {
-      if (state.state !== 'open' || !state.sessionId) {
+      if (state.state !== 'open' || !state.deviceId) {
         return
       }
       if (Date.now() - lastHeartbeatAt > DEFAULT_HEARTBEAT_TIMEOUT_MS) {
         options.eventBus.publish({
           type: 'host.heartbeat.timeout',
           remote: `${state.host ?? ''}:${String(state.port ?? '')}`,
-          sessionId: state.sessionId,
+          deviceId: state.deviceId,
           code: 'REMOTE_HEARTBEAT_TIMEOUT',
           transport: 'tcp'
         })
@@ -510,7 +533,9 @@ export function createOutboundClientSession(
       await writeFrame({
         version: LAN_PROTOCOL_VERSION,
         type: 'heartbeat',
-        sessionId: state.sessionId,
+        requestId: randomUUID(),
+        sourceDeviceId: options.resolveLocalDeviceUuid(),
+        targetDeviceId: state.deviceId,
         timestamp: Date.now()
       }).catch(() => undefined)
     }

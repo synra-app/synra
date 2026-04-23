@@ -39,14 +39,14 @@ export interface ConnectionRuntimeAdapter {
   /** Native Synra TCP probe (e.g. Capacitor). Optional on hosts that fold probe into `startDiscovery`. */
   probeSynraPeers?(options: ProbeSynraPeersOptions): Promise<ProbeSynraPeersResult>
   openSession(options: OpenSessionOptions): Promise<{
-    sessionId: string
+    deviceId: string
     state: SessionState
     transport: 'tcp'
   }>
-  closeSession(sessionId?: string): Promise<void>
+  closeSession(deviceId?: string): Promise<void>
   sendMessage(options: SendMessageOptions): Promise<void>
   sendLanEvent(options: SendLanEventOptions): Promise<void>
-  getSessionState(sessionId?: string): Promise<GetSessionStateResult>
+  getSessionState(deviceId?: string): Promise<GetSessionStateResult>
   addDeviceConnectableUpdatedListener(
     listener: (event: DeviceConnectableUpdatedEvent) => void
   ): Promise<ListenerHandle>
