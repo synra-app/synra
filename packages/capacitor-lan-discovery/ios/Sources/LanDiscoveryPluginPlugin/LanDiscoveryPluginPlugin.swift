@@ -13,7 +13,7 @@ public class LanDiscoveryPluginPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "startDiscovery", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "stopDiscovery", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getDiscoveredDevices", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "probeConnectable", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "ensureOutboundSession", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "closeSession", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "sendMessage", returnType: CAPPluginReturnPromise),
     ]
@@ -84,15 +84,14 @@ public class LanDiscoveryPluginPlugin: CAPPlugin, CAPBridgedPlugin {
         call.resolve(implementation.listDevices())
     }
 
-    @objc func probeConnectable(_ call: CAPPluginCall) {
-        let port = call.getInt("port").map { NSNumber(value: $0) }
-        let timeoutMs = call.getInt("timeoutMs").map { NSNumber(value: $0) }
-        let result = implementation.probeConnectable(port: port, timeoutMs: timeoutMs)
-        if let devices = result["devices"] as? [[String: Any]] {
-            for device in devices {
-                notifyListeners("deviceConnectableUpdated", data: ["device": device])
-            }
+    @objc func ensureOutboundSession(_ call: CAPPluginCall) {
+        guard let host = call.getString("host") else {
+            call.reject("host is required.")
+            return
         }
+        let port = NSNumber(value: call.getInt("port") ?? 32100)
+        let timeoutMs = call.getInt("timeoutMs").map { NSNumber(value: $0) }
+        let result = implementation.ensureOutboundSession(host: host, port: port, timeoutMs: timeoutMs)
         call.resolve(result)
     }
 

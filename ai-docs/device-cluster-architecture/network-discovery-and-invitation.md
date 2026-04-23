@@ -13,6 +13,11 @@
 
 ## 发现机制
 
+### Synra LAN（Capacitor / Electron 主机）
+
+- 对同一 `(ip, tcpPort)` 的 Synra 探测与会话复用**一条** TCP：`hello` / `helloAck` 成功后不再为「仅探测」单独关连接，而是进入长度前缀 JSON 读循环并发出 `sessionOpened`（出站）。
+- JS 层不应在扫描结束后再对每个可连设备二次 `openSession` 打开第二条 TCP；需要主动连对端时使用 `LanDiscovery.ensureOutboundSession`（或由适配器路由到该方法）。
+
 ## 广播内容
 
 节点周期广播以下信息：

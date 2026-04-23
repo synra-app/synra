@@ -88,6 +88,11 @@ public class LanDiscoveryPluginPlugin extends Plugin {
     private volatile boolean tcpServerRunning = false;
     private final Set<Socket> inboundTcpSockets = Collections.synchronizedSet(new HashSet<>());
     private final Map<String, Socket> inboundSessionSockets = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Socket> outboundSessionSockets = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, String> outboundHostPortToSessionId = new ConcurrentHashMap<>();
+    /** Canonical device id for active outbound (host:port) — used when probe skips re-handshake. */
+    private final ConcurrentHashMap<String, String> outboundHostPortToCanonDeviceId = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, String> outboundHostPortToDisplayName = new ConcurrentHashMap<>();
     private NsdManager.RegistrationListener mdnsRegistrationListener;
     private volatile String registeredMdnsServiceName;
 
@@ -148,6 +153,9 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         boolean enableProbeFallback = call.getBoolean("enableProbeFallback", true);
         String discoveryMode = call.getString("discoveryMode", "hybrid");
         boolean reset = call.getBoolean("reset", true);
+        if (reset) {
+            closeAllOutboundSessions();
+        }
         Integer scanWindowMs = call.getInt("scanWindowMs", null);
         int port = call.getInt("port", DEFAULT_TCP_PORT);
         int timeoutMs = call.getInt("timeoutMs", DEFAULT_TIMEOUT_MS);
@@ -213,21 +221,15 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             if (!outcome.connectable) {
                 continue;
             }
-            if (outcome.remoteDisplayName == null || outcome.remoteDisplayName.isBlank()) {
-                continue;
-            }
             if (outcome.remoteDeviceId == null || outcome.remoteDeviceId.isBlank()) {
                 continue;
             }
-            probed.add(
-                LanDiscoveryPlugin.createProbedSynraDevice(
-                    outcome.remoteDeviceId.trim(),
-                    outcome.remoteDisplayName.trim(),
-                    host,
-                    now,
-                    now
-                )
-            );
+            String idTrim = outcome.remoteDeviceId.trim();
+            String displayTrim =
+                outcome.remoteDisplayName != null && !outcome.remoteDisplayName.isBlank()
+                    ? outcome.remoteDisplayName.trim()
+                    : idTrim;
+            probed.add(LanDiscoveryPlugin.createProbedSynraDevice(idTrim, displayTrim, host, now, now));
         }
         implementation.mergeDevices(probed);
         result = implementation.listDevices();
@@ -247,18 +249,36 @@ public class LanDiscoveryPluginPlugin extends Plugin {
     }
 
     @PluginMethod
-    public void probeConnectable(PluginCall call) {
+    public void ensureOutboundSession(PluginCall call) {
+        String host = call.getString("host");
+        if (host == null || host.isBlank()) {
+            call.reject("host is required.");
+            return;
+        }
         int port = call.getInt("port", DEFAULT_TCP_PORT);
         int timeoutMs = call.getInt("timeoutMs", DEFAULT_TIMEOUT_MS);
-        JSObject listed = implementation.listDevices();
-        long checkedAt = applyProbeToDevices(listed, port, timeoutMs);
-
-        JSObject response = new JSObject();
-        response.put("checkedAt", checkedAt);
-        response.put("port", port);
-        response.put("timeoutMs", timeoutMs);
-        response.put("devices", implementation.listDevices().optJSONArray("devices"));
-        call.resolve(response);
+        ProbeOutcome outcome = probeDevice(host.trim(), port, timeoutMs);
+        if (!outcome.connectable) {
+            JSObject err = new JSObject();
+            err.put("error", "ENSURE_FAILED");
+            err.put("host", host.trim());
+            err.put("port", port);
+            call.resolve(err);
+            return;
+        }
+        String hpKey = host.trim() + ":" + port;
+        String sid = outboundHostPortToSessionId.get(hpKey);
+        if (sid == null || outboundSessionSockets.get(sid) == null) {
+            JSObject err = new JSObject();
+            err.put("error", "ENSURE_FAILED");
+            call.resolve(err);
+            return;
+        }
+        JSObject ok = new JSObject();
+        ok.put("sessionId", sid);
+        ok.put("state", "open");
+        ok.put("transport", "tcp");
+        call.resolve(ok);
     }
 
     @PluginMethod
@@ -273,7 +293,10 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             return;
         }
 
-        Socket socket = inboundSessionSockets.get(sessionId);
+        Socket socket = outboundSessionSockets.get(sessionId);
+        if (socket == null || socket.isClosed()) {
+            socket = inboundSessionSockets.get(sessionId);
+        }
         if (socket == null || socket.isClosed()) {
             call.reject("Session is not open.");
             return;
@@ -309,7 +332,21 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             call.reject("sessionId is required.");
             return;
         }
-        Socket socket = inboundSessionSockets.remove(sessionId);
+        Socket socket = outboundSessionSockets.remove(sessionId);
+        if (socket != null) {
+            String hpRemove = null;
+            for (Map.Entry<String, String> e : outboundHostPortToSessionId.entrySet()) {
+                if (sessionId.equals(e.getValue())) {
+                    hpRemove = e.getKey();
+                    break;
+                }
+            }
+            if (hpRemove != null) {
+                outboundHostPortToSessionId.remove(hpRemove);
+                outboundHostPortToCanonDeviceId.remove(hpRemove);
+                outboundHostPortToDisplayName.remove(hpRemove);
+            }
+        }
         boolean emittedSessionClosed = false;
         if (socket != null && !socket.isClosed()) {
             try {
@@ -318,13 +355,28 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                 // noop
             }
             closeQuietly(socket);
-            inboundTcpSockets.remove(socket);
             JSObject closed = new JSObject();
             closed.put("sessionId", sessionId);
             closed.put("reason", "closed-by-host");
             closed.put("transport", "tcp");
             notifyListeners("sessionClosed", closed);
             emittedSessionClosed = true;
+        }
+        if (!emittedSessionClosed) {
+            socket = inboundSessionSockets.remove(sessionId);
+            if (socket != null && !socket.isClosed()) {
+                try {
+                    writeSocketFrame(socket, frame("close", sessionId, null, null));
+                } catch (Exception ignored) {
+                }
+                closeQuietly(socket);
+                inboundTcpSockets.remove(socket);
+                JSObject closed = new JSObject();
+                closed.put("sessionId", sessionId);
+                closed.put("reason", "closed-by-host");
+                closed.put("transport", "tcp");
+                notifyListeners("sessionClosed", closed);
+            }
         }
         JSObject result = new JSObject();
         result.put("success", true);
@@ -903,6 +955,24 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             inboundTcpSockets.clear();
         }
         inboundSessionSockets.clear();
+        closeAllOutboundSessions();
+    }
+
+    private void closeAllOutboundSessions() {
+        for (String sid : new ArrayList<>(outboundSessionSockets.keySet())) {
+            Socket s = outboundSessionSockets.remove(sid);
+            if (s != null && !s.isClosed()) {
+                closeQuietly(s);
+            }
+            JSObject closed = new JSObject();
+            closed.put("sessionId", sid);
+            closed.put("reason", "host-stopped");
+            closed.put("transport", "tcp");
+            notifyListeners("sessionClosed", closed);
+        }
+        outboundHostPortToSessionId.clear();
+        outboundHostPortToCanonDeviceId.clear();
+        outboundHostPortToDisplayName.clear();
     }
 
     private void handleInboundTcpSocket(Socket socket) {
@@ -931,7 +1001,6 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                         JSONObject helloPayload = request.optJSONObject("payload");
                         String sourceDeviceId =
                             helloPayload == null ? null : helloPayload.optString("sourceDeviceId", null);
-                        boolean isProbe = helloPayload != null && helloPayload.optBoolean("probe", false);
                         String sourceHostIp =
                             helloPayload == null ? null : helloPayload.optString("sourceHostIp", null);
                         String peerDisplay =
@@ -998,10 +1067,6 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                             output.flush();
                         } catch (IOException ignored) {
                             // ignore flush errors on close path
-                        }
-                        if (isProbe) {
-                            sessionClosedNotified = true;
-                            break;
                         }
                         activeSessionId = sessionId;
                         inboundSessionSockets.put(sessionId, socket);
@@ -1239,12 +1304,45 @@ public class LanDiscoveryPluginPlugin extends Plugin {
     }
 
     private ProbeOutcome probeDevice(String host, int port, int timeoutMs) {
+        String hpKey = host.trim() + ":" + port;
+        String existingSid = outboundHostPortToSessionId.get(hpKey);
+        if (existingSid != null) {
+            Socket existing = outboundSessionSockets.get(existingSid);
+            if (existing != null && !existing.isClosed()) {
+                String cachedCanon = outboundHostPortToCanonDeviceId.get(hpKey);
+                String cachedDisp = outboundHostPortToDisplayName.get(hpKey);
+                if (cachedCanon != null && !cachedCanon.isBlank()) {
+                    return new ProbeOutcome(true, null, cachedCanon, cachedDisp);
+                }
+                JSObject listed = implementation.listDevices();
+                JSONArray arr = listed.optJSONArray("devices");
+                if (arr != null) {
+                    for (int i = 0; i < arr.length(); i++) {
+                        JSONObject d = arr.optJSONObject(i);
+                        if (d != null && host.equals(d.optString("ipAddress")) && d.optBoolean("connectable", false)) {
+                            return new ProbeOutcome(
+                                true,
+                                null,
+                                LanDiscoveryIdUtils.canonicalLanDeviceId(d.optString("deviceId")),
+                                d.optString("name", null)
+                            );
+                        }
+                    }
+                }
+                return new ProbeOutcome(true, null, null, null);
+            }
+            outboundHostPortToSessionId.remove(hpKey);
+            outboundHostPortToCanonDeviceId.remove(hpKey);
+            outboundHostPortToDisplayName.remove(hpKey);
+        }
+
         Socket socket = new Socket();
         try {
             socket.connect(new InetSocketAddress(host, port), timeoutMs);
             socket.setSoTimeout(timeoutMs);
             DataInputStream input = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
             DataOutputStream output = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
+            String sessionId = UUID.randomUUID().toString();
             JSObject probePayload = new JSObject();
             probePayload.put("sourceDeviceId", getOrCreateLocalDeviceUuid());
             probePayload.put("probe", true);
@@ -1253,16 +1351,18 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             if (probeSelfIp != null && !probeSelfIp.isBlank()) {
                 probePayload.put("sourceHostIp", probeSelfIp);
             }
-            writeFrame(output, frame("hello", UUID.randomUUID().toString(), null, probePayload));
+            writeFrame(output, frame("hello", sessionId, null, probePayload));
             try {
                 output.flush();
             } catch (IOException ignored) {
             }
             JSONObject response = readFrame(input);
             if (!"helloAck".equals(response.optString("type"))) {
+                closeQuietly(socket);
                 return new ProbeOutcome(false, "MISSING_HELLO_ACK", null, null);
             }
             if (!APP_ID.equals(response.optString("appId"))) {
+                closeQuietly(socket);
                 return new ProbeOutcome(false, "APP_ID_MISMATCH", null, null);
             }
             JSONObject ackPayload = response.optJSONObject("payload");
@@ -1279,69 +1379,151 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                     remoteDisplayName = null;
                 }
             }
+            if (remote == null || remote.isBlank()) {
+                closeQuietly(socket);
+                return new ProbeOutcome(false, "MISSING_REMOTE_DEVICE_ID", null, null);
+            }
             String localUuid = getOrCreateLocalDeviceUuid();
-            if (remote != null && remote.equals(localUuid)) {
+            if (remote.equals(localUuid)) {
+                closeQuietly(socket);
                 return new ProbeOutcome(false, "SELF_DEVICE", null, remoteDisplayName);
             }
-            return new ProbeOutcome(true, null, LanDiscoveryIdUtils.canonicalLanDeviceId(remote), remoteDisplayName);
+            String oldSid = outboundHostPortToSessionId.put(hpKey, sessionId);
+            if (oldSid != null && !oldSid.equals(sessionId)) {
+                Socket oldSock = outboundSessionSockets.remove(oldSid);
+                closeQuietly(oldSock);
+            }
+            outboundSessionSockets.put(sessionId, socket);
+            socket.setSoTimeout(DEFAULT_TIMEOUT_MS);
+            String canon = LanDiscoveryIdUtils.canonicalLanDeviceId(remote);
+            outboundHostPortToCanonDeviceId.put(hpKey, canon);
+            outboundHostPortToDisplayName.put(
+                hpKey,
+                remoteDisplayName != null && !remoteDisplayName.isBlank() ? remoteDisplayName : null
+            );
+            long now = System.currentTimeMillis();
+            JSObject opened = new JSObject();
+            opened.put("sessionId", sessionId);
+            opened.put("transport", "tcp");
+            opened.put("deviceId", canon);
+            opened.put("direction", "outbound");
+            opened.put("host", host);
+            opened.put("port", port);
+            if (remoteDisplayName != null) {
+                opened.put("displayName", remoteDisplayName);
+            }
+            JSONArray remotePairedPeerDeviceIds = new JSONArray();
+            if (ackPayload != null) {
+                JSONArray inboundPairedPeerIds = ackPayload.optJSONArray("pairedPeerDeviceIds");
+                if (inboundPairedPeerIds != null) {
+                    for (int i = 0; i < inboundPairedPeerIds.length(); i++) {
+                        String id = inboundPairedPeerIds.optString(i, "").trim();
+                        if (!id.isEmpty()) {
+                            remotePairedPeerDeviceIds.put(id);
+                        }
+                    }
+                }
+                String handshakeKind = ackPayload.optString("handshakeKind", null);
+                if ("paired".equals(handshakeKind) || "fresh".equals(handshakeKind)) {
+                    opened.put("handshakeKind", handshakeKind);
+                }
+                if (ackPayload.has("claimsPeerPaired")) {
+                    opened.put("claimsPeerPaired", ackPayload.optBoolean("claimsPeerPaired", false));
+                }
+            }
+            opened.put("pairedPeerDeviceIds", remotePairedPeerDeviceIds);
+            notifyListeners("sessionOpened", opened);
+
+            JSObject dev = new JSObject();
+            dev.put("deviceId", canon);
+            dev.put("name", remoteDisplayName != null && !remoteDisplayName.isBlank() ? remoteDisplayName : canon);
+            dev.put("ipAddress", host);
+            dev.put("port", port);
+            dev.put("source", "probe");
+            dev.put("connectable", true);
+            dev.put("connectCheckAt", now);
+            dev.put("discoveredAt", now);
+            dev.put("lastSeenAt", now);
+            JSObject wrap = new JSObject();
+            wrap.put("device", dev);
+            notifyListeners("deviceFound", wrap);
+            notifyListeners("deviceUpdated", wrap);
+            notifyListeners("deviceConnectableUpdated", wrap);
+
+            String recordName =
+                remoteDisplayName != null && !remoteDisplayName.isBlank() ? remoteDisplayName.trim() : canon;
+            List<DeviceRecord> mergeOne = new ArrayList<>();
+            mergeOne.add(LanDiscoveryPlugin.createProbedSynraDevice(canon, recordName, host, now, now));
+            implementation.mergeDevices(mergeOne);
+
+            ExecutorService clientExecutor = tcpClientExecutor;
+            if (clientExecutor != null) {
+                clientExecutor.submit(() -> runOutboundReadLoop(sessionId, socket));
+            }
+            return new ProbeOutcome(true, null, canon, remoteDisplayName);
         } catch (Exception error) {
-            return new ProbeOutcome(false, error.getMessage(), null, null);
-        } finally {
             closeQuietly(socket);
+            return new ProbeOutcome(false, error.getMessage(), null, null);
         }
     }
 
-    private long applyProbeToDevices(JSObject source, int port, int timeoutMs) {
-        JSONArray devices = source.optJSONArray("devices");
-        long checkedAt = System.currentTimeMillis();
-        if (devices == null) {
-            return checkedAt;
+    private void runOutboundReadLoop(String sessionId, Socket socket) {
+        try {
+            DataInputStream input = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
+            DataOutputStream output = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
+            while (!socket.isClosed()) {
+                JSONObject request;
+                try {
+                    request = readFrame(input);
+                } catch (SocketTimeoutException ignored) {
+                    continue;
+                }
+                if (request == null) {
+                    break;
+                }
+                String type = request.optString("type");
+                String frameSessionId = request.optString("sessionId", sessionId);
+                if ("message".equals(type)) {
+                    String messageId = request.optString("messageId", null);
+                    Object rawPayload = request.opt("payload");
+                    JSONObject envelope = rawPayload instanceof JSONObject ? (JSONObject) rawPayload : null;
+                    JSObject received = new JSObject();
+                    received.put("sessionId", sessionId);
+                    received.put("messageId", messageId);
+                    received.put(
+                        "messageType",
+                        envelope == null ? "transport.message.received" : envelope.optString("messageType", "transport.message.received")
+                    );
+                    received.put("payload", envelope == null ? null : envelope.opt("payload"));
+                    received.put("timestamp", request.optLong("timestamp", System.currentTimeMillis()));
+                    received.put("transport", "tcp");
+                    notifyListeners("messageReceived", received);
+                    if (messageId != null && !messageId.isBlank()) {
+                        writeFrame(output, frame("ack", sessionId, messageId, null));
+                    }
+                } else if ("close".equals(type)) {
+                    break;
+                }
+            }
+        } catch (Exception ignored) {
+        } finally {
+            outboundSessionSockets.remove(sessionId);
+            for (Map.Entry<String, String> e : new ArrayList<>(outboundHostPortToSessionId.entrySet())) {
+                if (sessionId.equals(e.getValue())) {
+                    String hp = e.getKey();
+                    outboundHostPortToSessionId.remove(hp);
+                    outboundHostPortToCanonDeviceId.remove(hp);
+                    outboundHostPortToDisplayName.remove(hp);
+                    break;
+                }
+            }
+            closeQuietly(socket);
+            JSObject closed = new JSObject();
+            closed.put("sessionId", sessionId);
+            closed.put("reason", "peer-closed");
+            closed.put("transport", "tcp");
+            notifyListeners("sessionClosed", closed);
         }
-
-        for (int i = 0; i < devices.length(); i += 1) {
-            JSONObject device = devices.optJSONObject(i);
-            if (device == null) {
-                continue;
-            }
-
-            String deviceId = device.optString("deviceId");
-            String host = device.optString("ipAddress");
-            ProbeOutcome outcome = probeDevice(host, port, timeoutMs);
-            DeviceRecord updated;
-            String canonicalRemote = LanDiscoveryIdUtils.canonicalLanDeviceId(outcome.remoteDeviceId);
-            String canonicalExisting = LanDiscoveryIdUtils.canonicalLanDeviceId(deviceId);
-            if (canonicalRemote != null
-                && !canonicalRemote.isBlank()
-                && !canonicalRemote.equals(canonicalExisting)) {
-                updated = implementation.rekeyDeviceAfterProbe(
-                    deviceId,
-                    canonicalRemote,
-                    outcome.connectable,
-                    outcome.error
-                );
-            } else {
-                updated = implementation.updateDeviceConnectable(
-                    deviceId,
-                    outcome.connectable,
-                    outcome.error
-                );
-            }
-            if (updated != null
-                && outcome.remoteDisplayName != null
-                && !outcome.remoteDisplayName.isBlank()) {
-                updated = implementation.updateDeviceName(
-                    updated.toJSObject().optString("deviceId"),
-                    outcome.remoteDisplayName
-                );
-            }
-            if (updated != null) {
-                JSObject payload = new JSObject();
-                payload.put("device", updated.toJSObject());
-                notifyListeners("deviceConnectableUpdated", payload);
-            }
-        }
-
-        return checkedAt;
     }
 
     private JSObject frame(String type, String sessionId, String messageId, Object payload) {

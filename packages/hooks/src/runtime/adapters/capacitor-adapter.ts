@@ -1,3 +1,4 @@
+import type { SessionState } from '@synra/capacitor-device-connection'
 import { DeviceConnection } from '@synra/capacitor-device-connection'
 import { LanDiscovery } from '@synra/capacitor-lan-discovery'
 import type { ConnectionRuntimeAdapter } from '../adapter'
@@ -18,57 +19,85 @@ function combineListenerHandles(...handles: Array<ListenerHandle | undefined>): 
   }
 }
 
+type OutboundSessionMeta = {
+  deviceId: string
+  host: string
+  port: number
+  direction: 'inbound' | 'outbound'
+}
+
 export function createCapacitorRuntimeAdapter(): ConnectionRuntimeAdapter {
-  const inboundSessionIds = new Set<string>()
-  const outboundSessionMetaById = new Map<
-    string,
-    {
-      deviceId: string
-      host: string
-      port: number
-    }
-  >()
-  const pendingOutboundMetaByRemote = new Map<
-    string,
-    {
-      deviceId: string
-      host: string
-      port: number
-    }
-  >()
+  /** Sessions whose TCP framing is owned by LanDiscovery (inbound or outbound). */
+  const lanDiscoveryTransportSessionIds = new Set<string>()
+  const outboundSessionMetaById = new Map<string, OutboundSessionMeta>()
+  const pendingOutboundMetaByRemote = new Map<string, OutboundSessionMeta>()
 
   const adapter: ConnectionRuntimeAdapter = {
     startDiscovery: (options) => LanDiscovery.startDiscovery(options),
     openSession: async (options) => {
-      const pendingMeta = {
+      const pendingMeta: OutboundSessionMeta = {
         deviceId: options.deviceId,
         host: options.host,
-        port: options.port
+        port: options.port,
+        direction: 'outbound'
       }
       const pendingKey = normalizeHostKey(options.host, options.port)
       pendingOutboundMetaByRemote.set(pendingKey, pendingMeta)
+
+      const ensured = await LanDiscovery.ensureOutboundSession({
+        host: options.host.trim(),
+        port: options.port > 0 ? options.port : 32100,
+        deviceId: options.deviceId,
+        timeoutMs: 15_000
+      })
+
+      if ('sessionId' in ensured && ensured.sessionId.length > 0) {
+        lanDiscoveryTransportSessionIds.add(ensured.sessionId)
+        outboundSessionMetaById.set(ensured.sessionId, pendingMeta)
+        pendingOutboundMetaByRemote.delete(pendingKey)
+        const state: SessionState =
+          ensured.state === 'connecting' || ensured.state === 'open' ? ensured.state : 'open'
+        return { sessionId: ensured.sessionId, state, transport: 'tcp' }
+      }
+
+      pendingOutboundMetaByRemote.delete(pendingKey)
       const result = await DeviceConnection.openSession(options)
       outboundSessionMetaById.set(result.sessionId, pendingMeta)
       return result
     },
     closeSession: async (sessionId) => {
-      const closeTasks: Array<Promise<unknown>> = [DeviceConnection.closeSession({ sessionId })]
       if (sessionId) {
         outboundSessionMetaById.delete(sessionId)
       }
-      if (sessionId && inboundSessionIds.has(sessionId)) {
-        closeTasks.push(LanDiscovery.closeSession({ sessionId }))
+      if (sessionId && lanDiscoveryTransportSessionIds.has(sessionId)) {
+        lanDiscoveryTransportSessionIds.delete(sessionId)
+        await LanDiscovery.closeSession({ sessionId })
+        return
       }
-      await Promise.all(closeTasks)
+      await DeviceConnection.closeSession({ sessionId })
     },
     sendMessage: async (options) => {
-      if (inboundSessionIds.has(options.sessionId)) {
+      if (lanDiscoveryTransportSessionIds.has(options.sessionId)) {
         await LanDiscovery.sendMessage(options)
         return
       }
       await DeviceConnection.sendMessage(options)
     },
-    getSessionState: (sessionId) => DeviceConnection.getSessionState({ sessionId }),
+    getSessionState: async (sessionId) => {
+      if (sessionId && lanDiscoveryTransportSessionIds.has(sessionId)) {
+        const meta = outboundSessionMetaById.get(sessionId)
+        return {
+          sessionId,
+          deviceId: meta?.deviceId,
+          host: meta?.host,
+          port: meta?.port,
+          state: 'open',
+          transport: 'tcp',
+          direction: meta?.direction ?? 'outbound'
+        }
+      }
+      return DeviceConnection.getSessionState({ sessionId })
+    },
     addDeviceConnectableUpdatedListener: async (listener) => {
       const forward = (event: { device: Parameters<typeof listener>[0]['device'] }) => {
         listener({ device: event.device })
@@ -100,7 +129,12 @@ export function createCapacitorRuntimeAdapter(): ConnectionRuntimeAdapter {
         const normalizedDirection: 'inbound' | 'outbound' =
           event.direction === 'inbound' ? 'inbound' : 'outbound'
         if (event.sessionId && meta) {
-          outboundSessionMetaById.set(event.sessionId, meta)
+          outboundSessionMetaById.set(event.sessionId, {
+            deviceId: meta.deviceId,
+            host: meta.host,
+            port: meta.port,
+            direction: normalizedDirection
+          })
         }
         if (remoteKey && pendingMeta) {
           pendingOutboundMetaByRemote.delete(remoteKey)
@@ -122,10 +156,42 @@ export function createCapacitorRuntimeAdapter(): ConnectionRuntimeAdapter {
         })
       })
       const discoveryHandle = await LanDiscovery.addListener('sessionOpened', (event) => {
-        if (!event.deviceId) {
+        if (!event.sessionId) {
           return
         }
-        inboundSessionIds.add(event.sessionId)
+        const rawDir = (event as { direction?: unknown }).direction
+        const direction: 'inbound' | 'outbound' = rawDir === 'outbound' ? 'outbound' : 'inbound'
+
+        const remoteKey =
+          typeof event.host === 'string' && typeof event.port === 'number'
+            ? normalizeHostKey(event.host, event.port)
+            : undefined
+        const pendingMeta = remoteKey ? pendingOutboundMetaByRemote.get(remoteKey) : undefined
+        const metaFromEvent =
+          typeof event.deviceId === 'string' &&
+          event.deviceId.length > 0 &&
+          typeof event.host === 'string' &&
+          typeof event.port === 'number'
+            ? {
+                deviceId: event.deviceId,
+                host: event.host,
+                port: event.port,
+                direction
+              }
+            : pendingMeta
+        if (metaFromEvent) {
+          outboundSessionMetaById.set(event.sessionId, metaFromEvent)
+        }
+        if (remoteKey && pendingMeta) {
+          pendingOutboundMetaByRemote.delete(remoteKey)
+        }
+
+        lanDiscoveryTransportSessionIds.add(event.sessionId)
+
+        if (direction === 'inbound' && (!event.deviceId || event.deviceId.length === 0)) {
+          return
+        }
+
         const pairedInbound = (event as { pairedPeerDeviceIds?: unknown }).pairedPeerDeviceIds
         const pairedPeerDeviceIds = Array.isArray(pairedInbound)
           ? pairedInbound.filter(
@@ -142,8 +208,8 @@ export function createCapacitorRuntimeAdapter(): ConnectionRuntimeAdapter {
           typeof claimsPeerPairedRaw === 'boolean' ? claimsPeerPairedRaw : undefined
         listener({
           sessionId: event.sessionId,
-          deviceId: event.deviceId,
-          direction: 'inbound',
+          deviceId: metaFromEvent?.deviceId ?? event.deviceId,
+          direction,
           transport: 'tcp',
           host: event.host,
           port: event.port,
@@ -167,7 +233,8 @@ export function createCapacitorRuntimeAdapter(): ConnectionRuntimeAdapter {
       })
       const discoveryHandle = await LanDiscovery.addListener('sessionClosed', (event) => {
         if (event.sessionId) {
-          inboundSessionIds.delete(event.sessionId)
+          lanDiscoveryTransportSessionIds.delete(event.sessionId)
+          outboundSessionMetaById.delete(event.sessionId)
         }
         listener({
           sessionId: event.sessionId,

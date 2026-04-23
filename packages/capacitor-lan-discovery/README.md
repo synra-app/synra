@@ -24,14 +24,14 @@ npx cap sync
 
 ## Platform support
 
-| Capability                                                                 | iOS                    | Android                    | Web     | Electron |
-| -------------------------------------------------------------------------- | ---------------------- | -------------------------- | ------- | -------- |
-| `startDiscovery` / `stopDiscovery` / `getDiscoveredDevices`                | Yes                    | Yes                        | Mocked  | Yes      |
-| `probeConnectable`                                                         | Yes                    | Yes                        | No      | No       |
-| `sendMessage` / `closeSession`                                             | Yes (inbound sessions) | Yes (inbound sessions)     | No      | No       |
-| `scanStateChanged` / `sessionOpened` / `sessionClosed` / `messageReceived` | Yes                    | Yes                        | Partial | Partial  |
-| `transportError`                                                           | Yes                    | Yes                        | No      | No       |
-| `deviceFound` / `deviceUpdated` / `deviceLost`                             | No                     | Yes (compatibility events) | Partial | Partial  |
+| Capability                                                                 | iOS                      | Android                    | Web     | Electron                      |
+| -------------------------------------------------------------------------- | ------------------------ | -------------------------- | ------- | ----------------------------- |
+| `startDiscovery` / `stopDiscovery` / `getDiscoveredDevices`                | Yes                      | Yes                        | Mocked  | Yes                           |
+| `ensureOutboundSession` (hello → keep-alive TCP; same socket as discovery) | Yes                      | Yes                        | No      | Yes (`discovery.openSession`) |
+| `sendMessage` / `closeSession`                                             | Yes (inbound + outbound) | Yes (inbound + outbound)   | No      | Yes                           |
+| `scanStateChanged` / `sessionOpened` / `sessionClosed` / `messageReceived` | Yes                      | Yes                        | Partial | Partial                       |
+| `transportError`                                                           | Yes                      | Yes                        | No      | No                            |
+| `deviceFound` / `deviceUpdated` / `deviceLost`                             | No                       | Yes (compatibility events) | Partial | Partial                       |
 
 ## Notes
 

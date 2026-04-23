@@ -65,17 +65,29 @@ export type ListDiscoveredDevicesResult = {
   devices: DiscoveredDevice[]
 }
 
-export type ProbeConnectableOptions = {
+export type EnsureOutboundSessionOptions = {
+  host: string
   port?: number
   timeoutMs?: number
+  /** Optional hint for Electron host bridge (`discovery.openSession`). */
+  deviceId?: string
 }
 
-export type ProbeConnectableResult = {
-  checkedAt: number
-  port: number
-  timeoutMs: number
-  devices: DiscoveredDevice[]
+export type EnsureOutboundSessionSuccess = {
+  sessionId: string
+  state: 'idle' | 'connecting' | 'open' | 'closed' | 'error'
+  transport: 'tcp'
 }
+
+export type EnsureOutboundSessionFailure = {
+  error: string
+  host?: string
+  port?: number
+}
+
+export type EnsureOutboundSessionResult =
+  | EnsureOutboundSessionSuccess
+  | EnsureOutboundSessionFailure
 
 export type DiscoverySendMessageOptions = {
   sessionId: string
@@ -137,7 +149,7 @@ export interface LanDiscoveryPlugin {
   startDiscovery(options?: StartDiscoveryOptions): Promise<StartDiscoveryResult>
   stopDiscovery(): Promise<StopDiscoveryResult>
   getDiscoveredDevices(): Promise<ListDiscoveredDevicesResult>
-  probeConnectable(options?: ProbeConnectableOptions): Promise<ProbeConnectableResult>
+  ensureOutboundSession(options: EnsureOutboundSessionOptions): Promise<EnsureOutboundSessionResult>
   closeSession(options: DiscoveryCloseSessionOptions): Promise<DiscoveryCloseSessionResult>
   sendMessage(options: DiscoverySendMessageOptions): Promise<DiscoverySendMessageResult>
   addListener(

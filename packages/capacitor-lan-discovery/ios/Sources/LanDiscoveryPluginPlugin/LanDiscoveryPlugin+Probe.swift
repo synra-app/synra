@@ -7,9 +7,14 @@ extension LanDiscoveryPlugin {
             return ProbeOutcome(connectable: false, error: "INVALID_PORT", remoteDeviceId: nil, remoteDisplayName: nil)
         }
 
+        if let existing = existingOutboundProbeOutcome(host: host, port: port) {
+            return existing
+        }
+
         let connection = NWConnection(host: NWEndpoint.Host(host), port: endpointPort, using: .tcp)
         let semaphore = DispatchSemaphore(value: 0)
         var outcome = ProbeOutcome(connectable: false, error: "PROBE_FAILED", remoteDeviceId: nil, remoteDisplayName: nil)
+        let outgoingSessionId = UUID().uuidString
         connection.stateUpdateHandler = { [weak self] state in
             guard let self else {
                 semaphore.signal()
@@ -20,7 +25,7 @@ extension LanDiscoveryPlugin {
                 self.sendFrame(
                     self.frame(
                         type: "hello",
-                        sessionId: UUID().uuidString,
+                        sessionId: outgoingSessionId,
                         messageId: nil,
                         payload: {
                             var probeHello: [String: Any] = [
@@ -53,15 +58,39 @@ extension LanDiscoveryPlugin {
                                     remoteDeviceId: nil,
                                     remoteDisplayName: (ackName?.isEmpty == false) ? ackName : nil
                                 )
+                                connection.cancel()
                             } else {
                                 let ackName = (payload?["displayName"] as? String)?
                                     .trimmingCharacters(in: .whitespacesAndNewlines)
-                                outcome = ProbeOutcome(
-                                    connectable: true,
-                                    error: nil,
-                                    remoteDeviceId: trimmedRemote.isEmpty ? nil : canonRemote,
-                                    remoteDisplayName: (ackName?.isEmpty == false) ? ackName : nil
-                                )
+                                if trimmedRemote.isEmpty {
+                                    outcome = ProbeOutcome(
+                                        connectable: false,
+                                        error: "MISSING_REMOTE_DEVICE_ID",
+                                        remoteDeviceId: nil,
+                                        remoteDisplayName: nil
+                                    )
+                                    connection.cancel()
+                                } else {
+                                    outcome = ProbeOutcome(
+                                        connectable: true,
+                                        error: nil,
+                                        remoteDeviceId: canonRemote,
+                                        remoteDisplayName: (ackName?.isEmpty == false) ? ackName : nil
+                                    )
+                                    let display =
+                                        (ackName?.isEmpty == false) ? (ackName ?? "") : self.fallbackPeerDisplayName(
+                                            forCanonicalDeviceId: canonRemote
+                                        )
+                                    self.finalizeOutboundSynraSession(
+                                        connection: connection,
+                                        host: host,
+                                        port: port,
+                                        outgoingSessionId: outgoingSessionId,
+                                        canonRemote: canonRemote,
+                                        displayName: display,
+                                        helloAckPayload: payload
+                                    )
+                                }
                             }
                         } else {
                             outcome = ProbeOutcome(
@@ -70,6 +99,7 @@ extension LanDiscoveryPlugin {
                                 remoteDeviceId: nil,
                                 remoteDisplayName: nil
                             )
+                            connection.cancel()
                         }
                         semaphore.signal()
                     }
@@ -87,16 +117,20 @@ extension LanDiscoveryPlugin {
             }
         }
         connection.start(queue: .global(qos: .userInitiated))
-        // Match Android-style budget: connect and read each use `timeoutMs`; one NWConnection wait
-        // covers handshake + send + recv, so allow roughly 2× here.
         let probeWaitMs = max(1, timeoutMs * 2)
         _ = semaphore.wait(timeout: .now() + .milliseconds(probeWaitMs))
-        connection.cancel()
         if outcome.connectable {
             return outcome
         }
+        if outcome.error == "SELF_DEVICE" {
+            return outcome
+        }
         if outcome.error == "PROBE_FAILED" {
+            connection.cancel()
             return ProbeOutcome(connectable: false, error: "PROBE_TIMEOUT", remoteDeviceId: nil, remoteDisplayName: nil)
+        }
+        if !outcome.connectable {
+            connection.cancel()
         }
         return outcome
     }

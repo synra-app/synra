@@ -13,6 +13,7 @@ import { collectLocalIpSet } from '../core/network'
 import type { DeviceRegistry } from '../state/device-registry'
 import type { DiscoveryStrategy } from './discovery-strategy'
 import { probeDevices } from './probe-runner'
+import type { ProbeSocketRegistry } from './probe-socket-registry'
 
 type DiscoveryState = 'idle' | 'scanning'
 
@@ -26,6 +27,7 @@ type DiscoveryOrchestratorOptions = {
   registry: DeviceRegistry
   strategies: DiscoveryStrategy[]
   resolveLocalDeviceUuid: () => string
+  probeSocketRegistry?: ProbeSocketRegistry
 }
 
 export function createDiscoveryOrchestrator(
@@ -73,11 +75,13 @@ export function createDiscoveryOrchestrator(
       )
       options.registry.merge(discovered.flat())
 
+      const probePort = startOptions.port ?? DEFAULT_TCP_PORT
       const probed = await probeDevices(options.registry.list(), {
         localDeviceId: options.resolveLocalDeviceUuid(),
-        port: startOptions.port ?? DEFAULT_TCP_PORT,
+        port: probePort,
         timeoutMs: startOptions.timeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS,
-        concurrency: startOptions.concurrency ?? DEFAULT_PROBE_CONCURRENCY
+        concurrency: startOptions.concurrency ?? DEFAULT_PROBE_CONCURRENCY,
+        probeSocketRegistry: options.probeSocketRegistry
       })
       options.registry.reset()
       const accepted = probed.filter(
@@ -85,6 +89,8 @@ export function createDiscoveryOrchestrator(
           device.connectable && typeof device.name === 'string' && device.name.trim().length > 0
       )
       options.registry.merge(accepted)
+      const keepProbeSockets = new Set(accepted.map((d) => `${d.ipAddress}:${probePort}`))
+      options.probeSocketRegistry?.closeStale(keepProbeSockets)
 
       refreshLocalIpSet(Boolean(startOptions.includeLoopback))
       return {

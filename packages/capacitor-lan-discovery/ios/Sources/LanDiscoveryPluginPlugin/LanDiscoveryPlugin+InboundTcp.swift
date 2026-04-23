@@ -200,18 +200,7 @@ extension LanDiscoveryPlugin {
                         payload: helloAckPayload
                     ),
                     through: current.connection
-                ) {
-                    if isProbe {
-                        self.closeInboundConnection(
-                            connectionId: connectionId,
-                            reason: "probe-completed",
-                            emitSessionClosed: false
-                        )
-                    }
-                }
-                if isProbe {
-                    return
-                }
+                )
                 let (hostFallback, _) = self.describeHostPort(current.connection.endpoint)
                 let host =
                     (resolvedPeerIpv4 ?? hostFallback)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? hostFallback

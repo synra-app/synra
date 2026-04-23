@@ -17,6 +17,7 @@ import { DEFAULT_ACK_TIMEOUT_MS, DEFAULT_HEARTBEAT_TIMEOUT_MS } from '../core/co
 import { localDisplayName } from '../core/device-identity'
 import { pickPrimarySourceHostIp } from '../core/network'
 import type { HostEventBus } from '../events/host-event-bus'
+import type { ProbeSocketRegistry } from '../discovery/probe-socket-registry'
 import {
   LAN_APP_ID,
   LAN_PROTOCOL_VERSION,
@@ -40,6 +41,7 @@ type OutboundClientSessionOptions = {
   eventBus: HostEventBus
   resolveLocalDeviceUuid: () => string
   readPairedPeerDeviceIds?: () => string[]
+  probeSocketRegistry?: ProbeSocketRegistry
 }
 
 export interface OutboundClientSession {
@@ -53,7 +55,7 @@ export interface OutboundClientSession {
 export function createOutboundClientSession(
   options: OutboundClientSessionOptions
 ): OutboundClientSession {
-  const codec = new LengthPrefixedJsonCodec()
+  let codec: LengthPrefixedJsonCodec = new LengthPrefixedJsonCodec()
   const pendingAcks = new Map<string, () => void>()
   let socket: Socket | undefined
   let state: OutboundState = { state: 'idle' }
@@ -247,9 +249,54 @@ export function createOutboundClientSession(
           'Session is already connecting.'
         )
       }
+      const adoptKey = `${openOptions.host}:${openOptions.port}`
+      const lease = options.probeSocketRegistry?.take(adoptKey)
+      if (lease) {
+        closeWithError('SESSION_REPLACED')
+        socket = lease.socket
+        codec = lease.codec
+        const now = Date.now()
+        lastHeartbeatAt = now
+        state = {
+          sessionId: lease.sessionId,
+          deviceId: openOptions.deviceId,
+          host: openOptions.host,
+          port: openOptions.port,
+          state: 'open',
+          remoteDisplayName: lease.displayName,
+          openedAt: now,
+          closedAt: undefined,
+          lastError: undefined
+        }
+        attachSocketHandlers(socket)
+        options.eventBus.publish({
+          type: 'transport.session.opened',
+          remote: `${openOptions.host}:${String(openOptions.port)}`,
+          sessionId: lease.sessionId,
+          payload: {
+            direction: 'outbound',
+            deviceId: openOptions.deviceId,
+            host: openOptions.host,
+            port: openOptions.port,
+            displayName: lease.displayName,
+            pairedPeerDeviceIds: [],
+            handshakeKind: 'fresh',
+            claimsPeerPaired: false
+          },
+          transport: 'tcp'
+        })
+        return {
+          success: true,
+          sessionId: lease.sessionId,
+          state: 'open',
+          transport: 'tcp'
+        }
+      }
+
       closeWithError('SESSION_REPLACED')
 
       socket = new Socket()
+      codec = new LengthPrefixedJsonCodec()
       state = {
         sessionId: undefined,
         deviceId: openOptions.deviceId,

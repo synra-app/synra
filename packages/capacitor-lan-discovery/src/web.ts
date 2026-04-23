@@ -2,8 +2,8 @@ import { WebPlugin } from '@capacitor/core'
 import type {
   DiscoveryCloseSessionOptions,
   DiscoveryCloseSessionResult,
-  ProbeConnectableOptions,
-  ProbeConnectableResult,
+  EnsureOutboundSessionOptions,
+  EnsureOutboundSessionResult,
   DiscoverySendMessageOptions,
   DiscoverySendMessageResult,
   LanDiscoveryPlugin,
@@ -76,14 +76,10 @@ export class LanDiscoveryWeb extends WebPlugin implements LanDiscoveryPlugin {
     }
   }
 
-  async probeConnectable(_options: ProbeConnectableOptions = {}): Promise<ProbeConnectableResult> {
-    const checkedAt = now()
-    return {
-      checkedAt,
-      port: 32100,
-      timeoutMs: 1500,
-      devices: this.scanState.devices
-    }
+  async ensureOutboundSession(
+    _options: EnsureOutboundSessionOptions
+  ): Promise<EnsureOutboundSessionResult> {
+    throw this.unavailable('ensureOutboundSession is unavailable on web runtime.')
   }
 
   async closeSession(_options: DiscoveryCloseSessionOptions): Promise<DiscoveryCloseSessionResult> {

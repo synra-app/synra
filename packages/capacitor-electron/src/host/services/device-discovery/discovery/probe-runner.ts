@@ -13,12 +13,15 @@ import {
   LengthPrefixedJsonCodec,
   type LanFrame
 } from '../protocol/lan-frame.codec'
+import type { ProbeSocketRegistry } from './probe-socket-registry'
 
 export type ProbeOptions = {
   port?: number
   timeoutMs?: number
   concurrency?: number
   localDeviceId: string
+  /** When set, successful probes keep the TCP socket for reuse by outbound sessions (single TCP). */
+  probeSocketRegistry?: ProbeSocketRegistry
 }
 
 export async function probeDevices(
@@ -55,10 +58,18 @@ async function probeSingle(
   const port = options.port ?? DEFAULT_TCP_PORT
   const socket = new Socket()
   const codec = new LengthPrefixedJsonCodec()
+  const registryKey = `${device.ipAddress}:${port}`
 
   return new Promise<DiscoveredDevice>((resolve) => {
-    const end = (connectable: boolean, nextDevice?: Partial<DiscoveredDevice>) => {
-      socket.destroy()
+    const end = (
+      connectable: boolean,
+      nextDevice?: Partial<DiscoveredDevice>,
+      keepSocket = false
+    ) => {
+      clearTimeout(timer)
+      if (!keepSocket) {
+        socket.destroy()
+      }
       resolve({
         ...device,
         ...nextDevice,
@@ -72,7 +83,6 @@ async function probeSingle(
     }
     const timer = setTimeout(() => end(false, { connectCheckError: 'PROBE_TIMEOUT' }), timeoutMs)
     socket.on('error', () => {
-      clearTimeout(timer)
       end(false)
     })
     socket.on('data', (chunk) => {
@@ -89,7 +99,27 @@ async function probeSingle(
           typeof payload.sourceDeviceId === 'string' && payload.sourceDeviceId.length > 0
             ? payload.sourceDeviceId
             : undefined
-        clearTimeout(timer)
+        const ackSessionId =
+          typeof frame.sessionId === 'string' && frame.sessionId.length > 0 ? frame.sessionId : ''
+        if (options.probeSocketRegistry && ackSessionId.length > 0) {
+          socket.removeAllListeners()
+          options.probeSocketRegistry.register(registryKey, {
+            socket,
+            codec,
+            sessionId: ackSessionId,
+            displayName: typeof payload.displayName === 'string' ? payload.displayName : undefined
+          })
+          end(
+            true,
+            {
+              deviceId: peerDeviceId ? hashDeviceId(peerDeviceId) : device.deviceId,
+              name: typeof payload.displayName === 'string' ? payload.displayName : device.name,
+              port
+            },
+            true
+          )
+          return
+        }
         end(true, {
           deviceId: peerDeviceId ? hashDeviceId(peerDeviceId) : device.deviceId,
           name: typeof payload.displayName === 'string' ? payload.displayName : device.name,

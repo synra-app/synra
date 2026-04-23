@@ -17,6 +17,7 @@ extension LanDiscoveryPlugin {
     ) -> [String: Any] {
         if reset {
             devices.removeAll()
+            closeAllOutboundSessions()
         }
 
         startBackgroundDiscoveryServices()
@@ -99,49 +100,27 @@ extension LanDiscoveryPlugin {
         return updated.toDictionary()
     }
 
-    @objc public func probeConnectable(port: NSNumber?, timeoutMs: NSNumber?) -> [String: Any] {
-        let targetPort = port?.uint16Value ?? 32100
-        let targetTimeout = timeoutMs?.intValue ?? 1500
-        let checkedAt = now()
-        for (deviceId, device) in devices {
-            let outcome = probeDevice(host: device.ipAddress, port: targetPort, timeoutMs: targetTimeout)
-            var updated = device.withConnectable(outcome.connectable, outcome.error)
-            let canonRemote = outcome.remoteDeviceId.map { canonicalLanDeviceId(fromWireSourceDeviceId: $0) } ?? ""
-            let canonExisting = canonicalLanDeviceId(fromWireSourceDeviceId: device.deviceId)
-            if !canonRemote.isEmpty, canonRemote != canonExisting {
-                devices.removeValue(forKey: deviceId)
-                let trimmedDisplay = outcome.remoteDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                let nextName: String
-                if !trimmedDisplay.isEmpty {
-                    nextName = trimmedDisplay
-                } else {
-                    nextName = updated.name
-                }
-                updated = DeviceRecord(
-                    deviceId: canonRemote,
-                    name: nextName,
-                    ipAddress: updated.ipAddress,
-                    source: updated.source,
-                    connectable: updated.connectable,
-                    connectCheckAt: updated.connectCheckAt,
-                    connectCheckError: updated.connectCheckError,
-                    discoveredAt: updated.discoveredAt,
-                    lastSeenAt: updated.lastSeenAt
-                )
-            } else if let dn = outcome.remoteDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines),
-                      !dn.isEmpty
-            {
-                updated = updated.withName(dn)
-            }
-            devices[updated.deviceId] = updated
+    @objc public func ensureOutboundSession(
+        host: String,
+        port: NSNumber,
+        timeoutMs: NSNumber?
+    ) -> [String: Any] {
+        let trimmed = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return ["error": "INVALID_HOST"]
         }
-
-        return [
-            "checkedAt": checkedAt,
-            "port": Int(targetPort),
-            "timeoutMs": targetTimeout,
-            "devices": devices.values.map { $0.toDictionary() },
-        ]
+        let p = port.uint16Value
+        let t = max(200, timeoutMs?.intValue ?? defaultDiscoveryTimeoutMs)
+        _ = probeDevice(host: trimmed, port: p, timeoutMs: t)
+        let key = outboundHostPortKey(host: trimmed, port: p)
+        if let sid = outboundHostPortToSessionId[key], outboundConnections[sid] != nil {
+            return [
+                "sessionId": sid,
+                "state": "open",
+                "transport": "tcp",
+            ]
+        }
+        return ["error": "ENSURE_FAILED", "host": trimmed, "port": Int(p)]
     }
 
     @objc public func sendMessage(
@@ -150,18 +129,25 @@ extension LanDiscoveryPlugin {
         payload: Any,
         messageId: String?
     ) -> [String: Any]? {
-        guard let context = inboundConnections.first(where: { $0.value.sessionId == sessionId })?.value else {
-            return nil
-        }
         let targetMessageId = messageId ?? UUID().uuidString
         let envelope: [String: Any] = [
             "messageType": messageType,
             "payload": payload,
         ]
-        sendFrame(
-            frame(type: "message", sessionId: sessionId, messageId: targetMessageId, payload: envelope),
-            through: context.connection
-        )
+        let frameToSend = frame(type: "message", sessionId: sessionId, messageId: targetMessageId, payload: envelope)
+        if let outbound = outboundConnections[sessionId] {
+            sendFrame(frameToSend, through: outbound.connection)
+            return [
+                "success": true,
+                "sessionId": sessionId,
+                "messageId": targetMessageId,
+                "transport": "tcp",
+            ]
+        }
+        guard let context = inboundConnections.first(where: { $0.value.sessionId == sessionId })?.value else {
+            return nil
+        }
+        sendFrame(frameToSend, through: context.connection)
         return [
             "success": true,
             "sessionId": sessionId,
@@ -171,6 +157,14 @@ extension LanDiscoveryPlugin {
     }
 
     @objc public func closeSession(sessionId: String) -> [String: Any] {
+        if outboundConnections[sessionId] != nil {
+            closeOutboundSession(sessionId: sessionId, reason: "closed-by-host", emitSessionClosed: true)
+            return [
+                "success": true,
+                "sessionId": sessionId,
+                "transport": "tcp",
+            ]
+        }
         guard let connectionId = inboundConnections.first(where: { $0.value.sessionId == sessionId })?.key else {
             return [
                 "success": true,
@@ -193,6 +187,7 @@ extension LanDiscoveryPlugin {
     }
 
     @objc public func stopBackgroundDiscoveryServices() {
+        closeAllOutboundSessions()
         stopTcpServer()
         stopMdnsAdvertisement()
         stopUdpDiscoveryResponder()

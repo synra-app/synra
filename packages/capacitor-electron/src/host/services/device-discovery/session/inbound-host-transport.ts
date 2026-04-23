@@ -177,7 +177,6 @@ export function createInboundHostTransport(
         frame.payload && typeof frame.payload === 'object'
           ? (frame.payload as Record<string, unknown>)
           : {}
-      const isProbe = payload.probe === true
       const remoteDeviceId =
         typeof payload.sourceDeviceId === 'string' && payload.sourceDeviceId.length > 0
           ? payload.sourceDeviceId
@@ -215,7 +214,7 @@ export function createInboundHostTransport(
           host: peerHost,
           port: options.port ?? DEFAULT_TCP_PORT,
           displayName: peerDisplayName,
-          source: isProbe ? 'probe' : 'session',
+          source: 'session',
           connectable: true
         },
         transport: 'tcp'
@@ -236,10 +235,6 @@ export function createInboundHostTransport(
           pairedPeerDeviceIds
         }
       })
-      if (isProbe) {
-        socket.destroy()
-        return
-      }
       sessions.set(sessionId, {
         sessionId,
         socket,

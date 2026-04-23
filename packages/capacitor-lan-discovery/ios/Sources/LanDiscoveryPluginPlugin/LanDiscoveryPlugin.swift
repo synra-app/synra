@@ -29,6 +29,8 @@ import Network
     internal let tcpServerQueue = DispatchQueue(label: "com.synra.lan-discovery.tcp-server")
     internal var tcpListener: NWListener?
     internal var inboundConnections: [String: InboundConnectionContext] = [:]
+    internal var outboundConnections: [String: OutboundConnectionContext] = [:]
+    internal var outboundHostPortToSessionId: [String: String] = [:]
 
     public var onSessionOpened: (([String: Any]) -> Void)?
     public var onSessionClosed: (([String: Any]) -> Void)?

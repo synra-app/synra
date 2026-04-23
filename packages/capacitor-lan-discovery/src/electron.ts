@@ -2,8 +2,9 @@ import { WebPlugin } from '@capacitor/core'
 import type {
   DiscoveryCloseSessionOptions,
   DiscoveryCloseSessionResult,
-  ProbeConnectableOptions,
-  ProbeConnectableResult,
+  EnsureOutboundSessionOptions,
+  EnsureOutboundSessionResult,
+  EnsureOutboundSessionSuccess,
   DiscoverySendMessageOptions,
   DiscoverySendMessageResult,
   LanDiscoveryPlugin,
@@ -54,6 +55,10 @@ type DiscoveryBridgeMethods = {
   'discovery.list': {
     payload: Record<string, never>
     result: DiscoveryListBridgeResult
+  }
+  'discovery.openSession': {
+    payload: { deviceId: string; host: string; port: number; token?: string }
+    result: { success: true; sessionId: string; state: string; transport?: string }
   }
   'discovery.closeSession': {
     payload: DiscoveryCloseSessionOptions
@@ -174,8 +179,34 @@ export class LanDiscoveryElectron extends WebPlugin implements LanDiscoveryPlugi
     return toListResult(result)
   }
 
-  async probeConnectable(_options: ProbeConnectableOptions = {}): Promise<ProbeConnectableResult> {
-    throw this.unavailable('probeConnectable is unavailable on electron runtime.')
+  async ensureOutboundSession(
+    options: EnsureOutboundSessionOptions
+  ): Promise<EnsureOutboundSessionResult> {
+    const host = typeof options.host === 'string' ? options.host.trim() : ''
+    if (!host) {
+      return { error: 'INVALID_HOST' }
+    }
+    this.ensureHostEventSubscription()
+    const port = options.port ?? 32100
+    const deviceId =
+      typeof options.deviceId === 'string' && options.deviceId.trim().length > 0
+        ? options.deviceId.trim()
+        : 'lan-outbound'
+    try {
+      const result = await this.invokeBridge('discovery.openSession', {
+        deviceId,
+        host,
+        port
+      })
+      const state = result.state as EnsureOutboundSessionSuccess['state']
+      return {
+        sessionId: result.sessionId,
+        state,
+        transport: 'tcp'
+      }
+    } catch {
+      return { error: 'ENSURE_FAILED', host, port }
+    }
   }
 
   async closeSession(options: DiscoveryCloseSessionOptions): Promise<DiscoveryCloseSessionResult> {

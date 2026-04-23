@@ -13,7 +13,6 @@ import type {
 import type { ConnectionRuntimeAdapter } from './adapter'
 import { registerAdapterListeners } from './adapter-listeners'
 import { ConnectedSessionsBook } from './connected-sessions-book'
-import { getHooksRuntimeOptions, isLocalDiscoveryDeviceId } from './config'
 import { createDiscoveryModule } from './discovery-module'
 import { createMessageListenersRegistry } from './message-listeners'
 import { createSessionOperationsModule } from './session-operations-module'
@@ -78,29 +77,6 @@ export function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): Conn
 
   async function startDiscovery(discoveryOptions?: SynraDiscoveryStartOptions): Promise<void> {
     await discoveryModule.startDiscovery(discoveryOptions)
-    const exclude = getHooksRuntimeOptions().shouldExcludeDiscoveredDevice
-    const shouldDrop = (deviceId: string) =>
-      isLocalDiscoveryDeviceId(deviceId) || (typeof exclude === 'function' && exclude(deviceId))
-    for (const d of devices.value) {
-      if (!d.connectable) {
-        continue
-      }
-      const host = typeof d.ipAddress === 'string' ? d.ipAddress.trim() : ''
-      if (host.length === 0) {
-        continue
-      }
-      if (shouldDrop(d.deviceId)) {
-        continue
-      }
-      void sessionModule
-        .openSession({
-          deviceId: d.deviceId,
-          host,
-          port: typeof d.port === 'number' && d.port > 0 ? d.port : 32100,
-          suppressGlobalError: true
-        })
-        .catch(() => undefined)
-    }
   }
 
   async function ensureListeners(): Promise<void> {

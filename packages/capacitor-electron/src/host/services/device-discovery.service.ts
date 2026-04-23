@@ -18,6 +18,7 @@ import type {
 import { DEFAULT_HEARTBEAT_INTERVAL_MS } from './device-discovery/core/constants'
 import { getOrCreateLocalDeviceUuid } from './device-discovery/core/device-identity'
 import { createDiscoveryOrchestrator } from './device-discovery/discovery/discovery-orchestrator'
+import { createProbeSocketRegistry } from './device-discovery/discovery/probe-socket-registry'
 import { createManualDiscoveryStrategy } from './device-discovery/discovery/strategies/manual.strategy'
 import { createMdnsDiscoveryStrategy } from './device-discovery/discovery/strategies/mdns.strategy'
 import { createUdpDiscoveryStrategy } from './device-discovery/discovery/strategies/udp.strategy'
@@ -50,6 +51,7 @@ export function createDeviceDiscoveryService(
   const readPairedPeerDeviceIds = options.readPairedPeerDeviceIds
   const registry = createDeviceRegistry()
   const eventBus = createHostEventBus(options.onHostEvent)
+  const probeSocketRegistry = createProbeSocketRegistry()
   const orchestrator = createDiscoveryOrchestrator({
     registry,
     strategies: [
@@ -57,7 +59,8 @@ export function createDeviceDiscoveryService(
       createUdpDiscoveryStrategy(),
       createManualDiscoveryStrategy()
     ],
-    resolveLocalDeviceUuid
+    resolveLocalDeviceUuid,
+    probeSocketRegistry
   })
   const inboundTransport = createInboundHostTransport({
     eventBus,
@@ -67,7 +70,8 @@ export function createDeviceDiscoveryService(
   const outboundSession = createOutboundClientSession({
     eventBus,
     resolveLocalDeviceUuid,
-    readPairedPeerDeviceIds
+    readPairedPeerDeviceIds,
+    probeSocketRegistry
   })
 
   let heartbeatTimer: NodeJS.Timeout | undefined
@@ -90,6 +94,7 @@ export function createDeviceDiscoveryService(
       clearInterval(heartbeatTimer)
       heartbeatTimer = undefined
     }
+    probeSocketRegistry.closeAll()
     await outboundSession.close().catch(() => undefined)
     await inboundTransport.stop()
     hostStarted = false
