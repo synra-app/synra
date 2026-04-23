@@ -16,6 +16,8 @@ import { normalizeHost } from './host-normalization'
 import { sortDevices } from './device-sort'
 import type { MessageListenersRegistry } from './message-listeners'
 import { getHooksRuntimeOptions, isLocalDiscoveryDeviceId } from './config'
+import { setPairAwaitingAccept } from './pair-awaiting-accept'
+import { setPairedDeviceConnecting } from './paired-link-phases'
 import { setSessionStateWithTransitionLog } from './session-state-transition-log'
 
 function shouldSuppressTransportErrorMessage(message: string | undefined): boolean {
@@ -190,7 +192,12 @@ export async function registerAdapterListeners(options: {
         { reason: 'session_closed_event' }
       )
     }
-    sessionsBook.markConnectionClosed(event.sessionId, Date.now())
+    const closedOpen = sessionsBook.markConnectionClosed(event.sessionId, Date.now())
+    const closedDeviceId = closedOpen?.deviceId
+    if (typeof closedDeviceId === 'string' && closedDeviceId.trim().length > 0) {
+      setPairAwaitingAccept(closedDeviceId, false)
+      setPairedDeviceConnecting(closedDeviceId, false)
+    }
   })
 
   await adapter.addMessageReceivedListener((event) => {

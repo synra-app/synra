@@ -82,14 +82,33 @@ export class ConnectedSessionsBook {
     this.scheduleConnectedSessionsRebuild(Boolean(options.immediate))
   }
 
-  markConnectionClosed(sessionId: string | undefined, reasonAt: number): void {
+  /**
+   * Marks a session closed. When the session was previously open, returns a snapshot of that row
+   * (before mutation) so callers can clear pairing UI state keyed by `deviceId`.
+   */
+  markConnectionClosed(
+    sessionId: string | undefined,
+    reasonAt: number
+  ): RuntimeConnectedSession | undefined {
     if (!sessionId) {
-      return
+      return undefined
     }
     const current = this.connectedSessionMap.get(sessionId)
     if (!current) {
-      return
+      return undefined
     }
+    if (current.status === 'closed') {
+      this.upsertConnectedSession(
+        {
+          ...current,
+          closedAt: reasonAt,
+          lastActiveAt: reasonAt
+        },
+        { immediate: true }
+      )
+      return undefined
+    }
+    const snapshot: RuntimeConnectedSession = { ...current }
     this.upsertConnectedSession(
       {
         ...current,
@@ -99,6 +118,7 @@ export class ConnectedSessionsBook {
       },
       { immediate: true }
     )
+    return snapshot
   }
 
   touchSessionActivity(

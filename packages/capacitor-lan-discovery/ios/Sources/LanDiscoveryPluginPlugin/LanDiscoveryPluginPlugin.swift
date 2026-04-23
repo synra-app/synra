@@ -33,6 +33,11 @@ public class LanDiscoveryPluginPlugin: CAPPlugin, CAPBridgedPlugin {
         implementation.onTransportError = { [weak self] payload in
             self?.notifyListeners("transportError", data: payload)
         }
+        implementation.onDiscoveredPeerDevice = { [weak self] payload in
+            self?.notifyListeners("deviceFound", data: payload)
+            self?.notifyListeners("deviceUpdated", data: payload)
+            self?.notifyListeners("deviceConnectableUpdated", data: payload)
+        }
     }
 
     @objc func startDiscovery(_ call: CAPPluginCall) {

@@ -62,7 +62,8 @@ export function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): Conn
     scanState,
     devices,
     loading,
-    error
+    error,
+    connectedSessions
   })
 
   const sessionModule = createSessionOperationsModule({

@@ -385,10 +385,19 @@ public final class DeviceConnectionPluginCore: NSObject {
                 return
             }
             guard let frame else {
+                let closedSessionId = self.sessionState.sessionId
+                let shouldNotifyClosed = self.sessionState.state == "open"
                 self.sessionState.state = "closed"
                 self.sessionState.closedAt = self.now()
                 self.connection?.cancel()
                 self.connection = nil
+                if shouldNotifyClosed, let closedSessionId, !closedSessionId.isEmpty {
+                    self.onSessionClosed?([
+                        "sessionId": closedSessionId,
+                        "reason": "socket-closed",
+                        "transport": "tcp",
+                    ])
+                }
                 return
             }
 

@@ -15,6 +15,13 @@ final class MdnsCollector: NSObject, NetServiceBrowserDelegate, NetServiceDelega
     }
 
     func start(serviceType: String, timeoutMs: Int) {
+        accessQueue.sync {
+            addresses.removeAll()
+            bonjourHostByIp.removeAll()
+        }
+        #if DEBUG
+            print("[lan-discovery] mdns browse type=\(serviceType) timeoutMs=\(timeoutMs)")
+        #endif
         let browseSeconds = Double(max(timeoutMs, 200)) / 1000.0
         let resolveTimeout = max(3, Int(browseSeconds.rounded(.up)) + 2)
         lastResolveTimeout = resolveTimeout

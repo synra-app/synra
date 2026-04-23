@@ -19,6 +19,17 @@ function nonEmptyTrimmed(value: string | undefined): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined
 }
 
+/** Shown when the peer hello omits displayName so the row still appears in the list. */
+function fallbackDisplayNameForLanDeviceId(deviceId: string): string {
+  const trimmed = deviceId.trim()
+  if (trimmed.length === 0) {
+    return 'Synra device'
+  }
+  const tail = trimmed.startsWith('device-') ? trimmed.slice('device-'.length) : trimmed
+  const prefix = tail.slice(0, 6)
+  return prefix.length > 0 ? `Peer ${prefix}` : 'Synra device'
+}
+
 function isPlaceholderName(value: string | undefined): boolean {
   if (typeof value !== 'string') {
     return false
@@ -87,10 +98,10 @@ export function upsertDiscoveredPeerFromSession(
   const existing =
     devices.value.find((device) => device.deviceId === event.deviceId) ??
     devices.value.find((device) => normalizeHost(device.ipAddress) === host)
-  const displayName = nonEmptyTrimmed(event.displayName) ?? nonEmptyTrimmed(existing?.name)
-  if (!displayName) {
-    return
-  }
+  const displayName =
+    nonEmptyTrimmed(event.displayName) ??
+    nonEmptyTrimmed(existing?.name) ??
+    fallbackDisplayNameForLanDeviceId(event.deviceId)
   const port = resolveValidPort(event.port, existing?.port)
   const peer: DiscoveredDevice = existing
     ? {

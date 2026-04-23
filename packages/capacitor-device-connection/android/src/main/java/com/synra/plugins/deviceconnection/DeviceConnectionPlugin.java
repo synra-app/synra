@@ -375,6 +375,15 @@ public class DeviceConnectionPlugin extends Plugin {
                         event.put("transport", "tcp");
                         notifyListeners("transportError", event);
                     }
+                    if (sessionOpen.get()
+                        && currentSessionId != null
+                        && !currentSessionId.isBlank()) {
+                        JSObject closed = new JSObject();
+                        closed.put("sessionId", currentSessionId);
+                        closed.put("reason", "socket-closed");
+                        closed.put("transport", "tcp");
+                        notifyListeners("sessionClosed", closed);
+                    }
                     closeSessionSocket();
                 }
             }
