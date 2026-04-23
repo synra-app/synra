@@ -34,7 +34,7 @@
     "vue": "catalog:vue"
   },
   "devDependencies": {
-    "@iconify-json/eos-icons": "^1.2.2",
+    "@iconify-json/eos-icons": "^1.2.4",
     "@tsdown/css": "catalog:",
     "@types/node": "catalog:types",
     "@unocss/preset-icons": "catalog:unocss",
