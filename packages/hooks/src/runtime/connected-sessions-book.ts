@@ -1,5 +1,5 @@
 import { type Ref } from 'vue'
-import type { RuntimeConnectedSession } from '../types'
+import type { AppLinkState, RuntimeConnectedSession } from '../types'
 import { CONNECTED_SESSIONS_REBUILD_DEBOUNCE_MS, MAX_CLOSED_CONNECTED_SESSIONS } from './constants'
 
 export class ConnectedSessionsBook {
@@ -12,7 +12,7 @@ export class ConnectedSessionsBook {
     return Number(session.lastActiveAt ?? session.closedAt ?? session.openedAt ?? 0)
   }
 
-  private pruneClosedSessions(entries: RuntimeConnectedSession[]): RuntimeConnectedSession[] {
+  private pruneDeadSessions(entries: RuntimeConnectedSession[]): RuntimeConnectedSession[] {
     if (entries.length <= MAX_CLOSED_CONNECTED_SESSIONS) {
       return entries
     }
@@ -20,21 +20,25 @@ export class ConnectedSessionsBook {
   }
 
   rebuildConnectedSessionsView(): void {
-    const openSessions: RuntimeConnectedSession[] = []
-    const closedSessions: RuntimeConnectedSession[] = []
+    const readySessions: RuntimeConnectedSession[] = []
+    const deadSessions: RuntimeConnectedSession[] = []
 
     for (const item of this.connectedSessionMap.values()) {
-      if (item.status === 'open') {
-        openSessions.push(item)
+      if (
+        item.transport === 'ready' ||
+        item.transport === 'handshaking' ||
+        item.transport === 'idle'
+      ) {
+        readySessions.push(item)
       } else {
-        closedSessions.push(item)
+        deadSessions.push(item)
       }
     }
 
-    openSessions.sort((left, right) => this.sessionSortValue(right) - this.sessionSortValue(left))
-    closedSessions.sort((left, right) => this.sessionSortValue(right) - this.sessionSortValue(left))
-    const retainedClosedSessions = this.pruneClosedSessions(closedSessions)
-    const nextView = [...openSessions, ...retainedClosedSessions]
+    readySessions.sort((left, right) => this.sessionSortValue(right) - this.sessionSortValue(left))
+    deadSessions.sort((left, right) => this.sessionSortValue(right) - this.sessionSortValue(left))
+    const retainedDeadSessions = this.pruneDeadSessions(deadSessions)
+    const nextView = [...readySessions, ...retainedDeadSessions]
 
     this.connectedSessions.value = nextView
 
@@ -83,10 +87,10 @@ export class ConnectedSessionsBook {
   }
 
   /**
-   * Marks a session closed. When the session was previously open, returns a snapshot of that row
-   * (before mutation) so callers can clear pairing UI state keyed by `deviceId`.
+   * Marks transport dead (TCP/session gone). Returns a snapshot of the row before mutation when
+   * transport was still usable, so callers can clear pairing UI keyed by `deviceId`.
    */
-  markConnectionClosed(
+  markTransportDead(
     sessionId: string | undefined,
     reasonAt: number
   ): RuntimeConnectedSession | undefined {
@@ -97,7 +101,7 @@ export class ConnectedSessionsBook {
     if (!current) {
       return undefined
     }
-    if (current.status === 'closed') {
+    if (current.transport === 'dead') {
       this.upsertConnectedSession(
         {
           ...current,
@@ -112,7 +116,7 @@ export class ConnectedSessionsBook {
     this.upsertConnectedSession(
       {
         ...current,
-        status: 'closed',
+        transport: 'dead',
         closedAt: reasonAt,
         lastActiveAt: reasonAt
       },
@@ -121,42 +125,58 @@ export class ConnectedSessionsBook {
     return snapshot
   }
 
+  setSessionAppLink(
+    sessionId: string,
+    app: AppLinkState,
+    options: { lastAppError?: string; immediate?: boolean } = {}
+  ): void {
+    const current = this.connectedSessionMap.get(sessionId)
+    if (!current || current.transport === 'dead') {
+      return
+    }
+    this.upsertConnectedSession(
+      {
+        ...current,
+        app,
+        ...(options.lastAppError !== undefined ? { lastAppError: options.lastAppError } : {}),
+        lastActiveAt: Date.now()
+      },
+      { immediate: Boolean(options.immediate) }
+    )
+  }
+
+  setAppLinkForDevice(
+    deviceId: string,
+    app: AppLinkState,
+    options: { lastAppError?: string } = {}
+  ): void {
+    const trimmed = deviceId.trim()
+    if (!trimmed) {
+      return
+    }
+    for (const session of this.connectedSessionMap.values()) {
+      if (session.transport === 'dead') {
+        continue
+      }
+      if (session.deviceId === trimmed) {
+        this.setSessionAppLink(session.sessionId, app, { ...options, immediate: true })
+      }
+    }
+  }
+
   touchSessionActivity(
     sessionId: string,
     updatedAt: number,
     fallbackDirection: 'inbound' | 'outbound'
   ): void {
     const existing = this.connectedSessionMap.get(sessionId)
-    if (!existing) {
+    if (!existing || existing.transport !== 'ready') {
       return
     }
     this.upsertConnectedSession({
       ...existing,
-      status: 'open',
       lastActiveAt: updatedAt,
       direction: existing.direction ?? fallbackDirection
     })
-  }
-
-  findOpenSessionIdsByHostDirection(
-    host: string,
-    direction: 'inbound' | 'outbound',
-    excludeSessionId?: string
-  ): string[] {
-    const matched: string[] = []
-    for (const session of this.connectedSessionMap.values()) {
-      if (session.status !== 'open') {
-        continue
-      }
-      if (excludeSessionId && session.sessionId === excludeSessionId) {
-        continue
-      }
-      const sessionHost = typeof session.host === 'string' ? session.host : undefined
-      const sessionDirection = session.direction === 'inbound' ? 'inbound' : 'outbound'
-      if (sessionHost === host && sessionDirection === direction) {
-        matched.push(session.sessionId)
-      }
-    }
-    return matched
   }
 }

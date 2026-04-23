@@ -30,7 +30,7 @@ export type PairedDeviceRow = {
  * for device lists; do not call `startScan` / `startDiscovery` from plugin code.
  */
 export function usePairedDevices() {
-  const { peers, connectedDeviceIds, ensureReady } = useTransport()
+  const { peers, appReadyDeviceIds, ensureReady } = useTransport()
   const pairedRecords = ref<SynraPairedDeviceRecord[]>([])
 
   async function reloadPairedRecords(): Promise<void> {
@@ -56,7 +56,7 @@ export function usePairedDevices() {
       const live = byId.get(record.deviceId)
       const transportPending = linkPhases.has(record.deviceId)
       const pairPending = pairAwaiting.has(record.deviceId)
-      const connected = connectedDeviceIds.value.includes(record.deviceId)
+      const connected = appReadyDeviceIds.value.includes(record.deviceId)
       let linkStatus: PairedLinkStatus = 'disconnected'
       if (connected && !transportPending && !pairPending) {
         linkStatus = 'connected'

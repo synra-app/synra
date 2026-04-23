@@ -2,7 +2,7 @@ import type { Pinia } from 'pinia'
 import type { SynraPairedDeviceRecord } from '@synra/capacitor-preferences'
 import { storeToRefs } from 'pinia'
 import { watch } from 'vue'
-import { setPairedDeviceConnecting } from '@synra/hooks'
+import { getConnectionRuntime, setPairedDeviceConnecting } from '@synra/hooks'
 import { listPairedDeviceRecords } from '../lib/paired-devices-storage'
 import { useLanDiscoveryStore } from '../stores/lan-discovery'
 import { usePairingStore } from '../stores/pairing'
@@ -27,13 +27,14 @@ function isIpv4Address(value: string | undefined): boolean {
 export function registerPairedAutoConnect(pinia: Pinia): void {
   const store = useLanDiscoveryStore(pinia)
   const pairingStore = usePairingStore(pinia)
-  const { peers, connectedDeviceIds } = storeToRefs(store)
+  const { peers, transportReadyDeviceIds } = storeToRefs(store)
   const { pairedListEpoch } = storeToRefs(pairingStore)
 
   const inFlight = new Set<string>()
 
   async function connectOne(record: SynraPairedDeviceRecord): Promise<void> {
-    if (connectedDeviceIds.value.includes(record.deviceId)) {
+    if (transportReadyDeviceIds.value.includes(record.deviceId)) {
+      getConnectionRuntime().setAppLinkForDevice(record.deviceId, 'connected')
       setPairedDeviceConnecting(record.deviceId, false)
       return
     }
@@ -59,6 +60,7 @@ export function registerPairedAutoConnect(pinia: Pinia): void {
           suppressGlobalError: true
         })
       }
+      getConnectionRuntime().setAppLinkForDevice(record.deviceId, 'connected')
     } catch {
       // Best-effort reconnect; discovery will retry on next tick.
     } finally {

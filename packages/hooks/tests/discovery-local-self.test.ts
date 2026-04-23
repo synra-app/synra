@@ -42,8 +42,7 @@ function createStaticScanAdapter(devices: DiscoveredDevice[]): ConnectionRuntime
     },
     async addTransportErrorListener() {
       return { remove: async () => {} }
-    },
-    invalidateHandoffForHostKeys() {}
+    }
   }
 }
 

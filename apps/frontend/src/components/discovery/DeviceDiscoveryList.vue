@@ -7,7 +7,6 @@ import DeviceDetailsDialog from './DeviceDetailsDialog.vue'
 defineProps<{
   devices: DisplayDevice[]
   loading: boolean
-  connectedDeviceIds: string[]
   actionPendingDeviceIds: string[]
   linkToneByDeviceId: Record<string, 'red' | 'yellow' | 'green' | 'gray'>
 }>()

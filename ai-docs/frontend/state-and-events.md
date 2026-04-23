@@ -14,7 +14,7 @@
 
 关键状态分组：
 
-- 设备态：`scanState`、`peers`、`connectedDeviceIds`
+- 设备态：`scanState`、`peers`、`transportReadyDeviceIds`（物理 TCP 就绪）、`appReadyDeviceIds`（应用链路就绪）
 - 插件态：`plugins`、`keyword`、`builtinInstalled`
 - 壳层态：`sidebarCollapsed`、`activeMenu`
 - 诊断态：`error`、`eventLogs`
@@ -49,7 +49,7 @@
 
 ## 设备与连接状态规范
 
-- 设备连接状态以 `connectedDeviceIds` 为单一来源。
+- 物理连接以 `transportReadyDeviceIds` 为准；应用层「已连接」灯色与配对 gating 以 `appReadyDeviceIds` 为准（由 `getConnectionRuntime().setAppLinkForDevice` 驱动）。
 - 页面不得维护额外 session 缓存，避免与 store 脱节。
 - 页面交互只基于 `deviceId`：
   - 连接设备

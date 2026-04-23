@@ -5,14 +5,17 @@ import { normalizeHost } from './host-normalization'
 import { getPairAwaitingAcceptDeviceIds, setPairAwaitingAccept } from './pair-awaiting-accept'
 import { setPairedDeviceConnecting } from './paired-link-phases'
 
-function hasOpenSessionForPeer(
+function hasTransportReadySessionForPeer(
   deviceId: string,
   devices: DiscoveredDevice[],
-  openSessions: RuntimeConnectedSession[]
+  sessions: RuntimeConnectedSession[]
 ): boolean {
   const target = devices.find((peer) => peer.deviceId === deviceId)
   const targetHost = target ? normalizeHost(target.ipAddress ?? '') : ''
-  return openSessions.some((session) => {
+  return sessions.some((session) => {
+    if (session.transport !== 'ready') {
+      return false
+    }
     if (session.deviceId === deviceId) {
       return true
     }
@@ -23,15 +26,15 @@ function hasOpenSessionForPeer(
   })
 }
 
-/** Clears pair-awaiting when no open session remains for that peer (scan / stale UI recovery). */
+/** Clears pair-awaiting when no transport-ready session remains for that peer (scan / stale UI recovery). */
 export function pruneStalePairAwaitingForOpenSessions(
   devices: Ref<DiscoveredDevice[]>,
   connectedSessions: Ref<RuntimeConnectedSession[]>
 ): void {
-  const openSessions = connectedSessions.value.filter((session) => session.status === 'open')
+  const liveSessions = connectedSessions.value.filter((session) => session.transport === 'ready')
   const awaiting = getPairAwaitingAcceptDeviceIds().value
   for (const deviceId of awaiting) {
-    if (hasOpenSessionForPeer(deviceId, devices.value, openSessions)) {
+    if (hasTransportReadySessionForPeer(deviceId, devices.value, liveSessions)) {
       continue
     }
     setPairAwaitingAccept(deviceId, false)

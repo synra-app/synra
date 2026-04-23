@@ -75,7 +75,7 @@ export function createSessionOperationsModule(options: {
         },
         { reason: 'manual_close_session' }
       )
-      sessionsBook.markConnectionClosed(sessionId, Date.now())
+      sessionsBook.markTransportDead(sessionId, Date.now())
       error.value = null
     } catch (unknownError) {
       error.value = unknownToErrorMessage(unknownError, CLOSE_SESSION_ERROR_MESSAGE)

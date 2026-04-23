@@ -7,18 +7,17 @@ import type { Pinia } from 'pinia'
 import { syncPairedDiscoveryExclusionFromRecords } from './discovery-paired-exclusion'
 import { listPairedDeviceRecords, removePairedDeviceRecord } from './paired-devices-storage'
 import { PAIR_MESSAGE_UNPAIR_REQUIRED } from './pair-protocol'
-import { useLanDiscoveryStore } from '../stores/lan-discovery'
 import { usePairingStore } from '../stores/pairing'
 
 /**
  * After helloAck: if the peer no longer lists our LAN `deviceId` among its paired partners but we
  * still store them as paired, drop the stale pairing locally and refresh discovery exclusion.
+ * Physical TCP stays open; application link state is updated only.
  */
 export async function applyHandshakePairedSync(options: {
   pinia: Pinia
   peerDeviceId: string
   theirPairedPeerDeviceIds: string[]
-  /** Session just opened on helloAck; close it after dropping stale pairing so UI does not stay green. */
   openedSessionId?: string
   remoteHandshakeKind?: 'paired' | 'fresh'
   remoteClaimsPeerPaired?: boolean
@@ -39,14 +38,7 @@ export async function applyHandshakePairedSync(options: {
   const hasLocalPair = records.some((record) => record.deviceId === peerId)
   const sid = options.openedSessionId?.trim()
   const runtime = getConnectionRuntime()
-  const lanStore = useLanDiscoveryStore(options.pinia)
   const pairingStore = usePairingStore(options.pinia)
-  const closeAndDisconnect = async (): Promise<void> => {
-    if (sid) {
-      await runtime.closeSession(sid).catch(() => undefined)
-    }
-    await lanStore.disconnectDevice(peerId).catch(() => undefined)
-  }
 
   if (!hasLocalPair) {
     const shouldRequestUnpair =
@@ -63,7 +55,7 @@ export async function applyHandshakePairedSync(options: {
         })
         .catch(() => undefined)
       setPairedDeviceConnecting(peerId, false)
-      await closeAndDisconnect()
+      runtime.setAppLinkForDevice(peerId, 'failed', 'Peer lists paired state we do not have.')
     }
     return
   }
@@ -71,6 +63,7 @@ export async function applyHandshakePairedSync(options: {
   const shouldDropForFreshHandshake = options.remoteHandshakeKind === 'fresh'
   const shouldDropForStaleAck = !remoteListsLocal
   if (!shouldDropForFreshHandshake && !shouldDropForStaleAck) {
+    runtime.setAppLinkForDevice(peerId, 'connected')
     return
   }
 
@@ -80,6 +73,9 @@ export async function applyHandshakePairedSync(options: {
   pairingStore.bumpPairedList()
 
   setPairedDeviceConnecting(peerId, false)
-
-  await closeAndDisconnect()
+  runtime.setAppLinkForDevice(
+    peerId,
+    'disconnected',
+    'Stale or fresh handshake dropped local pair.'
+  )
 }

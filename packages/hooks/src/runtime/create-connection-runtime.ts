@@ -1,6 +1,7 @@
 import type { DiscoveryState, DiscoveredDevice } from '@synra/capacitor-lan-discovery'
 import { type Ref, ref } from 'vue'
 import type {
+  AppLinkState,
   RuntimeConnectedSession,
   RuntimeOpenSessionInput,
   RuntimeSessionState,
@@ -12,6 +13,7 @@ import type {
 import type { ConnectionRuntimeAdapter } from './adapter'
 import { registerAdapterListeners } from './adapter-listeners'
 import { ConnectedSessionsBook } from './connected-sessions-book'
+import { getHooksRuntimeOptions, isLocalDiscoveryDeviceId } from './config'
 import { createDiscoveryModule } from './discovery-module'
 import { createMessageListenersRegistry } from './message-listeners'
 import { createSessionOperationsModule } from './session-operations-module'
@@ -27,8 +29,9 @@ export type ConnectionRuntime = {
   startDiscovery(options?: SynraDiscoveryStartOptions): Promise<void>
   openSession(options: RuntimeOpenSessionInput): Promise<void>
   closeSession(sessionId?: string): Promise<void>
-  invalidateHandoffForHostKeys(keys: readonly string[]): void
   sendMessage(input: SynraConnectionSendInput): Promise<void>
+  setSessionAppLink(sessionId: string, app: AppLinkState, lastAppError?: string): void
+  setAppLinkForDevice(deviceId: string, app: AppLinkState, lastAppError?: string): void
   onMessage(
     handler: (message: SynraConnectionMessage) => void | Promise<void>,
     filter?: SynraConnectionFilter
@@ -73,6 +76,33 @@ export function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): Conn
     sessionsBook
   })
 
+  async function startDiscovery(discoveryOptions?: SynraDiscoveryStartOptions): Promise<void> {
+    await discoveryModule.startDiscovery(discoveryOptions)
+    const exclude = getHooksRuntimeOptions().shouldExcludeDiscoveredDevice
+    const shouldDrop = (deviceId: string) =>
+      isLocalDiscoveryDeviceId(deviceId) || (typeof exclude === 'function' && exclude(deviceId))
+    for (const d of devices.value) {
+      if (!d.connectable) {
+        continue
+      }
+      const host = typeof d.ipAddress === 'string' ? d.ipAddress.trim() : ''
+      if (host.length === 0) {
+        continue
+      }
+      if (shouldDrop(d.deviceId)) {
+        continue
+      }
+      void sessionModule
+        .openSession({
+          deviceId: d.deviceId,
+          host,
+          port: typeof d.port === 'number' && d.port > 0 ? d.port : 32100,
+          suppressGlobalError: true
+        })
+        .catch(() => undefined)
+    }
+  }
+
   async function ensureListeners(): Promise<void> {
     if (listenersRegistered) {
       return
@@ -91,8 +121,12 @@ export function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): Conn
     listenersRegistered = true
   }
 
-  function invalidateHandoffForHostKeys(keys: readonly string[]): void {
-    adapter.invalidateHandoffForHostKeys?.(keys)
+  function setSessionAppLink(sessionId: string, app: AppLinkState, lastAppError?: string): void {
+    sessionsBook.setSessionAppLink(sessionId, app, { lastAppError, immediate: true })
+  }
+
+  function setAppLinkForDevice(deviceId: string, app: AppLinkState, lastAppError?: string): void {
+    sessionsBook.setAppLinkForDevice(deviceId, app, { lastAppError })
   }
 
   return {
@@ -103,11 +137,12 @@ export function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): Conn
     sessionState,
     connectedSessions,
     ensureListeners,
-    startDiscovery: discoveryModule.startDiscovery.bind(discoveryModule),
+    startDiscovery,
     openSession: sessionModule.openSession.bind(sessionModule),
     closeSession: sessionModule.closeSession.bind(sessionModule),
-    invalidateHandoffForHostKeys,
     sendMessage: sessionModule.sendMessage.bind(sessionModule),
+    setSessionAppLink,
+    setAppLinkForDevice,
     onMessage: messageRegistry.onMessage.bind(messageRegistry)
   }
 }

@@ -17,10 +17,12 @@ export {
   type ScanPhase
 } from './runtime/derive-device-card-badge'
 export type {
+  AppLinkState,
   SynraConnectionFilter,
   SynraConnectionMessage,
   SynraConnectionSendInput,
-  RuntimeConnectedSession
+  RuntimeConnectedSession,
+  TransportLinkState
 } from './types'
 export type { ConnectionRuntime } from './runtime/core'
 export type { PairedDeviceRow, PairedLinkStatus } from './hooks/use-paired-devices'

@@ -1,4 +1,5 @@
 import {
+  getConnectionRuntime,
   getPairAwaitingAcceptDeviceIds,
   getPairedLinkPhases,
   mergePairedAndDiscoveredDevices,
@@ -38,7 +39,7 @@ function isIpv4Address(value: string | undefined): boolean {
 export function useConnectPage() {
   const store = useLanDiscoveryStore()
   const pairingStore = usePairingStore()
-  const { scanState, peers, connectedDeviceIds, connectedSessions, loading, error } =
+  const { scanState, peers, appReadyDeviceIds, connectedSessions, loading, error } =
     storeToRefs(store)
   const { pairedListEpoch, feedbackMessage } = storeToRefs(pairingStore)
 
@@ -83,7 +84,7 @@ export function useConnectPage() {
       const anyPending = rowPending || transportPending.has(id) || pairAwaiting.has(id)
       if (anyPending) {
         tones[id] = 'yellow'
-      } else if (connectedDeviceIds.value.includes(id)) {
+      } else if (appReadyDeviceIds.value.includes(id)) {
         tones[id] = 'green'
       } else if (device.isPaired) {
         tones[id] = 'red'
@@ -105,6 +106,9 @@ export function useConnectPage() {
     addPendingDeviceAction(deviceId)
     try {
       await store.connectToDevice(deviceId)
+      if (pairedRecords.value.some((row) => row.deviceId === deviceId)) {
+        getConnectionRuntime().setAppLinkForDevice(deviceId, 'connected')
+      }
     } finally {
       removePendingDeviceAction(deviceId)
     }
@@ -133,7 +137,11 @@ export function useConnectPage() {
       if (!sessionId) {
         pairingStore.pushFeedback('Could not open session for pairing.')
         setPairAwaitingAccept(device.deviceId, false)
-        void store.disconnectDevice(device.deviceId).catch(() => undefined)
+        getConnectionRuntime().setAppLinkForDevice(
+          device.deviceId,
+          'failed',
+          'No session for pairing.'
+        )
         return
       }
       const requestId = crypto.randomUUID()
@@ -148,7 +156,11 @@ export function useConnectPage() {
     } catch {
       pairingStore.pushFeedback('Pairing request failed.')
       setPairAwaitingAccept(device.deviceId, false)
-      void store.disconnectDevice(device.deviceId).catch(() => undefined)
+      getConnectionRuntime().setAppLinkForDevice(
+        device.deviceId,
+        'failed',
+        'Pairing request failed.'
+      )
     } finally {
       removePendingDeviceAction(device.deviceId)
     }
@@ -162,7 +174,7 @@ export function useConnectPage() {
     setPairAwaitingAccept(device.deviceId, false)
     try {
       const openedSession = connectedSessions.value.find(
-        (session) => session.status === 'open' && session.deviceId === device.deviceId
+        (session) => session.transport === 'ready' && session.deviceId === device.deviceId
       )
       if (openedSession?.sessionId) {
         await store
@@ -196,7 +208,7 @@ export function useConnectPage() {
 
   return {
     displayDevices,
-    connectedDeviceIds,
+    appReadyDeviceIds,
     error,
     feedbackMessage,
     linkToneByDeviceId,

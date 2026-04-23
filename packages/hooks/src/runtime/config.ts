@@ -8,12 +8,6 @@ export type HooksRuntimeOptions = {
    */
   localDiscoveryDeviceId?: string
   /**
-   * When true, mobile LanDiscovery inbound TCP is migrated to DeviceConnection (legacy PC
-   * reverse-connect). Default false so LAN sessions to Synra desktop/mobile peers stay on
-   * LanDiscovery for pairing and custom messages.
-   */
-  enableMobileLanDeviceConnectionHandoff?: boolean
-  /**
    * After TCP helloAck, `theirPairedPeerDeviceIds` lists device IDs the peer still considers paired
    * with (remote partners). If our hashed device id is missing while we still store `peerDeviceId`
    * as paired, the host should drop that stale pairing.

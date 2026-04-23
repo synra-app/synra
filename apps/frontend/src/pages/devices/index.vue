@@ -1,7 +1,6 @@
 <script setup lang="ts">
 const {
   displayDevices,
-  connectedDeviceIds,
   error,
   feedbackMessage,
   linkToneByDeviceId,
@@ -26,7 +25,6 @@ const {
     <DeviceDiscoveryList
       :devices="displayDevices"
       :loading="loading"
-      :connected-device-ids="connectedDeviceIds"
       :action-pending-device-ids="pendingDeviceActionIds"
       :link-tone-by-device-id="linkToneByDeviceId"
       @pair="onPairDevice"

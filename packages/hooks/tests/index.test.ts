@@ -91,8 +91,7 @@ function createMockAdapter(): ConnectionRuntimeAdapter {
     },
     async addTransportErrorListener(_listener: (event: TransportErrorEvent) => void) {
       return { remove: async () => {} }
-    },
-    invalidateHandoffForHostKeys() {}
+    }
   }
 }
 
@@ -179,8 +178,7 @@ test('transport error closes connected session state', async () => {
       async addTransportErrorListener(listener: (event: TransportErrorEvent) => void) {
         transportErrorListener = listener
         return { remove: async () => {} }
-      },
-      invalidateHandoffForHostKeys() {}
+      }
     })
   })
   resetConnectionRuntime()
@@ -188,7 +186,7 @@ test('transport error closes connected session state', async () => {
   await transport.ensureReady()
   await transport.startScan()
   await transport.connectToDevice('device-a')
-  expect(transport.connectedDeviceIds.value).toContain('device-a')
+  expect(transport.transportReadyDeviceIds.value).toContain('device-a')
 
   transportErrorListener?.({
     sessionId: 'session-device-a',
@@ -197,10 +195,10 @@ test('transport error closes connected session state', async () => {
     transport: 'tcp'
   })
 
-  expect(transport.connectedDeviceIds.value).not.toContain('device-a')
+  expect(transport.transportReadyDeviceIds.value).not.toContain('device-a')
   expect(
     transport.connectedSessions.value.find((session) => session.sessionId === 'session-device-a')
-  ).toMatchObject({ status: 'closed' })
+  ).toMatchObject({ transport: 'dead' })
 })
 
 test('startScan clears peer list when discovery returns empty', async () => {
@@ -258,8 +256,7 @@ test('startScan clears peer list when discovery returns empty', async () => {
       },
       async addTransportErrorListener() {
         return { remove: async () => {} }
-      },
-      invalidateHandoffForHostKeys() {}
+      }
     })
   })
   resetConnectionRuntime()

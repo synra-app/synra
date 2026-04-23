@@ -50,7 +50,6 @@ function createScanOnlyAdapter(
     async addTransportErrorListener() {
       return { remove: async () => {} }
     },
-    invalidateHandoffForHostKeys() {},
     emitInboundSessionOpened(event: SessionOpenedEvent) {
       sessionOpenedListener?.(event)
     }

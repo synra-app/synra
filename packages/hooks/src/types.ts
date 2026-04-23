@@ -12,9 +12,16 @@ export type RuntimeSessionState = {
   closedAt?: number
 }
 
+/** Physical TCP + Synra transport: `ready` means socket is up and usable for frames. */
+export type TransportLinkState = 'idle' | 'handshaking' | 'ready' | 'dead'
+
+/** Application-level link (pairing, gating, UI). Does not imply TCP is open. */
+export type AppLinkState = 'disconnected' | 'pending' | 'connected' | 'failed'
+
 export type RuntimeConnectedSession = {
   sessionId: string
-  status?: 'open' | 'closed'
+  transport: TransportLinkState
+  app: AppLinkState
   deviceId?: string
   host?: string
   port?: number
@@ -22,6 +29,7 @@ export type RuntimeConnectedSession = {
   closedAt?: number
   lastActiveAt?: number
   direction?: 'inbound' | 'outbound'
+  lastAppError?: string
 }
 
 export type RuntimeOpenSessionInput = {

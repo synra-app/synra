@@ -37,8 +37,7 @@ export async function registerAdapterListeners(options: {
   sessionsBook: ConnectedSessionsBook
   messageRegistry: MessageListenersRegistry
 }): Promise<void> {
-  const { adapter, isMobileRuntime, devices, sessionState, error, sessionsBook, messageRegistry } =
-    options
+  const { adapter, devices, sessionState, error, sessionsBook, messageRegistry } = options
 
   const { emitIncomingMessage } = messageRegistry
 
@@ -87,18 +86,6 @@ export async function registerAdapterListeners(options: {
 
     upsertDiscoveredPeerFromSession(devices, event)
 
-    if (!isMobileRuntime && inferredDirection === 'inbound' && event.host) {
-      const staleOutboundSessionIds = sessionsBook.findOpenSessionIdsByHostDirection(
-        event.host,
-        'outbound',
-        event.sessionId
-      )
-      for (const staleSessionId of staleOutboundSessionIds) {
-        sessionsBook.markConnectionClosed(staleSessionId, Date.now())
-        void adapter.closeSession(staleSessionId).catch(() => undefined)
-      }
-    }
-
     const currentSessionId = sessionState.value.sessionId
     const currentDirection = sessionState.value.direction === 'inbound' ? 'inbound' : 'outbound'
     const shouldReplacePrimarySession =
@@ -126,7 +113,8 @@ export async function registerAdapterListeners(options: {
     sessionsBook.upsertConnectedSession(
       {
         sessionId: event.sessionId,
-        status: 'open',
+        transport: 'ready',
+        app: 'pending',
         deviceId: event.deviceId,
         host: event.host,
         port: event.port,
@@ -192,7 +180,7 @@ export async function registerAdapterListeners(options: {
         { reason: 'session_closed_event' }
       )
     }
-    const closedOpen = sessionsBook.markConnectionClosed(event.sessionId, Date.now())
+    const closedOpen = sessionsBook.markTransportDead(event.sessionId, Date.now())
     const closedDeviceId = closedOpen?.deviceId
     if (typeof closedDeviceId === 'string' && closedDeviceId.trim().length > 0) {
       setPairAwaitingAccept(closedDeviceId, false)
@@ -252,7 +240,7 @@ export async function registerAdapterListeners(options: {
           { reason: 'transport_error_event' }
         )
       }
-      sessionsBook.markConnectionClosed(transportErrorSessionId, now)
+      sessionsBook.markTransportDead(transportErrorSessionId, now)
     }
     if (shouldSuppressTransportErrorMessage(event.message)) {
       return
@@ -266,7 +254,8 @@ export async function registerAdapterListeners(options: {
     sessionsBook.upsertConnectedSession(
       {
         sessionId: snapshot.sessionId,
-        status: 'open',
+        transport: 'ready',
+        app: 'pending',
         deviceId: snapshot.deviceId,
         host: snapshot.host,
         port: snapshot.port,

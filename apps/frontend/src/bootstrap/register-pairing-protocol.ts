@@ -20,32 +20,30 @@ import {
   upsertPairedDeviceRecord
 } from '../lib/paired-devices-storage'
 import { syncPairedDiscoveryExclusionFromRecords } from '../lib/discovery-paired-exclusion'
-import { useLanDiscoveryStore } from '../stores/lan-discovery'
 import { usePairingStore } from '../stores/pairing'
 
 export async function registerPairingProtocol(pinia: Pinia): Promise<void> {
   const runtime = getConnectionRuntime()
   await runtime.ensureListeners()
   const pairingStore = usePairingStore(pinia)
-  const lanStore = useLanDiscoveryStore(pinia)
-  const findOpenDeviceIdBySessionId = (sessionId: string): string | undefined => {
+  const findDeviceIdByTransportReadySessionId = (sessionId: string): string | undefined => {
     const match = runtime.connectedSessions.value.find(
       (session) =>
         session.sessionId === sessionId &&
-        session.status === 'open' &&
+        session.transport === 'ready' &&
         typeof session.deviceId === 'string' &&
         session.deviceId.length > 0
     )
     return match?.deviceId
   }
-  const unpairAndDisconnect = async (deviceId: string, reason: string): Promise<void> => {
+  const unpairLocalOnly = async (deviceId: string, reason: string): Promise<void> => {
     await removePairedDeviceRecord(deviceId)
     const next = await listPairedDeviceRecords()
     syncPairedDiscoveryExclusionFromRecords(next)
     pairingStore.bumpPairedList()
     setPairAwaitingAccept(deviceId, false)
     setPairedDeviceConnecting(deviceId, false)
-    await lanStore.disconnectDevice(deviceId).catch(() => undefined)
+    runtime.setAppLinkForDevice(deviceId, 'disconnected')
     pairingStore.pushFeedback(reason)
   }
 
@@ -92,6 +90,7 @@ export async function registerPairingProtocol(pinia: Pinia): Promise<void> {
         () => {
           pairingStore.bumpPairedList()
           pairingStore.pushFeedback('Pairing completed.')
+          runtime.setAppLinkForDevice(target.deviceId, 'connected')
         },
         () => {
           pairingStore.pushFeedback('Failed to save paired device.')
@@ -113,15 +112,15 @@ export async function registerPairingProtocol(pinia: Pinia): Promise<void> {
       if (rejected) {
         setPairAwaitingAccept(rejected.target.deviceId, false)
         setPairedDeviceConnecting(rejected.target.deviceId, false)
-        void lanStore.disconnectDevice(rejected.target.deviceId).catch(() => undefined)
+        runtime.setAppLinkForDevice(rejected.target.deviceId, 'failed', 'Pairing was declined.')
       } else {
         const sid = message.sessionId
         if (typeof sid === 'string' && sid.length > 0) {
-          const deviceId = findOpenDeviceIdBySessionId(sid)
+          const deviceId = findDeviceIdByTransportReadySessionId(sid)
           if (deviceId) {
             setPairAwaitingAccept(deviceId, false)
             setPairedDeviceConnecting(deviceId, false)
-            void lanStore.disconnectDevice(deviceId).catch(() => undefined)
+            runtime.setAppLinkForDevice(deviceId, 'failed', 'Pairing was declined.')
           }
         }
       }
@@ -142,7 +141,7 @@ export async function registerPairingProtocol(pinia: Pinia): Promise<void> {
       if (!isPairUnpairRequiredPayload(message.payload)) {
         return
       }
-      const deviceId = findOpenDeviceIdBySessionId(message.sessionId)
+      const deviceId = findDeviceIdByTransportReadySessionId(message.sessionId)
       if (!deviceId) {
         return
       }
@@ -150,7 +149,7 @@ export async function registerPairingProtocol(pinia: Pinia): Promise<void> {
         typeof message.payload.reason === 'string' && message.payload.reason.trim().length > 0
           ? message.payload.reason.trim()
           : 'Peer requested to cancel pairing.'
-      void unpairAndDisconnect(deviceId, reason).catch(() => undefined)
+      void unpairLocalOnly(deviceId, reason).catch(() => undefined)
     },
     { messageType: PAIR_MESSAGE_UNPAIR_REQUIRED }
   )

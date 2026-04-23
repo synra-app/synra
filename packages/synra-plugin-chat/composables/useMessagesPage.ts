@@ -4,7 +4,7 @@ import type { ChatMessage } from '../src/types/chat'
 
 export function useMessagesPage() {
   const transport = useTransport()
-  const { peers, connectedDeviceIds, loading, error, ensureReady, startScan } = transport
+  const { peers, transportReadyDeviceIds, loading, error, ensureReady, startScan } = transport
   const messageInput = ref('')
   const messageType = ref('default')
   const selectedDeviceId = ref<string>('')
@@ -22,7 +22,9 @@ export function useMessagesPage() {
       connectCheckError: device.connectCheckError,
       lastSeenAt: device.lastSeenAt,
       lastSeenLabel: device.lastSeenAt ? new Date(device.lastSeenAt).toLocaleTimeString() : '-',
-      connectionStatus: connectedDeviceIds.value.includes(device.deviceId) ? 'connected' : 'idle',
+      connectionStatus: transportReadyDeviceIds.value.includes(device.deviceId)
+        ? 'connected'
+        : 'idle',
       isSelected: selectedDeviceId.value === device.deviceId,
       badge: deriveDeviceCardBadge(device, scanPhase)
     }))
