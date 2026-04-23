@@ -230,6 +230,14 @@ function buildChoices(history: BuildTarget[]): Array<{ name: string; value: Buil
 }
 
 async function resolveBuildTarget(history: BuildTarget[]): Promise<BuildTarget> {
+  const fromArg = process.argv[2]?.trim().toLowerCase()
+  if (fromArg) {
+    if (!isBuildTarget(fromArg)) {
+      throw new Error(`Invalid build target argument: ${fromArg}. Expected one of: ${BUILD_TARGETS.join(', ')}.`)
+    }
+    return fromArg
+  }
+
   const fromEnv = process.env.BUILD_TARGET?.trim().toLowerCase()
   if (fromEnv) {
     if (!isBuildTarget(fromEnv)) {
