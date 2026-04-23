@@ -138,6 +138,8 @@ export type DeviceDiscoveryStartOptions = {
   reset?: boolean
   port?: number
   timeoutMs?: number
+  /** Merged into each Synra TCP probe `connect` payload during this discovery run. */
+  probeConnectWirePayload?: Record<string, unknown>
 }
 
 export type DeviceDiscoveryStartResult = {
@@ -151,11 +153,15 @@ export type DeviceDiscoveryListResult = {
   devices: DiscoveredDevice[]
 }
 
+export type SynraLanConnectType = 'fresh' | 'paired'
+
 export type DeviceSessionOpenOptions = {
   deviceId: string
   host: string
   port: number
   token?: string
+  /** Sent on Synra `connect` payload as `connectType`; caller must set. */
+  connectType: SynraLanConnectType
   transport?: ConnectionTransport
 }
 
@@ -208,6 +214,21 @@ export type DeviceSessionSendMessageResult = {
   transport?: ConnectionTransport
 }
 
+export type DeviceSessionSendLanEventOptions = {
+  sessionId: string
+  eventName: string
+  payload?: unknown
+  eventId?: string
+  schemaVersion?: number
+  transport?: ConnectionTransport
+}
+
+export type DeviceSessionSendLanEventResult = {
+  success: true
+  sessionId: string
+  transport?: ConnectionTransport
+}
+
 export type DeviceSessionGetStateOptions = {
   sessionId?: string
   transport?: ConnectionTransport
@@ -220,6 +241,7 @@ export type DeviceDiscoveryHostEvent = {
     | 'transport.session.opened'
     | 'transport.session.closed'
     | 'transport.message.received'
+    | 'transport.lan.event.received'
     | 'transport.message.ack'
     | 'transport.error'
     | 'host.member.online'
@@ -249,14 +271,10 @@ export type MethodPayloadMap = {
   'discovery.start': DeviceDiscoveryStartOptions
   'discovery.stop': Record<string, never>
   'discovery.list': Record<string, never>
-  'discovery.openSession': DeviceSessionOpenOptions
-  'discovery.closeSession': DeviceSessionCloseOptions
-  'discovery.sendMessage': DeviceSessionSendMessageOptions
-  'discovery.getSessionState': DeviceSessionGetStateOptions
-  'discovery.pullHostEvents': Record<string, never>
   'connection.openSession': DeviceSessionOpenOptions
   'connection.closeSession': DeviceSessionCloseOptions
   'connection.sendMessage': DeviceSessionSendMessageOptions
+  'connection.sendLanEvent': DeviceSessionSendLanEventOptions
   'connection.getSessionState': DeviceSessionGetStateOptions
   'connection.pullHostEvents': Record<string, never>
   'preferences.get': { key: string }
@@ -274,14 +292,10 @@ export type MethodResultMap = {
   'discovery.start': DeviceDiscoveryStartResult
   'discovery.stop': OperationResult
   'discovery.list': DeviceDiscoveryListResult
-  'discovery.openSession': DeviceSessionOpenResult
-  'discovery.closeSession': DeviceSessionCloseResult
-  'discovery.sendMessage': DeviceSessionSendMessageResult
-  'discovery.getSessionState': DeviceSessionSnapshot
-  'discovery.pullHostEvents': DeviceDiscoveryPullHostEventsResult
   'connection.openSession': DeviceSessionOpenResult
   'connection.closeSession': DeviceSessionCloseResult
   'connection.sendMessage': DeviceSessionSendMessageResult
+  'connection.sendLanEvent': DeviceSessionSendLanEventResult
   'connection.getSessionState': DeviceSessionSnapshot
   'connection.pullHostEvents': DeviceDiscoveryPullHostEventsResult
   'preferences.get': { value: string | null }

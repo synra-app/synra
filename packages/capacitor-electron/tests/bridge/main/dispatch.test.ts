@@ -64,6 +64,11 @@ function createHandlers() {
         messageId: 'msg-1',
         sessionId: 'session-1'
       })),
+      sendLanEvent: vi.fn(async () => ({
+        success: true as const,
+        sessionId: 'session-1',
+        transport: 'tcp' as const
+      })),
       getSessionState: vi.fn(async () => ({
         sessionId: 'session-1',
         state: 'open' as const
@@ -85,6 +90,11 @@ function createHandlers() {
       sendMessage: vi.fn(async () => ({
         success: true as const,
         messageId: 'msg-1',
+        sessionId: 'session-1',
+        transport: 'tcp' as const
+      })),
+      sendLanEvent: vi.fn(async () => ({
+        success: true as const,
         sessionId: 'session-1',
         transport: 'tcp' as const
       })),
@@ -200,6 +210,11 @@ describe('bridge/main/dispatch', () => {
           messageId: 'msg-1',
           sessionId: 'session-1'
         })),
+        sendLanEvent: vi.fn(async () => ({
+          success: true as const,
+          sessionId: 'session-1',
+          transport: 'tcp' as const
+        })),
         getSessionState: vi.fn(async () => ({
           sessionId: 'session-1',
           state: 'open' as const
@@ -221,6 +236,11 @@ describe('bridge/main/dispatch', () => {
         sendMessage: vi.fn(async () => ({
           success: true as const,
           messageId: 'msg-1',
+          sessionId: 'session-1',
+          transport: 'tcp' as const
+        })),
+        sendLanEvent: vi.fn(async () => ({
+          success: true as const,
           sessionId: 'session-1',
           transport: 'tcp' as const
         })),

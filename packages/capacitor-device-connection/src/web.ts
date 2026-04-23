@@ -6,7 +6,11 @@ import type {
   GetSessionStateResult,
   OpenSessionOptions,
   OpenSessionResult,
+  ProbeSynraPeersOptions,
+  ProbeSynraPeersResult,
   PullHostEventsResult,
+  SendLanEventOptions,
+  SendLanEventResult,
   SendMessageOptions,
   SendMessageResult,
   SessionSnapshot,
@@ -40,11 +44,19 @@ export class DeviceConnectionWeb extends WebPlugin implements DeviceConnectionPl
     throw this.unavailable('sendMessage is not supported on web fallback.')
   }
 
+  async sendLanEvent(_options: SendLanEventOptions): Promise<SendLanEventResult> {
+    throw this.unavailable('sendLanEvent is not supported on web fallback.')
+  }
+
   async getSessionState(_options: GetSessionStateOptions = {}): Promise<GetSessionStateResult> {
     return this.sessionState
   }
 
   async pullHostEvents(): Promise<PullHostEventsResult> {
     return { events: [] }
+  }
+
+  async probeSynraPeers(_options: ProbeSynraPeersOptions): Promise<ProbeSynraPeersResult> {
+    throw this.unavailable('probeSynraPeers is not supported on web fallback.')
   }
 }

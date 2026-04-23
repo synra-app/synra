@@ -4,15 +4,6 @@ import {
   setPairAwaitingAccept,
   setPairedDeviceConnecting
 } from '@synra/hooks'
-import {
-  PAIR_MESSAGE_ACCEPT,
-  PAIR_MESSAGE_REJECT,
-  PAIR_MESSAGE_REQUEST,
-  PAIR_MESSAGE_UNPAIR_REQUIRED,
-  isPairDecisionPayload,
-  isPairUnpairRequiredPayload,
-  isPairRequestPayload
-} from '../lib/pair-protocol'
 import { consumePairingOutbound } from '../lib/pairing-outbound-pending'
 import {
   listPairedDeviceRecords,
@@ -20,6 +11,7 @@ import {
   upsertPairedDeviceRecord
 } from '../lib/paired-devices-storage'
 import { syncPairedDiscoveryExclusionFromRecords } from '../lib/discovery-paired-exclusion'
+import { isPairRequestPayload } from '../lib/pair-protocol'
 import { usePairingStore } from '../stores/pairing'
 
 export async function registerPairingProtocol(pinia: Pinia): Promise<void> {
@@ -47,74 +39,68 @@ export async function registerPairingProtocol(pinia: Pinia): Promise<void> {
     pairingStore.pushFeedback(reason)
   }
 
-  runtime.onMessage(
-    (message) => {
-      if (!isPairRequestPayload(message.payload)) {
+  runtime.onLanWireEvent(
+    (evt) => {
+      if (!isPairRequestPayload(evt.payload)) {
         return
       }
       if (pairingStore.hasOpenIncoming()) {
         return
       }
       pairingStore.setIncoming({
-        requestId: message.payload.requestId,
-        sessionId: message.sessionId,
-        initiator: message.payload.initiator
+        requestId: evt.payload.requestId,
+        sessionId: evt.sessionId,
+        initiator: evt.payload.initiator
       })
-      setPairAwaitingAccept(message.payload.initiator.deviceId, true)
+      setPairAwaitingAccept(evt.payload.initiator.deviceId, true)
     },
-    { messageType: PAIR_MESSAGE_REQUEST }
+    { eventName: 'pairing.request' }
   )
 
-  runtime.onMessage(
-    (message) => {
-      if (message.messageType !== PAIR_MESSAGE_ACCEPT) {
+  runtime.onLanWireEvent(
+    (evt) => {
+      const pl = evt.payload
+      if (!pl || typeof pl !== 'object') {
         return
       }
-      if (!isPairDecisionPayload(message.payload)) {
+      const requestId = (pl as { requestId?: unknown }).requestId
+      const accepted = (pl as { accepted?: unknown }).accepted
+      if (typeof requestId !== 'string' || typeof accepted !== 'boolean') {
         return
       }
-      const pending = consumePairingOutbound(message.payload.requestId)
-      if (!pending) {
-        return
-      }
-      const target = pending.target
-      setPairAwaitingAccept(target.deviceId, false)
-      setPairedDeviceConnecting(target.deviceId, false)
-      void upsertPairedDeviceRecord({
-        deviceId: target.deviceId,
-        displayName: target.name,
-        pairedAt: Date.now(),
-        lastResolvedHost: target.ipAddress,
-        lastResolvedPort: target.port ?? 32100
-      }).then(
-        () => {
-          pairingStore.bumpPairedList()
-          pairingStore.pushFeedback('Pairing completed.')
-          runtime.setAppLinkForDevice(target.deviceId, 'connected')
-        },
-        () => {
-          pairingStore.pushFeedback('Failed to save paired device.')
+      if (accepted) {
+        const pending = consumePairingOutbound(requestId)
+        if (!pending) {
+          return
         }
-      )
-    },
-    { messageType: PAIR_MESSAGE_ACCEPT }
-  )
-
-  runtime.onMessage(
-    (message) => {
-      if (message.messageType !== PAIR_MESSAGE_REJECT) {
+        const target = pending.target
+        setPairAwaitingAccept(target.deviceId, false)
+        setPairedDeviceConnecting(target.deviceId, false)
+        void upsertPairedDeviceRecord({
+          deviceId: target.deviceId,
+          displayName: target.name,
+          pairedAt: Date.now(),
+          lastResolvedHost: target.ipAddress,
+          lastResolvedPort: target.port ?? 32100
+        }).then(
+          () => {
+            pairingStore.bumpPairedList()
+            pairingStore.pushFeedback('Pairing completed.')
+            runtime.setAppLinkForDevice(target.deviceId, 'connected')
+          },
+          () => {
+            pairingStore.pushFeedback('Failed to save paired device.')
+          }
+        )
         return
       }
-      if (!isPairDecisionPayload(message.payload)) {
-        return
-      }
-      const rejected = consumePairingOutbound(message.payload.requestId)
+      const rejected = consumePairingOutbound(requestId)
       if (rejected) {
         setPairAwaitingAccept(rejected.target.deviceId, false)
         setPairedDeviceConnecting(rejected.target.deviceId, false)
         runtime.setAppLinkForDevice(rejected.target.deviceId, 'failed', 'Pairing was declined.')
       } else {
-        const sid = message.sessionId
+        const sid = evt.sessionId
         if (typeof sid === 'string' && sid.length > 0) {
           const deviceId = findDeviceIdByTransportReadySessionId(sid)
           if (deviceId) {
@@ -125,32 +111,60 @@ export async function registerPairingProtocol(pinia: Pinia): Promise<void> {
         }
       }
       const reason =
-        typeof message.payload.reason === 'string' && message.payload.reason.trim().length > 0
-          ? message.payload.reason.trim()
+        typeof (pl as { reason?: unknown }).reason === 'string' &&
+        (pl as { reason: string }).reason.trim().length > 0
+          ? (pl as { reason: string }).reason.trim()
           : 'Pairing was declined.'
       pairingStore.pushFeedback(reason)
     },
-    { messageType: PAIR_MESSAGE_REJECT }
+    { eventName: 'pairing.response' }
   )
 
-  runtime.onMessage(
-    (message) => {
-      if (message.messageType !== PAIR_MESSAGE_UNPAIR_REQUIRED) {
-        return
-      }
-      if (!isPairUnpairRequiredPayload(message.payload)) {
-        return
-      }
-      const deviceId = findDeviceIdByTransportReadySessionId(message.sessionId)
-      if (!deviceId) {
+  runtime.onLanWireEvent(
+    async (evt) => {
+      const pl =
+        evt.payload && typeof evt.payload === 'object'
+          ? (evt.payload as { fromDeviceId?: unknown; reason?: unknown })
+          : {}
+      const fromDeviceId =
+        typeof pl.fromDeviceId === 'string' && pl.fromDeviceId.trim().length > 0
+          ? pl.fromDeviceId.trim()
+          : undefined
+      if (!fromDeviceId) {
         return
       }
       const reason =
-        typeof message.payload.reason === 'string' && message.payload.reason.trim().length > 0
-          ? message.payload.reason.trim()
-          : 'Peer requested to cancel pairing.'
-      void unpairLocalOnly(deviceId, reason).catch(() => undefined)
+        typeof pl.reason === 'string' && pl.reason.trim().length > 0
+          ? pl.reason.trim()
+          : 'Peer cleared this pairing.'
+      await removePairedDeviceRecord(fromDeviceId)
+      const next = await listPairedDeviceRecords()
+      syncPairedDiscoveryExclusionFromRecords(next)
+      pairingStore.bumpPairedList()
+      setPairAwaitingAccept(fromDeviceId, false)
+      setPairedDeviceConnecting(fromDeviceId, false)
+      runtime.setAppLinkForDevice(fromDeviceId, 'disconnected', reason)
+      pairingStore.pushFeedback(reason)
     },
-    { messageType: PAIR_MESSAGE_UNPAIR_REQUIRED }
+    { eventName: 'pairing.peerReset' }
+  )
+
+  runtime.onLanWireEvent(
+    async (evt) => {
+      const deviceId = findDeviceIdByTransportReadySessionId(evt.sessionId)
+      if (!deviceId) {
+        return
+      }
+      const pl =
+        evt.payload && typeof evt.payload === 'object'
+          ? (evt.payload as { reason?: unknown; mode?: unknown })
+          : {}
+      const reason =
+        typeof pl.reason === 'string' && pl.reason.trim().length > 0
+          ? pl.reason.trim()
+          : 'Peer requested to cancel pairing.'
+      await unpairLocalOnly(deviceId, reason)
+    },
+    { eventName: 'pairing.unpairRequired' }
   )
 }

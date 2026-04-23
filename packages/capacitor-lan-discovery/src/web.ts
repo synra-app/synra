@@ -1,11 +1,5 @@
 import { WebPlugin } from '@capacitor/core'
 import type {
-  DiscoveryCloseSessionOptions,
-  DiscoveryCloseSessionResult,
-  EnsureOutboundSessionOptions,
-  EnsureOutboundSessionResult,
-  DiscoverySendMessageOptions,
-  DiscoverySendMessageResult,
   LanDiscoveryPlugin,
   ListDiscoveredDevicesResult,
   StartDiscoveryOptions,
@@ -74,19 +68,5 @@ export class LanDiscoveryWeb extends WebPlugin implements LanDiscoveryPlugin {
       startedAt: this.scanState.startedAt,
       devices: this.scanState.devices
     }
-  }
-
-  async ensureOutboundSession(
-    _options: EnsureOutboundSessionOptions
-  ): Promise<EnsureOutboundSessionResult> {
-    throw this.unavailable('ensureOutboundSession is unavailable on web runtime.')
-  }
-
-  async closeSession(_options: DiscoveryCloseSessionOptions): Promise<DiscoveryCloseSessionResult> {
-    throw this.unavailable('closeSession is unavailable on web runtime.')
-  }
-
-  async sendMessage(_options: DiscoverySendMessageOptions): Promise<DiscoverySendMessageResult> {
-    throw this.unavailable('sendMessage is unavailable on web runtime.')
   }
 }

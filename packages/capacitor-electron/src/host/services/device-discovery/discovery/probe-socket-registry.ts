@@ -4,7 +4,7 @@ import type { LengthPrefixedJsonCodec } from '../protocol/lan-frame.codec'
 export type ProbeSocketLease = {
   socket: Socket
   codec: LengthPrefixedJsonCodec
-  /** Synra session id from hello / helloAck handshake. */
+  /** Synra session id from connect / connectAck. */
   sessionId: string
   displayName?: string
 }
@@ -12,6 +12,11 @@ export type ProbeSocketLease = {
 export type ProbeSocketRegistry = {
   register(key: string, lease: ProbeSocketLease): void
   take(key: string): ProbeSocketLease | undefined
+  /**
+   * If a lease is still registered under `key`, removes it and destroys the socket.
+   * No-op when the key is absent (e.g. already taken by outbound).
+   */
+  releaseIfHeld(key: string): void
   /** Closes and removes entries whose keys are not in keepKeys. */
   closeStale(keepKeys: Set<string>): void
   closeAll(): void
@@ -34,6 +39,14 @@ export function createProbeSocketRegistry(): ProbeSocketRegistry {
       }
       map.delete(key)
       return v
+    },
+    releaseIfHeld(key: string) {
+      const v = map.get(key)
+      if (!v) {
+        return
+      }
+      map.delete(key)
+      v.socket.destroy()
     },
     closeStale(keepKeys: Set<string>) {
       const toRemove: string[] = []

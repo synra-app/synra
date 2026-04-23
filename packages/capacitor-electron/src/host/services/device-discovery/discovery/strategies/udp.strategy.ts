@@ -20,14 +20,12 @@ export function createUdpDiscoveryStrategy(): DiscoveryStrategy {
           if (!envelope) {
             return
           }
-          const name = envelope.displayName?.trim()
           const normalizedIp = normalizeRemoteIp(remote.address)
           if (!normalizedIp) {
             return
           }
-          if (!name) {
-            return
-          }
+          // UDP payload may omit displayName (e.g. iOS). Candidates are IPv4 + Synra appId only;
+          // discovery requires a non-empty displayName from the Synra TCP connectAck (see probe-runner).
           devicesByIp.set(normalizedIp, toProbeCandidate(normalizedIp, 'probe'))
         })
         socket.bind(() => {

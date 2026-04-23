@@ -16,6 +16,9 @@ catalogs:
     '@capacitor/android':
       specifier: ^8.3.1
       version: 8.3.1
+    '@capacitor/app':
+      specifier: ^8.1.0
+      version: 8.1.0
     '@capacitor/cli':
       specifier: ^8.3.1
       version: 8.3.1
@@ -276,6 +279,9 @@ importers:
       '@capacitor/android':
         specifier: catalog:capacitor
         version: 8.3.1(@capacitor/core@8.3.1)
+      '@capacitor/app':
+        specifier: catalog:capacitor
+        version: 8.1.0(@capacitor/core@8.3.1)
       '@capacitor/core':
         specifier: catalog:capacitor
         version: 8.3.1
@@ -445,6 +451,9 @@ importers:
 
   packages/hooks:
     dependencies:
+      '@capacitor/app':
+        specifier: catalog:capacitor
+        version: 8.1.0(@capacitor/core@8.3.1)
       '@synra/capacitor-device-connection':
         specifier: workspace:*
         version: link:../capacitor-device-connection
@@ -675,6 +684,11 @@ packages:
     resolution: {integrity: sha512-hjskIG8YcBEh3X4yaTXvE9gcqpdcxunTgFruSKnuPxtMxAUzEK4Oq25x0Z1g3cz+MQPc+lRG09R7Ovc+ydKsNw==}
     peerDependencies:
       '@capacitor/core': ^8.3.0
+
+  '@capacitor/app@8.1.0':
+    resolution: {integrity: sha512-MlmttTOWHDedr/G4SrhNRxsXMqY+R75S4MM4eIgzsgCzOYhb/MpCkA5Q3nuOCfL1oHm26xjUzqZ5aupbOwdfYg==}
+    peerDependencies:
+      '@capacitor/core': '>=8.0.0'
 
   '@capacitor/cli@8.3.1':
     resolution: {integrity: sha512-1sPGW4THTDfR6YjXwZ0jM7oAfAtciPOHN00qs/3sNAQx1kKrrEYSfDPwCm1/xlAgi0OeL69SiRfw314Ans+1sw==}
@@ -4532,6 +4546,10 @@ snapshots:
       '@babel/helper-validator-identifier': 8.0.0-rc.3
 
   '@capacitor/android@8.3.1(@capacitor/core@8.3.1)':
+    dependencies:
+      '@capacitor/core': 8.3.1
+
+  '@capacitor/app@8.1.0(@capacitor/core@8.3.1)':
     dependencies:
       '@capacitor/core': 8.3.1
 

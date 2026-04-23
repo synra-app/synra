@@ -64,14 +64,10 @@ export function isSupportedMethod(method: string): boolean {
     method === BRIDGE_METHODS.discoveryStart ||
     method === BRIDGE_METHODS.discoveryStop ||
     method === BRIDGE_METHODS.discoveryList ||
-    method === BRIDGE_METHODS.discoveryOpenSession ||
-    method === BRIDGE_METHODS.discoveryCloseSession ||
-    method === BRIDGE_METHODS.discoverySendMessage ||
-    method === BRIDGE_METHODS.discoveryGetSessionState ||
-    method === BRIDGE_METHODS.discoveryPullHostEvents ||
     method === BRIDGE_METHODS.connectionOpenSession ||
     method === BRIDGE_METHODS.connectionCloseSession ||
     method === BRIDGE_METHODS.connectionSendMessage ||
+    method === BRIDGE_METHODS.connectionSendLanEvent ||
     method === BRIDGE_METHODS.connectionGetSessionState ||
     method === BRIDGE_METHODS.connectionPullHostEvents ||
     method === BRIDGE_METHODS.preferencesGet ||
@@ -277,5 +273,30 @@ export function validateDiscoverySendMessagePayload(payload: unknown): payload i
     return false
   }
 
+  return true
+}
+
+export function validateDiscoverySendLanEventPayload(payload: unknown): payload is {
+  sessionId: string
+  eventName: string
+  payload?: unknown
+  eventId?: string
+  schemaVersion?: number
+} {
+  if (!isObject(payload)) {
+    return false
+  }
+  if (typeof payload.sessionId !== 'string' || payload.sessionId.length === 0) {
+    return false
+  }
+  if (typeof payload.eventName !== 'string' || payload.eventName.length === 0) {
+    return false
+  }
+  if (payload.eventId !== undefined && typeof payload.eventId !== 'string') {
+    return false
+  }
+  if (payload.schemaVersion !== undefined && typeof payload.schemaVersion !== 'number') {
+    return false
+  }
   return true
 }

@@ -5,9 +5,11 @@ import type {
 } from '@synra/capacitor-lan-discovery'
 import type {
   GetSessionStateResult,
+  LanWireEventReceivedEvent,
   MessageAckEvent,
   MessageReceivedEvent,
   OpenSessionOptions,
+  SendLanEventOptions,
   SendMessageOptions,
   SessionClosedEvent,
   SessionOpenedEvent,
@@ -41,6 +43,9 @@ function createMockAdapter(): ConnectionRuntimeAdapter {
     async startDiscovery() {
       return { state: 'scanning', devices }
     },
+    async listDiscoveredDevices() {
+      return { state: 'scanning', devices }
+    },
     async openSession(options: OpenSessionOptions) {
       const event: SessionOpenedEvent = {
         sessionId: `session-${options.deviceId}`,
@@ -64,6 +69,7 @@ function createMockAdapter(): ConnectionRuntimeAdapter {
         messageId: options.messageId
       })
     },
+    async sendLanEvent(_options: SendLanEventOptions) {},
     async getSessionState(_sessionId?: string): Promise<GetSessionStateResult> {
       return { state: 'idle', transport: 'tcp' }
     },
@@ -91,12 +97,18 @@ function createMockAdapter(): ConnectionRuntimeAdapter {
     },
     async addTransportErrorListener(_listener: (event: TransportErrorEvent) => void) {
       return { remove: async () => {} }
+    },
+    async addLanWireEventReceivedListener(_listener: (event: LanWireEventReceivedEvent) => void) {
+      return { remove: async () => {} }
     }
   }
 }
 
 test('useTransport exposes minimal messaging capabilities', async () => {
-  configureHooksRuntime({ adapterFactory: () => createMockAdapter() })
+  configureHooksRuntime({
+    adapterFactory: () => createMockAdapter(),
+    resolveSynraConnectType: () => 'paired'
+  })
   resetConnectionRuntime()
   const transport = useTransport()
   await transport.ensureReady()
@@ -122,8 +134,25 @@ test('transport error closes connected session state', async () => {
   let transportErrorListener: ((event: TransportErrorEvent) => void) | undefined
 
   configureHooksRuntime({
+    resolveSynraConnectType: () => 'paired',
     adapterFactory: () => ({
       async startDiscovery() {
+        return {
+          state: 'scanning' as const,
+          devices: [
+            {
+              deviceId: 'device-a',
+              name: 'Device A',
+              ipAddress: '192.168.1.10',
+              source: 'mdns' as const,
+              connectable: true,
+              discoveredAt: Date.now(),
+              lastSeenAt: Date.now()
+            }
+          ]
+        }
+      },
+      async listDiscoveredDevices() {
         return {
           state: 'scanning' as const,
           devices: [
@@ -153,6 +182,7 @@ test('transport error closes connected session state', async () => {
       },
       async closeSession() {},
       async sendMessage() {},
+      async sendLanEvent() {},
       async getSessionState(): Promise<GetSessionStateResult> {
         return { state: 'idle', transport: 'tcp' }
       },
@@ -177,6 +207,9 @@ test('transport error closes connected session state', async () => {
       },
       async addTransportErrorListener(listener: (event: TransportErrorEvent) => void) {
         transportErrorListener = listener
+        return { remove: async () => {} }
+      },
+      async addLanWireEventReceivedListener() {
         return { remove: async () => {} }
       }
     })
@@ -204,6 +237,7 @@ test('transport error closes connected session state', async () => {
 test('startScan clears peer list when discovery returns empty', async () => {
   let scanCount = 0
   configureHooksRuntime({
+    resolveSynraConnectType: () => 'paired',
     adapterFactory: () => ({
       async startDiscovery() {
         scanCount += 1
@@ -228,11 +262,15 @@ test('startScan clears peer list when discovery returns empty', async () => {
           devices: []
         }
       },
+      async listDiscoveredDevices() {
+        return { state: 'scanning' as const, devices: [] }
+      },
       async openSession() {
         throw new Error('should not probe-verify on empty scan')
       },
       async closeSession() {},
       async sendMessage() {},
+      async sendLanEvent() {},
       async getSessionState(): Promise<GetSessionStateResult> {
         return { state: 'idle', transport: 'tcp' }
       },
@@ -255,6 +293,9 @@ test('startScan clears peer list when discovery returns empty', async () => {
         return { remove: async () => {} }
       },
       async addTransportErrorListener() {
+        return { remove: async () => {} }
+      },
+      async addLanWireEventReceivedListener() {
         return { remove: async () => {} }
       }
     })

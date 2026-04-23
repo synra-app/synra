@@ -84,11 +84,14 @@ export type {
   DeviceDiscoveryListResult,
   DeviceSessionOpenOptions,
   DeviceSessionOpenResult,
+  SynraLanConnectType,
   ConnectionTransport,
   DeviceSessionCloseOptions,
   DeviceSessionCloseResult,
   DeviceSessionSendMessageOptions,
   DeviceSessionSendMessageResult,
+  DeviceSessionSendLanEventOptions,
+  DeviceSessionSendLanEventResult,
   DeviceSessionGetStateOptions,
   DeviceSessionSnapshot,
   DeviceDiscoveryStartOptions,
@@ -117,7 +120,8 @@ export {
   validateReadFilePayload,
   validateDiscoveryStartPayload,
   validateDiscoveryOpenSessionPayload,
-  validateDiscoverySendMessagePayload
+  validateDiscoverySendMessagePayload,
+  validateDiscoverySendLanEventPayload
 } from './shared/schema/validators'
 export {
   noopBridgeLogger,

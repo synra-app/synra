@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vite-plus/test'
 import type { HostEvent } from '@synra/capacitor-device-connection'
 import {
+  mapLanWireEventReceivedHostEvent,
   mapMessageTypeFromHostEvent,
   mapSessionClosedHostEvent,
   mapSessionOpenedHostEvent,
@@ -20,10 +21,7 @@ describe('electron host event mappers', () => {
         direction: 'inbound',
         host: '10.0.0.102',
         port: 32100,
-        displayName: 'Android',
-        pairedPeerDeviceIds: ['device-b', '', 'device-c'],
-        handshakeKind: 'fresh',
-        claimsPeerPaired: false
+        displayName: 'Android'
       },
       transport: 'tcp'
     }
@@ -35,9 +33,30 @@ describe('electron host event mappers', () => {
       host: '10.0.0.102',
       port: 32100,
       displayName: 'Android',
-      pairedPeerDeviceIds: ['device-b', 'device-c'],
-      handshakeKind: 'fresh',
-      claimsPeerPaired: false,
+      incomingSynraConnectPayload: undefined,
+      transport: 'tcp'
+    })
+  })
+
+  test('maps transport.lan.event.received', () => {
+    const event: HostEvent = {
+      id: 6,
+      timestamp: Date.now(),
+      type: 'transport.lan.event.received',
+      remote: '10.0.0.2:32100',
+      sessionId: 's9',
+      payload: {
+        eventName: 'pairing.request',
+        payload: { requestId: 'r1' },
+        fromDeviceId: 'peer-1'
+      },
+      transport: 'tcp'
+    }
+    expect(mapLanWireEventReceivedHostEvent(event)).toEqual({
+      sessionId: 's9',
+      eventName: 'pairing.request',
+      eventPayload: { requestId: 'r1' },
+      fromDeviceId: 'peer-1',
       transport: 'tcp'
     })
   })

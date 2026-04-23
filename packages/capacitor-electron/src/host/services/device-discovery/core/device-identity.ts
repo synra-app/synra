@@ -2,7 +2,11 @@ import { createHash, randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { SYNRA_DEVICE_BASIC_INFO_KEY } from '@synra/capacitor-preferences'
+import {
+  SYNRA_DEVICE_BASIC_INFO_KEY,
+  SYNRA_PAIRED_DEVICES_KEY,
+  parsePairedDevicesPayload
+} from '@synra/capacitor-preferences'
 import { createPreferencesService } from '../../preferences.service'
 
 function isUuidLike(value: string): boolean {
@@ -22,6 +26,31 @@ function defaultDeviceNameFromUuid(uuid: string): string {
 
 export function hashDeviceId(input: string): string {
   return `device-${createHash('sha1').update(input).digest('hex').slice(0, 12)}`
+}
+
+/** Whether the Synra preferences store lists the peer (wire `sourceDeviceId`, UUID or `device-*`) as paired. */
+export function isWirePeerInMainPairedList(remoteWireSourceDeviceId: string): boolean {
+  const trimmed = remoteWireSourceDeviceId.trim()
+  if (!trimmed) {
+    return false
+  }
+  const hashed = hashDeviceId(trimmed)
+  const idsToMatch = new Set<string>([hashed, trimmed])
+  for (const storePath of resolvePreferencesStorePaths()) {
+    const preferencesService = createPreferencesService({ storePath })
+    const raw = preferencesService.get(SYNRA_PAIRED_DEVICES_KEY)
+    if (typeof raw !== 'string' || raw.length === 0) {
+      continue
+    }
+    const parsed = parsePairedDevicesPayload(raw)
+    for (const item of parsed.items) {
+      const id = item.deviceId.trim()
+      if (id.length > 0 && idsToMatch.has(id)) {
+        return true
+      }
+    }
+  }
+  return false
 }
 
 function resolveElectronUserDataPreferencesStorePath(): string | undefined {

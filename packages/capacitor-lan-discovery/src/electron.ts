@@ -1,12 +1,5 @@
 import { WebPlugin } from '@capacitor/core'
 import type {
-  DiscoveryCloseSessionOptions,
-  DiscoveryCloseSessionResult,
-  EnsureOutboundSessionOptions,
-  EnsureOutboundSessionResult,
-  EnsureOutboundSessionSuccess,
-  DiscoverySendMessageOptions,
-  DiscoverySendMessageResult,
   LanDiscoveryPlugin,
   ListDiscoveredDevicesResult,
   StartDiscoveryOptions,
@@ -55,18 +48,6 @@ type DiscoveryBridgeMethods = {
   'discovery.list': {
     payload: Record<string, never>
     result: DiscoveryListBridgeResult
-  }
-  'discovery.openSession': {
-    payload: { deviceId: string; host: string; port: number; token?: string }
-    result: { success: true; sessionId: string; state: string; transport?: string }
-  }
-  'discovery.closeSession': {
-    payload: DiscoveryCloseSessionOptions
-    result: DiscoveryCloseSessionResult
-  }
-  'discovery.sendMessage': {
-    payload: DiscoverySendMessageOptions
-    result: DiscoverySendMessageResult
   }
 }
 
@@ -132,16 +113,14 @@ export class LanDiscoveryElectron extends WebPlugin implements LanDiscoveryPlugi
         this.notifyListeners('deviceFound', { device })
         this.notifyListeners('deviceUpdated', { device })
         this.notifyListeners('deviceConnectableUpdated', { device })
-        return
       }
       const lost = lostDeviceFromHostEvent(event)
-      if (!lost) {
-        return
+      if (lost) {
+        this.notifyListeners('deviceLost', {
+          deviceId: lost.deviceId,
+          ipAddress: lost.ipAddress
+        })
       }
-      this.notifyListeners('deviceLost', {
-        deviceId: lost.deviceId,
-        ipAddress: lost.ipAddress
-      })
     })
     this.hostEventSubscribed = true
   }
@@ -177,45 +156,5 @@ export class LanDiscoveryElectron extends WebPlugin implements LanDiscoveryPlugi
     this.ensureHostEventSubscription()
     const result = await this.invokeBridge('discovery.list', {})
     return toListResult(result)
-  }
-
-  async ensureOutboundSession(
-    options: EnsureOutboundSessionOptions
-  ): Promise<EnsureOutboundSessionResult> {
-    const host = typeof options.host === 'string' ? options.host.trim() : ''
-    if (!host) {
-      return { error: 'INVALID_HOST' }
-    }
-    this.ensureHostEventSubscription()
-    const port = options.port ?? 32100
-    const deviceId =
-      typeof options.deviceId === 'string' && options.deviceId.trim().length > 0
-        ? options.deviceId.trim()
-        : 'lan-outbound'
-    try {
-      const result = await this.invokeBridge('discovery.openSession', {
-        deviceId,
-        host,
-        port
-      })
-      const state = result.state as EnsureOutboundSessionSuccess['state']
-      return {
-        sessionId: result.sessionId,
-        state,
-        transport: 'tcp'
-      }
-    } catch {
-      return { error: 'ENSURE_FAILED', host, port }
-    }
-  }
-
-  async closeSession(options: DiscoveryCloseSessionOptions): Promise<DiscoveryCloseSessionResult> {
-    this.ensureHostEventSubscription()
-    return this.invokeBridge('discovery.closeSession', options)
-  }
-
-  async sendMessage(options: DiscoverySendMessageOptions): Promise<DiscoverySendMessageResult> {
-    this.ensureHostEventSubscription()
-    return this.invokeBridge('discovery.sendMessage', options)
   }
 }

@@ -1,6 +1,6 @@
 import type { DiscoveredDevice } from '@synra/capacitor-lan-discovery'
 import type { Ref } from 'vue'
-import type { RuntimeSessionState } from '../types'
+import type { RuntimeConnectedSession, RuntimeSessionState } from '../types'
 import type { ConnectionRuntimeAdapter } from './adapter'
 import type { ConnectedSessionsBook } from './connected-sessions-book'
 import {
@@ -15,6 +15,7 @@ import {
 import { normalizeHost } from './host-normalization'
 import { sortDevices } from './device-sort'
 import type { MessageListenersRegistry } from './message-listeners'
+import type { LanWireListenersRegistry } from './lan-wire-listeners'
 import { getHooksRuntimeOptions, isLocalDiscoveryDeviceId } from './config'
 import { setPairAwaitingAccept } from './pair-awaiting-accept'
 import { setPairedDeviceConnecting } from './paired-link-phases'
@@ -35,9 +36,20 @@ export async function registerAdapterListeners(options: {
   sessionState: Ref<RuntimeSessionState>
   error: Ref<string | null>
   sessionsBook: ConnectedSessionsBook
+  connectedSessions: Ref<RuntimeConnectedSession[]>
   messageRegistry: MessageListenersRegistry
+  lanWireRegistry: LanWireListenersRegistry
 }): Promise<void> {
-  const { adapter, devices, sessionState, error, sessionsBook, messageRegistry } = options
+  const {
+    adapter,
+    devices,
+    sessionState,
+    error,
+    sessionsBook,
+    connectedSessions,
+    messageRegistry,
+    lanWireRegistry
+  } = options
 
   const { emitIncomingMessage } = messageRegistry
 
@@ -86,6 +98,18 @@ export async function registerAdapterListeners(options: {
 
     upsertDiscoveredPeerFromSession(devices, event)
 
+    const inboundWire = event.incomingSynraConnectPayload
+    const inboundConnectType =
+      inboundWire && typeof inboundWire.connectType === 'string'
+        ? inboundWire.connectType.trim().toLowerCase()
+        : ''
+    if (inferredDirection === 'inbound' && inboundConnectType === 'fresh') {
+      const repair = getHooksRuntimeOptions().repairStalePairingAfterInboundFreshConnect
+      if (typeof repair === 'function') {
+        void Promise.resolve(repair(event)).catch(() => undefined)
+      }
+    }
+
     const currentSessionId = sessionState.value.sessionId
     const currentDirection = sessionState.value.direction === 'inbound' ? 'inbound' : 'outbound'
     const shouldReplacePrimarySession =
@@ -124,34 +148,6 @@ export async function registerAdapterListeners(options: {
       },
       { immediate: true }
     )
-
-    const pairedFromEvent = (event as { pairedPeerDeviceIds?: unknown }).pairedPeerDeviceIds
-    const rawHandshakeKind = (event as { handshakeKind?: unknown }).handshakeKind
-    const handshakeKind =
-      rawHandshakeKind === 'paired' || rawHandshakeKind === 'fresh' ? rawHandshakeKind : undefined
-    const claimsPeerPairedRaw = (event as { claimsPeerPaired?: unknown }).claimsPeerPaired
-    const claimsPeerPaired =
-      typeof claimsPeerPairedRaw === 'boolean' ? claimsPeerPairedRaw : undefined
-    const sync = getHooksRuntimeOptions().onHandshakePairedPeerIds
-    if (
-      typeof sync === 'function' &&
-      typeof event.deviceId === 'string' &&
-      event.deviceId.length > 0 &&
-      (Array.isArray(pairedFromEvent) ||
-        handshakeKind !== undefined ||
-        claimsPeerPaired !== undefined)
-    ) {
-      const ids = Array.isArray(pairedFromEvent)
-        ? pairedFromEvent.filter(
-            (id): id is string => typeof id === 'string' && id.trim().length > 0
-          )
-        : []
-      sync(event.deviceId, ids, {
-        sessionId: typeof event.sessionId === 'string' ? event.sessionId : undefined,
-        handshakeKind,
-        claimsPeerPaired
-      })
-    }
   })
 
   await adapter.addSessionClosedListener((event) => {
@@ -185,6 +181,28 @@ export async function registerAdapterListeners(options: {
     if (typeof closedDeviceId === 'string' && closedDeviceId.trim().length > 0) {
       setPairAwaitingAccept(closedDeviceId, false)
       setPairedDeviceConnecting(closedDeviceId, false)
+    }
+  })
+
+  await adapter.addLanWireEventReceivedListener((event) => {
+    sessionsBook.touchSessionActivity(event.sessionId, Date.now(), 'inbound')
+    const row = connectedSessions.value.find((s) => s.sessionId === event.sessionId)
+    const resolvedFromId = row?.deviceId ?? event.fromDeviceId
+    lanWireRegistry.emitLanWireEvent(event, resolvedFromId)
+    if (event.eventName === 'device.displayName.changed' && event.eventPayload !== undefined) {
+      const pl =
+        event.eventPayload && typeof event.eventPayload === 'object'
+          ? (event.eventPayload as Record<string, unknown>)
+          : {}
+      const deviceId = typeof pl.deviceId === 'string' ? pl.deviceId : undefined
+      const displayName = typeof pl.displayName === 'string' ? pl.displayName : undefined
+      if (deviceId && displayName) {
+        applyRemoteDeviceProfileName(devices, deviceId, displayName)
+        const patch = getHooksRuntimeOptions().onRemoteDeviceProfile
+        if (typeof patch === 'function') {
+          patch(deviceId, displayName)
+        }
+      }
     }
   })
 

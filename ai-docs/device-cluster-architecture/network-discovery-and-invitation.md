@@ -17,6 +17,13 @@
 
 - 对同一 `(ip, tcpPort)` 的 Synra 探测与会话复用**一条** TCP：`hello` / `helloAck` 成功后不再为「仅探测」单独关连接，而是进入长度前缀 JSON 读循环并发出 `sessionOpened`（出站）。
 - JS 层不应在扫描结束后再对每个可连设备二次 `openSession` 打开第二条 TCP；需要主动连对端时使用 `LanDiscovery.ensureOutboundSession`（或由适配器路由到该方法）。
+- **`hybrid` 且 `enableProbeFallback` 为 true（默认）**：mDNS 与 UDP 定向发现候选取**并集**后再做 TCP probe，避免「mDNS 已有其它主机却永远不走 UDP」导致漏扫（例如部分桌面端仅 UDP 响应）。
+- **`enableProbeFallback` 为 false**：`hybrid` 下**不**跑 UDP 定向发现，仅 mDNS + 手动目标。
+
+### 后台与多端同步（Synra LAN）
+
+- **Android**：`@synra/capacitor-lan-discovery` 在 TCP 传输栈启动后会启动 **前台服务**（`connectedDevice` 类型），用于在后台仍维持本机 LAN 监听/会话能力；停止 TCP 栈（如 `stopDiscovery` 触发的 teardown）时结束服务。需通知权限与渠道文案随产品调整。
+- **iOS**：系统仍会挂起后台应用；前台恢复时由 **`@capacitor/app` + `@synra/hooks`** 在 `appStateChange` 活跃态拉取 `getDiscoveredDevices` 并刷新列表，配合 `pair-awaiting-prune`，减少「必须连扫两次才对齐配对态」的情况。短时后台收尾若需 `beginBackgroundTask`，应在 App 原生层单独接入，不在此文档展开。
 
 ## 广播内容
 

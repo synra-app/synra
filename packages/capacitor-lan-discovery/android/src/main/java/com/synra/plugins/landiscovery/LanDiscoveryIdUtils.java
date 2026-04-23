@@ -1,30 +1,10 @@
 package com.synra.plugins.landiscovery;
 
-import java.net.InetAddress;
-import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 
 final class LanDiscoveryIdUtils {
     private LanDiscoveryIdUtils() {}
-
-    static String normalizePeerHost(String sourceHostIp, Socket socket) {
-        if (sourceHostIp != null) {
-            String trimmed = sourceHostIp.trim();
-            if (isIpv4Address(trimmed)) {
-                return trimmed;
-            }
-        }
-        InetAddress peerAddr = socket.getInetAddress();
-        if (peerAddr == null) {
-            return null;
-        }
-        String observed = peerAddr.getHostAddress();
-        if (observed == null || observed.isBlank() || observed.contains(":")) {
-            return null;
-        }
-        return observed;
-    }
 
     static boolean isIpv4Address(String value) {
         if (value == null || value.isBlank() || value.contains(":")) {

@@ -20,25 +20,16 @@ let package = Package(
                 .product(name: "Cordova", package: "capacitor-swift-pm")
             ],
             path: "ios/Sources/LanDiscoveryPluginPlugin",
-            // Explicit list so Xcode/SwiftPM always compiles every split file with the same target
-            // (avoids “Cannot find type … in scope” when discovery or target membership is stale).
             sources: [
                 "LanDiscoveryDeviceRecord.swift",
-                "LanDiscoveryInboundContext.swift",
+                "LanDiscoveryPlugin.swift",
                 "LanDiscoveryMdnsCollector.swift",
-                "LanDiscoveryOutboundContext.swift",
                 "LanDiscoveryPlugin+Identity.swift",
-                "LanDiscoveryPlugin+InboundTcp.swift",
-                "LanDiscoveryPlugin+OutboundTcp.swift",
                 "LanDiscoveryPlugin+MdnsAdvertise.swift",
                 "LanDiscoveryPlugin+NetworkScan.swift",
-                "LanDiscoveryPlugin+Probe.swift",
                 "LanDiscoveryPlugin+PublicAPI.swift",
-                "LanDiscoveryPlugin+TcpFraming.swift",
                 "LanDiscoveryPlugin+UdpResponder.swift",
-                "LanDiscoveryPlugin.swift",
-                "LanDiscoveryPluginPlugin.swift",
-                "LanDiscoveryProbeOutcome.swift",
+                "LanDiscoveryPluginPlugin.swift"
             ]),
         .testTarget(
             name: "LanDiscoveryPluginPluginTests",

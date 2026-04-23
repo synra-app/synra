@@ -32,10 +32,11 @@ npx cap sync
 | `scanStateChanged` / `sessionOpened` / `sessionClosed` / `messageReceived` | Yes                      | Yes                        | Partial | Partial                       |
 | `transportError`                                                           | Yes                      | Yes                        | No      | No                            |
 | `deviceFound` / `deviceUpdated` / `deviceLost`                             | No                       | Yes (compatibility events) | Partial | Partial                       |
+| Foreground service (LAN TCP stack keep-alive on Android)                   | No                       | Yes                        | No      | No                            |
 
 ## Notes
 
-- `hybrid` discovery mode uses mDNS first, and falls back to UDP only when mDNS does not produce candidates.
+- `hybrid` with **`enableProbeFallback` true (default)** unions **mDNS + UDP** discovery candidates before TCP probe. With **`enableProbeFallback` false**, UDP discovery is not run in `hybrid` (mDNS + manual targets only).
 - `deviceFound`, `deviceUpdated`, and `deviceLost` are currently Android-compatible events and should not be treated as cross-platform guarantees.
 - `scanWindowMs` and `startedAt` can be returned by native platforms in discovery result payloads.
 

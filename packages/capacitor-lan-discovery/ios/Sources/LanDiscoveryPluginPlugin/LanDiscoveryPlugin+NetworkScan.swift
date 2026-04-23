@@ -2,26 +2,24 @@ import Foundation
 import Network
 
 extension LanDiscoveryPlugin {
-    func populateDevicesFromSynraProbes(candidateIps: [String], port: UInt16, timeoutMs: Int) {
+    /// IPv4 candidates only (mDNS / UDP / manual). Synra TCP hello is performed by `DeviceConnection.probeSynraPeers` in JS.
+    func populateCandidateDevicesFromIps(ips: [String], port: Int, manualHosts: Set<String>) {
         let checkedAt = now()
-        for host in candidateIps {
-            let outcome = probeDevice(host: host, port: port, timeoutMs: timeoutMs)
-            guard outcome.connectable else {
+        for host in ips {
+            let trimmed = host.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
                 continue
             }
-            let display = outcome.remoteDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let remoteRaw = outcome.remoteDeviceId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            guard !display.isEmpty, !remoteRaw.isEmpty else {
-                continue
-            }
-            let remoteId = canonicalLanDeviceId(fromWireSourceDeviceId: remoteRaw)
-            devices[remoteId] = DeviceRecord(
-                deviceId: remoteId,
-                name: display,
-                ipAddress: host,
-                source: "probe",
-                connectable: true,
-                connectCheckAt: checkedAt,
+            let stableId = hashDeviceId("synra-candidate:\(trimmed)")
+            let source: String = manualHosts.contains(trimmed) ? "manual" : "mdns"
+            devices[stableId] = DeviceRecord(
+                deviceId: stableId,
+                name: trimmed,
+                ipAddress: trimmed,
+                port: port,
+                source: source,
+                connectable: false,
+                connectCheckAt: nil,
                 connectCheckError: nil,
                 discoveredAt: checkedAt,
                 lastSeenAt: checkedAt
@@ -97,6 +95,7 @@ extension LanDiscoveryPlugin {
                     deviceId: hashDeviceId("\(host):\(addressValue)"),
                     name: "\(host) (\(interfaceName))",
                     ipAddress: addressValue,
+                    port: Int(defaultTcpPort),
                     source: "mdns",
                     connectable: false,
                     connectCheckAt: nil,

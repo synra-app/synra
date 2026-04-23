@@ -11,6 +11,8 @@ import type {
   DeviceSessionGetStateOptions,
   DeviceSessionOpenOptions,
   DeviceSessionOpenResult,
+  DeviceSessionSendLanEventOptions,
+  DeviceSessionSendLanEventResult,
   DeviceSessionSendMessageOptions,
   DeviceSessionSendMessageResult,
   DeviceSessionSnapshot
@@ -30,7 +32,6 @@ import { createDeviceRegistry } from './device-discovery/state/device-registry'
 type DeviceDiscoveryServiceOptions = {
   onHostEvent?: (event: DeviceDiscoveryHostEvent) => void
   resolveLocalDeviceUuid?: () => string
-  readPairedPeerDeviceIds?: () => string[]
 }
 
 export interface DeviceDiscoveryService {
@@ -40,6 +41,7 @@ export interface DeviceDiscoveryService {
   openSession(options: DeviceSessionOpenOptions): Promise<DeviceSessionOpenResult>
   closeSession(options?: DeviceSessionCloseOptions): Promise<DeviceSessionCloseResult>
   sendMessage(options: DeviceSessionSendMessageOptions): Promise<DeviceSessionSendMessageResult>
+  sendLanEvent(options: DeviceSessionSendLanEventOptions): Promise<DeviceSessionSendLanEventResult>
   getSessionState(options?: DeviceSessionGetStateOptions): Promise<DeviceSessionSnapshot>
   pullHostEvents(): Promise<DeviceDiscoveryPullHostEventsResult>
 }
@@ -48,7 +50,6 @@ export function createDeviceDiscoveryService(
   options: DeviceDiscoveryServiceOptions = {}
 ): DeviceDiscoveryService {
   const resolveLocalDeviceUuid = options.resolveLocalDeviceUuid ?? getOrCreateLocalDeviceUuid
-  const readPairedPeerDeviceIds = options.readPairedPeerDeviceIds
   const registry = createDeviceRegistry()
   const eventBus = createHostEventBus(options.onHostEvent)
   const probeSocketRegistry = createProbeSocketRegistry()
@@ -64,13 +65,11 @@ export function createDeviceDiscoveryService(
   })
   const inboundTransport = createInboundHostTransport({
     eventBus,
-    resolveLocalDeviceUuid,
-    readPairedPeerDeviceIds
+    resolveLocalDeviceUuid
   })
   const outboundSession = createOutboundClientSession({
     eventBus,
     resolveLocalDeviceUuid,
-    readPairedPeerDeviceIds,
     probeSocketRegistry
   })
 
@@ -172,6 +171,21 @@ export function createDeviceDiscoveryService(
       return {
         success: true,
         messageId: sendOptions.messageId ?? `${Date.now()}`,
+        sessionId: sendOptions.sessionId,
+        transport: 'tcp'
+      }
+    },
+    async sendLanEvent(sendOptions) {
+      const outboundState = await outboundSession.getState({ sessionId: sendOptions.sessionId })
+      if (outboundState.state === 'open' && outboundState.sessionId === sendOptions.sessionId) {
+        return outboundSession.sendLanEvent(sendOptions)
+      }
+      const sentViaInbound = await inboundTransport.sendLanEvent(sendOptions)
+      if (!sentViaInbound) {
+        throw new BridgeError(BRIDGE_ERROR_CODES.unsupportedOperation, 'Session is not open.')
+      }
+      return {
+        success: true,
         sessionId: sendOptions.sessionId,
         transport: 'tcp'
       }

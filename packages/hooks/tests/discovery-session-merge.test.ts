@@ -13,18 +13,24 @@ function createScanOnlyAdapter(
 ): ConnectionRuntimeAdapter & { emitInboundSessionOpened: (event: SessionOpenedEvent) => void } {
   let round = 0
   let sessionOpenedListener: ((event: SessionOpenedEvent) => void) | undefined
+  let lastListedDevices: DiscoveredDevice[] = []
 
   return {
     async startDiscovery() {
       const devices = scanRounds[Math.min(round, scanRounds.length - 1)] ?? []
       round += 1
+      lastListedDevices = devices
       return { state: 'scanning' as const, devices, requestId: 'r1' }
+    },
+    async listDiscoveredDevices() {
+      return { state: 'scanning' as const, devices: [...lastListedDevices] }
     },
     async openSession(_options: OpenSessionOptions) {
       return { sessionId: 's1', state: 'open' as const, transport: 'tcp' as const }
     },
     async closeSession() {},
     async sendMessage() {},
+    async sendLanEvent() {},
     async getSessionState(): Promise<GetSessionStateResult> {
       return { state: 'idle', transport: 'tcp' }
     },
@@ -48,6 +54,9 @@ function createScanOnlyAdapter(
       return { remove: async () => {} }
     },
     async addTransportErrorListener() {
+      return { remove: async () => {} }
+    },
+    async addLanWireEventReceivedListener() {
       return { remove: async () => {} }
     },
     emitInboundSessionOpened(event: SessionOpenedEvent) {

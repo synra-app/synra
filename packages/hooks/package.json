@@ -27,6 +27,7 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
+    "@capacitor/app": "catalog:capacitor",
     "@synra/capacitor-device-connection": "workspace:*",
     "@synra/capacitor-lan-discovery": "workspace:*",
     "@synra/capacitor-preferences": "workspace:*",

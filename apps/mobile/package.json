@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@capacitor/android": "catalog:capacitor",
+    "@capacitor/app": "catalog:capacitor",
     "@capacitor/core": "catalog:capacitor",
     "@capacitor/ios": "catalog:capacitor",
     "@synra/capacitor-device-connection": "workspace:*",

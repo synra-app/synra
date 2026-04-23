@@ -5,6 +5,8 @@ import type {
   DeviceSessionGetStateOptions,
   DeviceSessionOpenOptions,
   DeviceSessionOpenResult,
+  DeviceSessionSendLanEventOptions,
+  DeviceSessionSendLanEventResult,
   DeviceSessionSendMessageOptions,
   DeviceSessionSendMessageResult,
   DeviceSessionSnapshot
@@ -15,6 +17,7 @@ export interface ConnectionService {
   openSession(options: DeviceSessionOpenOptions): Promise<DeviceSessionOpenResult>
   closeSession(options?: DeviceSessionCloseOptions): Promise<DeviceSessionCloseResult>
   sendMessage(options: DeviceSessionSendMessageOptions): Promise<DeviceSessionSendMessageResult>
+  sendLanEvent(options: DeviceSessionSendLanEventOptions): Promise<DeviceSessionSendLanEventResult>
   getSessionState(options?: DeviceSessionGetStateOptions): Promise<DeviceSessionSnapshot>
   pullHostEvents(): Promise<DeviceDiscoveryPullHostEventsResult>
 }
@@ -45,6 +48,12 @@ export function createConnectionService(
       const transport = options.transport ?? 'tcp'
       assertTcpTransport(transport)
       const result = await discoveryService.sendMessage(options)
+      return { ...result, transport: 'tcp' }
+    },
+    async sendLanEvent(options) {
+      const transport = options.transport ?? 'tcp'
+      assertTcpTransport(transport)
+      const result = await discoveryService.sendLanEvent(options)
       return { ...result, transport: 'tcp' }
     },
     async getSessionState(options = {}) {

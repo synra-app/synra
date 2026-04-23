@@ -9,6 +9,8 @@ import type {
   DeviceSessionGetStateOptions,
   DeviceSessionOpenOptions,
   DeviceSessionOpenResult,
+  DeviceSessionSendLanEventOptions,
+  DeviceSessionSendLanEventResult,
   DeviceSessionSendMessageOptions,
   DeviceSessionSendMessageResult,
   DeviceSessionSnapshot
@@ -40,7 +42,6 @@ type OutboundState = {
 type OutboundClientSessionOptions = {
   eventBus: HostEventBus
   resolveLocalDeviceUuid: () => string
-  readPairedPeerDeviceIds?: () => string[]
   probeSocketRegistry?: ProbeSocketRegistry
 }
 
@@ -48,8 +49,15 @@ export interface OutboundClientSession {
   open(options: DeviceSessionOpenOptions): Promise<DeviceSessionOpenResult>
   close(options?: DeviceSessionCloseOptions): Promise<DeviceSessionCloseResult>
   sendMessage(options: DeviceSessionSendMessageOptions): Promise<DeviceSessionSendMessageResult>
+  sendLanEvent(options: DeviceSessionSendLanEventOptions): Promise<DeviceSessionSendLanEventResult>
   getState(options?: DeviceSessionGetStateOptions): Promise<DeviceSessionSnapshot>
   heartbeatTick(): Promise<void>
+}
+
+type ConnectAckResult = {
+  sessionId: string
+  displayName?: string
+  remoteDeviceId?: string
 }
 
 export function createOutboundClientSession(
@@ -60,20 +68,8 @@ export function createOutboundClientSession(
   let socket: Socket | undefined
   let state: OutboundState = { state: 'idle' }
   let lastHeartbeatAt = 0
-  let resolveHello:
-    | ((result: {
-        sessionId: string
-        displayName?: string
-        remoteDeviceId?: string
-        pairedPeerDeviceIds?: string[]
-      }) => void)
-    | undefined
-  let rejectHello: ((reason: unknown) => void) | undefined
-
-  const normalizePairedPeerDeviceIds = (): Set<string> => {
-    const ids = options.readPairedPeerDeviceIds?.() ?? []
-    return new Set(ids.map((id) => id.trim()).filter((id) => id.length > 0))
-  }
+  let resolveConnect: ((result: ConnectAckResult) => void) | undefined
+  let rejectConnect: ((reason: unknown) => void) | undefined
 
   const closeWithError = (reason?: string) => {
     if (socket) {
@@ -116,20 +112,13 @@ export function createOutboundClientSession(
     })
   }
 
-  const readPairedPeerDeviceIdsFromHelloAckPayload = (
-    payload: Record<string, unknown>
-  ): string[] => {
-    const raw = payload.pairedPeerDeviceIds
-    if (!Array.isArray(raw)) {
-      return []
-    }
-    return raw
-      .filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
-      .map((id) => id.trim())
-  }
-
   const handleFrame = (frame: LanFrame) => {
-    if (frame.type === 'helloAck' && resolveHello && frame.sessionId) {
+    if (
+      frame.type === 'connectAck' &&
+      resolveConnect &&
+      frame.sessionId &&
+      frame.appId === LAN_APP_ID
+    ) {
       const payload =
         frame.payload && typeof frame.payload === 'object'
           ? (frame.payload as Record<string, unknown>)
@@ -142,15 +131,13 @@ export function createOutboundClientSession(
         typeof payload.sourceDeviceId === 'string' && payload.sourceDeviceId.length > 0
           ? payload.sourceDeviceId
           : undefined
-      const pairedPeerDeviceIds = readPairedPeerDeviceIdsFromHelloAckPayload(payload)
-      resolveHello({
+      resolveConnect({
         sessionId: frame.sessionId,
         displayName,
-        remoteDeviceId,
-        pairedPeerDeviceIds
+        remoteDeviceId
       })
-      resolveHello = undefined
-      rejectHello = undefined
+      resolveConnect = undefined
+      rejectConnect = undefined
       return
     }
     if (frame.type === 'ack' && frame.sessionId && frame.messageId) {
@@ -192,6 +179,25 @@ export function createOutboundClientSession(
       })
       return
     }
+    if (frame.type === 'event' && frame.sessionId) {
+      const pl =
+        frame.payload && typeof frame.payload === 'object'
+          ? (frame.payload as Record<string, unknown>)
+          : {}
+      const eventName = typeof pl.eventName === 'string' ? pl.eventName : ''
+      options.eventBus.publish({
+        type: 'transport.lan.event.received',
+        remote: `${state.host ?? ''}:${String(state.port ?? '')}`,
+        sessionId: frame.sessionId,
+        payload: {
+          eventName,
+          eventPayload: pl.payload,
+          fromDeviceId: state.deviceId
+        },
+        transport: 'tcp'
+      })
+      return
+    }
     if (frame.type === 'heartbeat') {
       lastHeartbeatAt = Date.now()
       return
@@ -228,13 +234,18 @@ export function createOutboundClientSession(
       }
     })
     currentSocket.on('error', (error) => {
-      rejectHello?.(error)
-      rejectHello = undefined
-      resolveHello = undefined
+      rejectConnect?.(error)
+      rejectConnect = undefined
+      resolveConnect = undefined
       publishTransportError('SOCKET_ERROR', { message: error.message })
       closeWithError(error.message)
     })
     currentSocket.on('close', () => {
+      if (state.state === 'connecting') {
+        rejectConnect?.('SOCKET_CLOSED')
+        rejectConnect = undefined
+        resolveConnect = undefined
+      }
       if (state.state !== 'closed') {
         closeWithError('SOCKET_CLOSED')
       }
@@ -278,10 +289,7 @@ export function createOutboundClientSession(
             deviceId: openOptions.deviceId,
             host: openOptions.host,
             port: openOptions.port,
-            displayName: lease.displayName,
-            pairedPeerDeviceIds: [],
-            handshakeKind: 'fresh',
-            claimsPeerPaired: false
+            displayName: lease.displayName
           },
           transport: 'tcp'
         })
@@ -308,55 +316,40 @@ export function createOutboundClientSession(
         lastError: undefined
       }
       attachSocketHandlers(socket)
-      let handshakeMeta: { handshakeKind: 'paired' | 'fresh'; claimsPeerPaired: boolean } = {
-        handshakeKind: 'fresh',
-        claimsPeerPaired: false
-      }
-
-      const helloAck = await new Promise<{
-        sessionId: string
-        displayName?: string
-        remoteDeviceId?: string
-        pairedPeerDeviceIds?: string[]
-      }>((resolve, reject) => {
-        resolveHello = resolve
-        rejectHello = reject
+      const connectAck = await new Promise<ConnectAckResult>((resolve, reject) => {
+        resolveConnect = resolve
+        rejectConnect = reject
         const timeout = setTimeout(() => reject('SESSION_OPEN_TIMEOUT'), DEFAULT_ACK_TIMEOUT_MS)
         socket?.connect(openOptions.port, openOptions.host, () => {
-          const pairedPeerDeviceIds = normalizePairedPeerDeviceIds()
-          const claimsPeerPaired = pairedPeerDeviceIds.has(openOptions.deviceId)
-          const handshakeKind: 'paired' | 'fresh' = claimsPeerPaired ? 'paired' : 'fresh'
-          handshakeMeta = { handshakeKind, claimsPeerPaired }
           const payload: Record<string, unknown> = {
             token: openOptions.token,
             sourceDeviceId: options.resolveLocalDeviceUuid(),
             probe: false,
             displayName: localDisplayName(),
-            handshakeKind,
-            claimsPeerPaired
+            connectType: openOptions.connectType
           }
           const sourceHostIp = pickPrimarySourceHostIp()
           if (sourceHostIp) {
             payload.sourceHostIp = sourceHostIp
           }
-          const hello: LanFrame = {
+          const connect: LanFrame = {
             version: LAN_PROTOCOL_VERSION,
-            type: 'hello',
+            type: 'connect',
             sessionId: randomUUID(),
             timestamp: Date.now(),
             appId: LAN_APP_ID,
             protocolVersion: LAN_PROTOCOL_VERSION,
-            capabilities: ['message'],
+            capabilities: ['message', 'event'],
             payload
           }
-          void writeFrame(hello).catch(reject)
+          void writeFrame(connect).catch(reject)
         })
         const currentReject = reject
-        rejectHello = (reason) => {
+        rejectConnect = (reason) => {
           clearTimeout(timeout)
           currentReject(reason)
         }
-        resolveHello = (id) => {
+        resolveConnect = (id) => {
           clearTimeout(timeout)
           resolve(id)
         }
@@ -372,29 +365,26 @@ export function createOutboundClientSession(
       state = {
         ...state,
         state: 'open',
-        sessionId: helloAck.sessionId,
-        remoteDisplayName: helloAck.displayName,
+        sessionId: connectAck.sessionId,
+        remoteDisplayName: connectAck.displayName,
         openedAt: now
       }
       options.eventBus.publish({
         type: 'transport.session.opened',
         remote: `${openOptions.host}:${String(openOptions.port)}`,
-        sessionId: helloAck.sessionId,
+        sessionId: connectAck.sessionId,
         payload: {
           direction: 'outbound',
           deviceId: openOptions.deviceId,
           host: openOptions.host,
           port: openOptions.port,
-          displayName: helloAck.displayName,
-          pairedPeerDeviceIds: helloAck.pairedPeerDeviceIds ?? [],
-          handshakeKind: handshakeMeta.handshakeKind,
-          claimsPeerPaired: handshakeMeta.claimsPeerPaired
+          displayName: connectAck.displayName
         },
         transport: 'tcp'
       })
       return {
         success: true,
-        sessionId: helloAck.sessionId,
+        sessionId: connectAck.sessionId,
         state: 'open',
         transport: 'tcp'
       }
@@ -413,6 +403,33 @@ export function createOutboundClientSession(
       return {
         success: true,
         sessionId: targetSessionId,
+        transport: 'tcp'
+      }
+    },
+    async sendLanEvent(sendOptions) {
+      if (state.state !== 'open' || !state.sessionId) {
+        throw new BridgeError(BRIDGE_ERROR_CODES.unsupportedOperation, 'Session is not open.')
+      }
+      const envelope: Record<string, unknown> = {
+        eventName: sendOptions.eventName,
+        payload: sendOptions.payload
+      }
+      if (sendOptions.eventId !== undefined) {
+        envelope.eventId = sendOptions.eventId
+      }
+      if (sendOptions.schemaVersion !== undefined) {
+        envelope.schemaVersion = sendOptions.schemaVersion
+      }
+      await writeFrame({
+        version: LAN_PROTOCOL_VERSION,
+        type: 'event',
+        sessionId: sendOptions.sessionId,
+        timestamp: Date.now(),
+        payload: envelope
+      })
+      return {
+        success: true,
+        sessionId: sendOptions.sessionId,
         transport: 'tcp'
       }
     },

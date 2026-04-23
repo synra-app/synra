@@ -3,15 +3,18 @@ import type { Ref } from 'vue'
 import type {
   RuntimeOpenSessionInput,
   RuntimeSessionState,
-  SynraConnectionSendInput
+  SynraConnectionSendInput,
+  SynraLanWireSendInput
 } from '../types'
 import type { ConnectionRuntimeAdapter } from './adapter'
 import type { ConnectedSessionsBook } from './connected-sessions-book'
+import { getHooksRuntimeOptions } from './config'
 import { setSessionStateWithTransitionLog } from './session-state-transition-log'
 
 const OPEN_SESSION_ERROR_MESSAGE = 'Failed to open session.'
 const CLOSE_SESSION_ERROR_MESSAGE = 'Failed to close session.'
 const SEND_MESSAGE_ERROR_MESSAGE = 'Failed to send message.'
+const SEND_LAN_EVENT_ERROR_MESSAGE = 'Failed to send LAN event.'
 
 export function createSessionOperationsModule(options: {
   adapter: ConnectionRuntimeAdapter
@@ -22,6 +25,7 @@ export function createSessionOperationsModule(options: {
   openSession(options: RuntimeOpenSessionInput): Promise<void>
   closeSession(sessionId?: string): Promise<void>
   sendMessage(input: SynraConnectionSendInput): Promise<void>
+  sendLanEvent(input: SynraLanWireSendInput): Promise<void>
 } {
   const { adapter, error, sessionState, sessionsBook } = options
 
@@ -41,10 +45,19 @@ export function createSessionOperationsModule(options: {
     openSessionInflightKeys.add(key)
     const suppressGlobalError = openOptions.suppressGlobalError === true
     try {
+      const hook = getHooksRuntimeOptions().resolveSynraConnectType
+      const fromHook = hook ? await Promise.resolve(hook(openOptions.deviceId)) : undefined
+      const connectType = openOptions.connectType ?? fromHook
+      if (connectType !== 'fresh' && connectType !== 'paired') {
+        throw new Error(
+          'connectType is required: set RuntimeOpenSessionInput.connectType or configureHooksRuntime({ resolveSynraConnectType }).'
+        )
+      }
       await adapter.openSession({
         deviceId: openOptions.deviceId,
         host: openOptions.host,
-        port: openOptions.port
+        port: openOptions.port,
+        connectType
       })
       error.value = null
     } catch (unknownError) {
@@ -98,9 +111,27 @@ export function createSessionOperationsModule(options: {
     }
   }
 
+  async function sendLanEvent(input: SynraLanWireSendInput): Promise<void> {
+    try {
+      sessionsBook.touchSessionActivity(input.sessionId, Date.now(), 'outbound')
+      await adapter.sendLanEvent({
+        sessionId: input.sessionId,
+        eventName: input.eventName,
+        payload: input.payload,
+        eventId: input.eventId,
+        schemaVersion: input.schemaVersion
+      })
+      error.value = null
+    } catch (unknownError) {
+      error.value = unknownToErrorMessage(unknownError, SEND_LAN_EVENT_ERROR_MESSAGE)
+      throw unknownError
+    }
+  }
+
   return {
     openSession,
     closeSession,
-    sendMessage
+    sendMessage,
+    sendLanEvent
   }
 }

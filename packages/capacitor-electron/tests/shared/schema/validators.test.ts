@@ -7,7 +7,6 @@ import {
   validateResolveActionsPayload,
   validateRuntimeExecutePayload,
   validateExternalOpenPayload,
-  validateDiscoveryOpenSessionPayload,
   validateDiscoverySendMessagePayload,
   validateDiscoveryStartPayload,
   validateReadFilePayload
@@ -39,9 +38,9 @@ describe('shared/schema/validators', () => {
     expect(isSupportedProtocolVersion('9.9')).toBe(false)
     expect(isSupportedMethod(BRIDGE_METHODS.fileRead)).toBe(true)
     expect(isSupportedMethod(BRIDGE_METHODS.discoveryStart)).toBe(true)
-    expect(isSupportedMethod(BRIDGE_METHODS.discoveryOpenSession)).toBe(true)
-    expect(isSupportedMethod(BRIDGE_METHODS.discoverySendMessage)).toBe(true)
-    expect(isSupportedMethod(BRIDGE_METHODS.discoveryPullHostEvents)).toBe(true)
+    expect(isSupportedMethod(BRIDGE_METHODS.connectionOpenSession)).toBe(true)
+    expect(isSupportedMethod(BRIDGE_METHODS.connectionSendMessage)).toBe(true)
+    expect(isSupportedMethod(BRIDGE_METHODS.connectionSendLanEvent)).toBe(true)
     expect(isSupportedMethod(BRIDGE_METHODS.preferencesGet)).toBe(true)
     expect(isSupportedMethod(BRIDGE_METHODS.preferencesSet)).toBe(true)
     expect(isSupportedMethod(BRIDGE_METHODS.preferencesRemove)).toBe(true)
@@ -93,13 +92,6 @@ describe('shared/schema/validators', () => {
       })
     ).toBe(true)
     expect(validateDiscoveryStartPayload({ manualTargets: [1] })).toBe(false)
-    expect(
-      validateDiscoveryOpenSessionPayload({
-        deviceId: 'device-1',
-        host: '10.0.0.109',
-        port: 32100
-      })
-    ).toBe(true)
     expect(
       validateDiscoverySendMessagePayload({
         sessionId: 'session-1',

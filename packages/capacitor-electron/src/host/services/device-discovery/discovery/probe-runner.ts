@@ -9,6 +9,7 @@ import {
 import { hashDeviceId, localDisplayName } from '../core/device-identity'
 import { pickPrimarySourceHostIp } from '../core/network'
 import {
+  LAN_APP_ID,
   LAN_PROTOCOL_VERSION,
   LengthPrefixedJsonCodec,
   type LanFrame
@@ -20,6 +21,8 @@ export type ProbeOptions = {
   timeoutMs?: number
   concurrency?: number
   localDeviceId: string
+  /** Merged into each Synra `connect` payload (caller-defined wire keys). */
+  probeConnectWirePayload?: Record<string, unknown>
   /** When set, successful probes keep the TCP socket for reuse by outbound sessions (single TCP). */
   probeSocketRegistry?: ProbeSocketRegistry
 }
@@ -82,16 +85,16 @@ async function probeSingle(
       })
     }
     const timer = setTimeout(() => end(false, { connectCheckError: 'PROBE_TIMEOUT' }), timeoutMs)
-    socket.on('error', () => {
+    const onProbeError = () => {
       end(false)
-    })
-    socket.on('data', (chunk) => {
+    }
+    const onProbeData = (chunk: Buffer | string) => {
       if (!Buffer.isBuffer(chunk)) {
         return
       }
       const frames = codec.decodeChunk(chunk)
       for (const frame of frames) {
-        if (frame.type !== 'helloAck') {
+        if (frame.type !== 'connectAck' || frame.appId !== LAN_APP_ID) {
           continue
         }
         const payload = toRecord(frame.payload)
@@ -99,21 +102,31 @@ async function probeSingle(
           typeof payload.sourceDeviceId === 'string' && payload.sourceDeviceId.length > 0
             ? payload.sourceDeviceId
             : undefined
+        const ackDisplayName =
+          typeof payload.displayName === 'string' ? payload.displayName.trim() : ''
+        if (!ackDisplayName) {
+          end(false, { connectCheckError: 'MISSING_DISPLAY_NAME' })
+          return
+        }
         const ackSessionId =
           typeof frame.sessionId === 'string' && frame.sessionId.length > 0 ? frame.sessionId : ''
         if (options.probeSocketRegistry && ackSessionId.length > 0) {
-          socket.removeAllListeners()
+          socket.off('data', onProbeData)
+          socket.off('error', onProbeError)
           options.probeSocketRegistry.register(registryKey, {
             socket,
             codec,
             sessionId: ackSessionId,
-            displayName: typeof payload.displayName === 'string' ? payload.displayName : undefined
+            displayName: ackDisplayName
+          })
+          socket.on('error', () => {
+            options.probeSocketRegistry?.releaseIfHeld(registryKey)
           })
           end(
             true,
             {
               deviceId: peerDeviceId ? hashDeviceId(peerDeviceId) : device.deviceId,
-              name: typeof payload.displayName === 'string' ? payload.displayName : device.name,
+              name: ackDisplayName,
               port
             },
             true
@@ -122,32 +135,35 @@ async function probeSingle(
         }
         end(true, {
           deviceId: peerDeviceId ? hashDeviceId(peerDeviceId) : device.deviceId,
-          name: typeof payload.displayName === 'string' ? payload.displayName : device.name,
-          // Keep the resolved connect port so UI can show actionable endpoint info.
+          name: ackDisplayName,
           port
         })
       }
-    })
+    }
+    socket.on('error', onProbeError)
+    socket.on('data', onProbeData)
     socket.connect(port, device.ipAddress, () => {
-      const helloPayload: Record<string, unknown> = {
+      const connectPayload: Record<string, unknown> = {
         sourceDeviceId: options.localDeviceId,
         probe: true,
-        displayName: localDisplayName()
+        displayName: localDisplayName(),
+        ...options.probeConnectWirePayload
       }
       const sourceHostIp = pickPrimarySourceHostIp()
       if (sourceHostIp) {
-        helloPayload.sourceHostIp = sourceHostIp
+        connectPayload.sourceHostIp = sourceHostIp
       }
-      const hello: LanFrame = {
+      const connect: LanFrame = {
         version: LAN_PROTOCOL_VERSION,
-        type: 'hello',
+        type: 'connect',
         sessionId: randomUUID(),
         timestamp: Date.now(),
-        appId: 'synra',
+        appId: LAN_APP_ID,
         protocolVersion: LAN_PROTOCOL_VERSION,
-        payload: helloPayload
+        capabilities: ['message', 'event'],
+        payload: connectPayload
       }
-      socket.write(codec.encode(hello))
+      socket.write(codec.encode(connect))
     })
   })
 }

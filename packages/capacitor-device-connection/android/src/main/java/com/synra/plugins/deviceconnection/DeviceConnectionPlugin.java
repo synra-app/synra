@@ -20,6 +20,7 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -37,77 +38,9 @@ public class DeviceConnectionPlugin extends Plugin {
   private static final String INSTANCE_PREFS_NAME = "synra_preferences_store";
   private static final String INSTANCE_UUID_KEY = "synra.preferences.synra.device.instance-uuid";
   private static final String DEVICE_BASIC_INFO_KEY = "synra.preferences.synra.device.basic-info";
-  private static final String PAIRED_DEVICES_KEY = "synra.preferences.synra.device.paired-peers";
-  private static final String LEGACY_DEVICE_DISPLAY_NAME_KEY = "synra.preferences.synra.device.display-name";
+    private static final String LEGACY_DEVICE_DISPLAY_NAME_KEY = "synra.preferences.synra.device.display-name";
     private static final String LEGACY_PREFS_NAME = "synra_device_connection";
     private static final String LEGACY_PREFS_DEVICE_UUID_KEY = "device_uuid";
-
-    private static JSONArray pairedPeerDeviceIdsFromHelloAck(JSONObject helloAckPayload) {
-        JSONArray out = new JSONArray();
-        if (helloAckPayload == null) {
-            return out;
-        }
-        JSONArray raw = helloAckPayload.optJSONArray("pairedPeerDeviceIds");
-        if (raw == null) {
-            return out;
-        }
-        for (int i = 0; i < raw.length(); i++) {
-            String id = raw.optString(i, null);
-            if (id != null && !id.isBlank()) {
-                out.put(id.trim());
-            }
-        }
-        return out;
-    }
-
-    private JSONArray readStoredPairedPeerDeviceIds() {
-        JSONArray out = new JSONArray();
-        Context context = getContext();
-        if (context == null) {
-            return out;
-        }
-        android.content.SharedPreferences unified =
-            context.getSharedPreferences(INSTANCE_PREFS_NAME, Context.MODE_PRIVATE);
-        String raw = unified.getString(PAIRED_DEVICES_KEY, null);
-        if (raw == null || raw.isBlank()) {
-            return out;
-        }
-        try {
-            JSONObject parsed = new JSONObject(raw);
-            JSONArray items = parsed.optJSONArray("items");
-            if (items == null) {
-                return out;
-            }
-            for (int i = 0; i < items.length(); i++) {
-                JSONObject item = items.optJSONObject(i);
-                if (item == null) {
-                    continue;
-                }
-                String id = item.optString("deviceId", "").trim();
-                if (!id.isEmpty()) {
-                    out.put(id);
-                }
-            }
-        } catch (JSONException ignored) {
-            // ignore malformed paired payload
-        }
-        return out;
-    }
-
-    private boolean isPeerMarkedPaired(String deviceId) {
-        String target = deviceId == null ? "" : deviceId.trim();
-        if (target.isEmpty()) {
-            return false;
-        }
-        JSONArray ids = readStoredPairedPeerDeviceIds();
-        for (int i = 0; i < ids.length(); i++) {
-            String id = ids.optString(i, "").trim();
-            if (!id.isEmpty() && id.equals(target)) {
-                return true;
-            }
-        }
-        return false;
-    }
 
     private final ExecutorService ioExecutor = Executors.newSingleThreadExecutor();
     private final ExecutorService readerExecutor = Executors.newSingleThreadExecutor();
@@ -132,6 +65,11 @@ public class DeviceConnectionPlugin extends Plugin {
             call.reject("deviceId/host/port are required.");
             return;
         }
+        String connectType = call.getString("connectType", null);
+        if (connectType == null || connectType.isBlank()) {
+            call.reject("connectType is required.");
+            return;
+        }
 
         ioExecutor.submit(() -> {
             closeSessionSocket();
@@ -144,30 +82,28 @@ public class DeviceConnectionPlugin extends Plugin {
                     new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
 
                 String sessionId = UUID.randomUUID().toString();
-                boolean claimsPeerPaired = isPeerMarkedPaired(deviceId);
-                JSObject helloPayload = new JSObject();
-                helloPayload.put("sourceDeviceId", getOrCreateLocalDeviceUuid());
-                helloPayload.put("probe", false);
-                helloPayload.put("displayName", localSynraDisplayName());
-                helloPayload.put("handshakeKind", claimsPeerPaired ? "paired" : "fresh");
-                helloPayload.put("claimsPeerPaired", claimsPeerPaired);
-                writeFrame(output, frame("hello", sessionId, null, helloPayload));
-                JSONObject helloAck = readFrame(input);
-                if (!"helloAck".equals(helloAck.optString("type"))) {
-                    call.reject("Handshake failed: missing helloAck.");
+                JSObject connectPayload = new JSObject();
+                connectPayload.put("sourceDeviceId", getOrCreateLocalDeviceUuid());
+                connectPayload.put("probe", false);
+                connectPayload.put("displayName", localSynraDisplayName());
+                connectPayload.put("connectType", connectType.trim());
+                writeFrame(output, frame("connect", sessionId, null, connectPayload));
+                JSONObject connectAck = readFrame(input);
+                if (!"connectAck".equals(connectAck.optString("type"))) {
+                    call.reject("Connect failed: missing connectAck.");
                     closeQuietly(socket);
                     return;
                 }
-                if (!APP_ID.equals(helloAck.optString("appId"))) {
-                    call.reject("Handshake failed: appId mismatch.");
+                if (!APP_ID.equals(connectAck.optString("appId"))) {
+                    call.reject("Connect failed: appId mismatch.");
                     closeQuietly(socket);
                     return;
                 }
-                JSONObject helloAckPayload = helloAck.optJSONObject("payload");
+                JSONObject ackPayload = connectAck.optJSONObject("payload");
                 String remoteDeviceId =
-                    helloAckPayload == null ? null : helloAckPayload.optString("sourceDeviceId", null);
+                    ackPayload == null ? null : ackPayload.optString("sourceDeviceId", null);
                 if (remoteDeviceId == null || remoteDeviceId.isBlank()) {
-                    call.reject("Handshake failed: missing sourceDeviceId.");
+                    call.reject("Connect failed: missing sourceDeviceId.");
                     closeQuietly(socket);
                     return;
                 }
@@ -176,7 +112,7 @@ public class DeviceConnectionPlugin extends Plugin {
                 this.sessionSocket = socket;
                 this.sessionInput = input;
                 this.sessionOutput = output;
-                this.currentSessionId = helloAck.optString("sessionId", sessionId);
+                this.currentSessionId = connectAck.optString("sessionId", sessionId);
                 this.currentDeviceId = remoteDeviceId;
                 this.currentHost = host;
                 this.currentPort = port;
@@ -195,14 +131,18 @@ public class DeviceConnectionPlugin extends Plugin {
                 result.put("port", this.currentPort);
                 result.put("state", "open");
                 result.put("transport", "tcp");
-                result.put("handshakeKind", claimsPeerPaired ? "paired" : "fresh");
-                result.put("claimsPeerPaired", claimsPeerPaired);
                 String remoteDisplay =
-                    helloAckPayload == null ? null : helloAckPayload.optString("displayName", null);
+                    ackPayload == null ? null : ackPayload.optString("displayName", null);
                 if (remoteDisplay != null && !remoteDisplay.isBlank()) {
                     result.put("displayName", remoteDisplay.trim());
                 }
-                result.put("pairedPeerDeviceIds", pairedPeerDeviceIdsFromHelloAck(helloAckPayload));
+                if (ackPayload != null) {
+                    try {
+                        result.put("connectAckPayload", JSObject.fromJSONObject(ackPayload));
+                    } catch (Exception ignored) {
+                        // Omit connectAckPayload when JSObject.fromJSONObject fails.
+                    }
+                }
                 notifyListeners("sessionOpened", result);
                 call.resolve(result);
             } catch (Exception error) {
@@ -211,6 +151,138 @@ public class DeviceConnectionPlugin extends Plugin {
                 call.reject("openSession failed: " + error.getMessage());
             }
         });
+    }
+
+    @PluginMethod
+    public void probeSynraPeers(PluginCall call) {
+        JSONArray targets = call.getData().optJSONArray("targets");
+        int timeoutMs = call.getInt("timeoutMs", 1500);
+        if (targets == null || targets.length() == 0) {
+            call.reject("targets is required.");
+            return;
+        }
+        ioExecutor.submit(() -> {
+            try {
+                JSONArray out = new JSONArray();
+                for (int i = 0; i < targets.length(); i++) {
+                    JSONObject row = targets.optJSONObject(i);
+                    if (row == null) {
+                        continue;
+                    }
+                    String host = row.optString("host", null);
+                    if (host == null || host.isBlank()) {
+                        continue;
+                    }
+                    int port = row.optInt("port", 32100);
+                    JSONObject wireExtras = row.optJSONObject("connectWirePayload");
+                    out.put(probeSynraOneHost(host.trim(), port, Math.max(200, timeoutMs), wireExtras));
+                }
+                JSObject ret = new JSObject();
+                ret.put("results", out);
+                call.resolve(ret);
+            } catch (Exception error) {
+                call.reject("probeSynraPeers failed: " + error.getMessage());
+            }
+        });
+    }
+
+    private JSONObject probeSynraOneHost(String host, int port, int timeoutMs, JSONObject wireExtras)
+            throws IOException, JSONException {
+        JSONObject base = new JSONObject();
+        base.put("host", host);
+        base.put("port", port);
+        base.put("ok", false);
+        Socket socket = new Socket();
+        try {
+            socket.connect(new InetSocketAddress(host, port), timeoutMs);
+            socket.setSoTimeout(timeoutMs * 2);
+            DataInputStream input = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
+            DataOutputStream output = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
+            String sessionId = UUID.randomUUID().toString();
+            JSObject probePayload = new JSObject();
+            probePayload.put("sourceDeviceId", getOrCreateLocalDeviceUuid());
+            probePayload.put("probe", true);
+            probePayload.put("displayName", localSynraDisplayName());
+            if (wireExtras != null) {
+                java.util.Iterator<String> keys = wireExtras.keys();
+                while (keys.hasNext()) {
+                    String k = keys.next();
+                    probePayload.put(k, wireExtras.get(k));
+                }
+            }
+            writeFrame(output, frame("connect", sessionId, null, probePayload));
+            output.flush();
+            JSONObject response = readFrame(input);
+            if (!"connectAck".equals(response.optString("type"))) {
+                base.put("error", "CONNECT_ACK_INVALID");
+                return base;
+            }
+            if (!APP_ID.equals(response.optString("appId"))) {
+                base.put("error", "APP_ID_MISMATCH");
+                return base;
+            }
+            JSONObject ackPayload = response.optJSONObject("payload");
+            if (ackPayload == null) {
+                base.put("error", "MISSING_ACK_PAYLOAD");
+                return base;
+            }
+            String remote = ackPayload.optString("sourceDeviceId", null);
+            if (remote == null || remote.isBlank()) {
+                base.put("error", "MISSING_REMOTE_DEVICE_ID");
+                return base;
+            }
+            String localUuid = getOrCreateLocalDeviceUuid();
+            String canonRemote = canonicalSynraDeviceId(remote.trim());
+            String canonLocal = canonicalSynraDeviceId(localUuid);
+            if (canonRemote.equals(canonLocal)) {
+                base.put("error", "SELF_DEVICE");
+                return base;
+            }
+            base.put("ok", true);
+            base.put("wireSourceDeviceId", canonRemote);
+            String dn = ackPayload.optString("displayName", "");
+            if (!dn.isBlank()) {
+                base.put("displayName", dn.trim());
+            }
+            base.put("connectAckPayload", ackPayload);
+            return base;
+        } catch (Exception error) {
+            base.put("error", error.getMessage() == null ? "PROBE_FAILED" : error.getMessage());
+            return base;
+        } finally {
+            closeQuietly(socket);
+        }
+    }
+
+    private static String canonicalSynraDeviceId(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        String trimmed = raw.trim();
+        if (trimmed.isEmpty()) {
+            return trimmed;
+        }
+        if (trimmed.startsWith("device-") && trimmed.length() >= "device-".length() + 8) {
+            return trimmed;
+        }
+        return hashSynraId(trimmed);
+    }
+
+    private static String hashSynraId(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-1");
+            byte[] bytes = digest.digest(value.getBytes(StandardCharsets.UTF_8));
+            StringBuilder builder = new StringBuilder();
+            for (byte current : bytes) {
+                if (builder.length() >= 12) {
+                    break;
+                }
+                builder.append(String.format(Locale.ROOT, "%02x", current));
+            }
+            return "device-" + builder;
+        } catch (Exception ignored) {
+            return "device-" + Math.abs(value.hashCode());
+        }
     }
 
     @PluginMethod
@@ -269,6 +341,58 @@ public class DeviceConnectionPlugin extends Plugin {
                     notifyListeners("transportError", event);
                 }
                 call.reject("sendMessage failed: " + error.getMessage());
+            }
+        });
+    }
+
+    @PluginMethod
+    public void sendLanEvent(PluginCall call) {
+        String sessionId = call.getString("sessionId");
+        String eventName = call.getString("eventName");
+        Object payload = call.getData().opt("payload");
+        String eventId = call.getString("eventId");
+        Integer schemaVersion = call.getInt("schemaVersion");
+
+        if (sessionId == null || eventName == null) {
+            call.reject("sessionId/eventName are required.");
+            return;
+        }
+
+        ioExecutor.submit(() -> {
+            if (!sessionOpen.get() || sessionOutput == null || sessionInput == null) {
+                call.reject("Session is not open.");
+                return;
+            }
+
+            try {
+                JSObject envelope = new JSObject();
+                envelope.put("eventName", eventName);
+                if (payload != null) {
+                    envelope.put("payload", payload);
+                }
+                if (eventId != null) {
+                    envelope.put("eventId", eventId);
+                }
+                if (schemaVersion != null) {
+                    envelope.put("schemaVersion", schemaVersion);
+                }
+                writeFrame(sessionOutput, frame("event", sessionId, null, envelope));
+
+                JSObject result = new JSObject();
+                result.put("success", true);
+                result.put("sessionId", sessionId);
+                result.put("transport", "tcp");
+                call.resolve(result);
+            } catch (Exception error) {
+                this.lastSessionError = error.getMessage();
+                if (sessionOpen.get()) {
+                    JSObject event = new JSObject();
+                    event.put("sessionId", sessionId);
+                    event.put("message", error.getMessage());
+                    event.put("transport", "tcp");
+                    notifyListeners("transportError", event);
+                }
+                call.reject("sendLanEvent failed: " + error.getMessage());
             }
         });
     }
@@ -353,6 +477,17 @@ public class DeviceConnectionPlugin extends Plugin {
                         event.put("timestamp", frame.optLong("timestamp", System.currentTimeMillis()));
                         event.put("transport", "tcp");
                         notifyListeners("messageAck", event);
+                    } else if ("event".equals(type)) {
+                        JSONObject pl = frame.optJSONObject("payload");
+                        JSObject event = new JSObject();
+                        event.put("sessionId", frame.optString("sessionId"));
+                        event.put(
+                            "eventName",
+                            pl == null ? "" : pl.optString("eventName", "")
+                        );
+                        event.put("eventPayload", pl == null ? null : pl.opt("payload"));
+                        event.put("transport", "tcp");
+                        notifyListeners("lanWireEventReceived", event);
                     } else if ("heartbeat".equals(type)) {
                         // Keepalive frame from peer; no-op.
                     } else if ("close".equals(type)) {
@@ -398,7 +533,7 @@ public class DeviceConnectionPlugin extends Plugin {
         frame.put("timestamp", System.currentTimeMillis());
         frame.put("appId", APP_ID);
         frame.put("protocolVersion", PROTOCOL_VERSION);
-        frame.put("capabilities", new JSONArray().put("message"));
+        frame.put("capabilities", new JSONArray().put("message").put("event"));
         if (messageId != null) {
             frame.put("messageId", messageId);
         }

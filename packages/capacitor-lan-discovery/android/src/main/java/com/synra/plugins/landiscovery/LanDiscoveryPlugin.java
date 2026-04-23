@@ -14,6 +14,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -70,51 +71,6 @@ public class LanDiscoveryPlugin {
         return result;
     }
 
-    public synchronized DeviceRecord getDevice(String deviceId) {
-        return this.devices.get(deviceId);
-    }
-
-    public synchronized DeviceRecord updateDeviceConnectable(
-        String deviceId,
-        boolean connectable,
-        String connectCheckError
-    ) {
-        DeviceRecord selected = this.devices.get(deviceId);
-        if (selected == null) {
-            return null;
-        }
-
-        DeviceRecord updated = selected.withConnectable(connectable, connectCheckError);
-        this.devices.put(deviceId, updated);
-        return updated;
-    }
-
-    public synchronized DeviceRecord updateDeviceName(String deviceId, String name) {
-        DeviceRecord selected = this.devices.get(deviceId);
-        if (selected == null || name == null || name.isBlank()) {
-            return selected;
-        }
-        DeviceRecord updated = selected.withName(name.trim());
-        this.devices.put(deviceId, updated);
-        return updated;
-    }
-
-    public synchronized DeviceRecord rekeyDeviceAfterProbe(
-        String oldDeviceId,
-        String newDeviceId,
-        boolean connectable,
-        String connectCheckError
-    ) {
-        DeviceRecord selected = this.devices.remove(oldDeviceId);
-        if (selected == null) {
-            return null;
-        }
-        DeviceRecord probed = selected.withConnectable(connectable, connectCheckError);
-        DeviceRecord moved = probed.withDeviceId(newDeviceId, probed.name);
-        this.devices.put(newDeviceId, moved);
-        return moved;
-    }
-
     private JSArray toDeviceArray() {
         JSArray array = new JSArray();
         for (DeviceRecord device : this.devices.values()) {
@@ -123,34 +79,19 @@ public class LanDiscoveryPlugin {
         return array;
     }
 
-    static DeviceRecord createProbedSynraDevice(
-        String remoteDeviceId,
-        String displayName,
-        String ipAddress,
-        long discoveredAt,
-        long connectCheckAt
-    ) {
-        return new DeviceRecord(
-            remoteDeviceId,
-            displayName,
-            ipAddress,
-            "probe",
-            true,
-            connectCheckAt,
-            null,
-            discoveredAt,
-            discoveredAt
-        );
-    }
-
-    void mergeDevices(List<DeviceRecord> incoming) {
-        for (DeviceRecord device : incoming) {
-            DeviceRecord existing = this.devices.get(device.deviceId);
-            if (existing != null) {
-                this.devices.put(device.deviceId, existing.merge(device));
-            } else {
-                this.devices.put(device.deviceId, device);
+    void mergeCandidateDevices(List<String> ips, Set<String> manualHosts) {
+        long now = System.currentTimeMillis();
+        for (String host : ips) {
+            if (host == null) {
+                continue;
             }
+            String trimmed = host.trim();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            String stableId = Objects.requireNonNull(LanDiscoveryIdUtils.canonicalLanDeviceId("synra-candidate:" + trimmed));
+            String source = manualHosts.contains(trimmed) ? "manual" : "mdns";
+            this.devices.put(stableId, new DeviceRecord(stableId, trimmed, trimmed, source, false, null, null, now, now));
         }
     }
 

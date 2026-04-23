@@ -14,11 +14,15 @@ function createStaticScanAdapter(devices: DiscoveredDevice[]): ConnectionRuntime
     async startDiscovery() {
       return { state: 'scanning' as const, devices: [...devices], requestId: 'r1' }
     },
+    async listDiscoveredDevices() {
+      return { state: 'scanning' as const, devices: [...devices] }
+    },
     async openSession(_options: OpenSessionOptions) {
       return { sessionId: 's1', state: 'open' as const, transport: 'tcp' as const }
     },
     async closeSession() {},
     async sendMessage() {},
+    async sendLanEvent() {},
     async getSessionState(): Promise<GetSessionStateResult> {
       return { state: 'idle', transport: 'tcp' }
     },
@@ -41,6 +45,9 @@ function createStaticScanAdapter(devices: DiscoveredDevice[]): ConnectionRuntime
       return { remove: async () => {} }
     },
     async addTransportErrorListener() {
+      return { remove: async () => {} }
+    },
+    async addLanWireEventReceivedListener() {
       return { remove: async () => {} }
     }
   }

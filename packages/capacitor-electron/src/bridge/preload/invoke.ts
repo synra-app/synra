@@ -17,7 +17,7 @@ import {
   validateResolveActionsPayload,
   validateRuntimeExecutePayload,
   validateExternalOpenPayload,
-  validateDiscoveryOpenSessionPayload,
+  validateDiscoverySendLanEventPayload,
   validateDiscoverySendMessagePayload,
   validateReadFilePayload
 } from '../../shared/schema/validators'
@@ -75,22 +75,22 @@ function validatePayload(method: string, payload: unknown): void {
   }
 
   if (
-    method === BRIDGE_METHODS.discoveryOpenSession &&
-    !validateDiscoveryOpenSessionPayload(payload)
-  ) {
-    throw new BridgeError(
-      BRIDGE_ERROR_CODES.invalidParams,
-      'discovery.openSession expects { deviceId, host, port, token? }.'
-    )
-  }
-
-  if (
-    method === BRIDGE_METHODS.discoverySendMessage &&
+    method === BRIDGE_METHODS.connectionSendMessage &&
     !validateDiscoverySendMessagePayload(payload)
   ) {
     throw new BridgeError(
       BRIDGE_ERROR_CODES.invalidParams,
-      'discovery.sendMessage expects { sessionId, type, payload, messageId? }.'
+      'connection.sendMessage expects { sessionId, messageType, payload, messageId? }.'
+    )
+  }
+
+  if (
+    method === BRIDGE_METHODS.connectionSendLanEvent &&
+    !validateDiscoverySendLanEventPayload(payload)
+  ) {
+    throw new BridgeError(
+      BRIDGE_ERROR_CODES.invalidParams,
+      'connection.sendLanEvent expects { sessionId, eventName, payload?, eventId?, schemaVersion? }.'
     )
   }
 }

@@ -1,3 +1,4 @@
+import type { SynraLanConnectType } from '@synra/capacitor-device-connection'
 import type { SynraMessageType } from '@synra/protocol'
 
 export type RuntimeSessionState = {
@@ -36,6 +37,8 @@ export type RuntimeOpenSessionInput = {
   deviceId: string
   host: string
   port: number
+  /** Overrides `resolveSynraConnectType` from hooks runtime options when set. */
+  connectType?: SynraLanConnectType
   /**
    * When true, `openSession` failures do not populate the shared transport `error` ref (best-effort
    * auto-reconnect while the peer host is still starting its listener).
@@ -56,6 +59,8 @@ export type SynraDiscoveryStartOptions = {
   reset?: boolean
   port?: number
   timeoutMs?: number
+  /** Merged into each Synra probe `connect` payload (Capacitor + Electron discovery). */
+  probeConnectWirePayload?: Record<string, unknown>
 }
 
 export type SynraConnectionMessage = {
@@ -79,4 +84,26 @@ export type SynraConnectionSendInput = {
   messageType: SynraMessageType
   payload: unknown
   messageId?: string
+}
+
+export type SynraLanWireEvent = {
+  sessionId: string
+  eventName: string
+  payload: unknown
+  fromDeviceId?: string
+  transport: 'tcp'
+}
+
+export type SynraLanWireFilter = {
+  sessionId?: string
+  deviceId?: string
+  eventName?: string
+}
+
+export type SynraLanWireSendInput = {
+  sessionId: string
+  eventName: string
+  payload?: unknown
+  eventId?: string
+  schemaVersion?: number
 }

@@ -2,6 +2,7 @@ import type {
   DeviceConnectableUpdatedEvent,
   DiscoveredDevice,
   DiscoveryState,
+  ListDiscoveredDevicesResult,
   StartDiscoveryOptions
 } from '@synra/capacitor-lan-discovery'
 import {
@@ -11,17 +12,23 @@ import {
 import type {
   GetSessionStateResult,
   HostEvent,
+  LanWireEventReceivedEvent,
   MessageAckEvent,
   MessageReceivedEvent,
   OpenSessionOptions,
+  ProbeSynraPeersOptions,
+  ProbeSynraPeersResult,
+  SendLanEventOptions,
   SendMessageOptions,
   SessionState,
   SessionClosedEvent,
   SessionOpenedEvent,
   TransportErrorEvent
 } from '@synra/capacitor-device-connection'
+import { SYNRA_PROBE_EMBEDDED_IN_DISCOVERY } from '@synra/capacitor-device-connection'
 import type { ConnectionRuntimeAdapter } from '../adapter'
 import {
+  mapLanWireEventReceivedHostEvent,
   mapMessageTypeFromHostEvent,
   mapSessionClosedHostEvent,
   mapSessionOpenedHostEvent,
@@ -33,11 +40,13 @@ type MainHooksBridge = {
     state: DiscoveryState
     devices: DiscoveredDevice[]
   }>
+  listDiscoveredDevices: () => Promise<ListDiscoveredDevicesResult>
   openSession: (
     options: OpenSessionOptions
   ) => Promise<{ sessionId: string; state: SessionState; transport: 'tcp' }>
   closeSession: (sessionId?: string) => Promise<unknown>
   sendMessage: (options: SendMessageOptions) => Promise<unknown>
+  sendLanEvent: (options: SendLanEventOptions) => Promise<unknown>
   getSessionState: (sessionId?: string) => Promise<GetSessionStateResult>
   onHostEvent: (listener: (event: HostEvent) => void) => () => void
 }
@@ -70,12 +79,24 @@ export function createElectronMainRuntimeAdapter(): ConnectionRuntimeAdapter {
 
   return {
     startDiscovery: (options) => bridge.startDiscovery(options),
+    listDiscoveredDevices: () => bridge.listDiscoveredDevices(),
+    probeSynraPeers: async (options: ProbeSynraPeersOptions): Promise<ProbeSynraPeersResult> => ({
+      results: options.targets.map((target) => ({
+        host: target.host,
+        port: typeof target.port === 'number' && target.port > 0 ? target.port : 32100,
+        ok: false,
+        error: SYNRA_PROBE_EMBEDDED_IN_DISCOVERY
+      }))
+    }),
     openSession: (options) => bridge.openSession(options),
     closeSession: async (sessionId) => {
       await bridge.closeSession(sessionId)
     },
     sendMessage: async (options) => {
       await bridge.sendMessage(options)
+    },
+    sendLanEvent: async (options) => {
+      await bridge.sendLanEvent(options)
     },
     getSessionState: (sessionId) => bridge.getSessionState(sessionId),
     addDeviceConnectableUpdatedListener: async (
@@ -145,6 +166,13 @@ export function createElectronMainRuntimeAdapter(): ConnectionRuntimeAdapter {
     addTransportErrorListener: async (listener: (event: TransportErrorEvent) => void) =>
       addHostListener((event) => {
         const mapped = mapTransportErrorHostEvent(event)
+        if (mapped) {
+          listener(mapped)
+        }
+      }),
+    addLanWireEventReceivedListener: async (listener: (event: LanWireEventReceivedEvent) => void) =>
+      addHostListener((event) => {
+        const mapped = mapLanWireEventReceivedHostEvent(event)
         if (mapped) {
           listener(mapped)
         }

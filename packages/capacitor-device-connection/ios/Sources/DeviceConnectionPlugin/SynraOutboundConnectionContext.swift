@@ -1,13 +1,15 @@
 import Foundation
 import Network
 
-final class OutboundConnectionContext {
+final class SynraOutboundConnectionContext {
     let connection: NWConnection
     let host: String
     let port: UInt16
     let hostPortKey: String
     var sessionId: String
     let remoteLabel: String
+    let remoteDeviceId: String
+    let remoteDisplayName: String
 
     init(
         connection: NWConnection,
@@ -15,7 +17,9 @@ final class OutboundConnectionContext {
         port: UInt16,
         hostPortKey: String,
         sessionId: String,
-        remoteLabel: String
+        remoteLabel: String,
+        remoteDeviceId: String,
+        remoteDisplayName: String
     ) {
         self.connection = connection
         self.host = host
@@ -23,5 +27,7 @@ final class OutboundConnectionContext {
         self.hostPortKey = hostPortKey
         self.sessionId = sessionId
         self.remoteLabel = remoteLabel
+        self.remoteDeviceId = remoteDeviceId
+        self.remoteDisplayName = remoteDisplayName
     }
 }

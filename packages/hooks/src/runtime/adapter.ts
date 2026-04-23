@@ -2,14 +2,19 @@ import type {
   DeviceConnectableUpdatedEvent,
   DiscoveryState,
   DiscoveredDevice,
+  ListDiscoveredDevicesResult,
   StartDiscoveryOptions
 } from '@synra/capacitor-lan-discovery'
 import type {
   GetSessionStateResult,
+  LanWireEventReceivedEvent,
   MessageAckEvent,
   MessageReceivedEvent,
   OpenSessionOptions,
+  ProbeSynraPeersOptions,
+  ProbeSynraPeersResult,
   SessionState,
+  SendLanEventOptions,
   SendMessageOptions,
   SessionClosedEvent,
   SessionOpenedEvent,
@@ -30,6 +35,9 @@ export interface ConnectionRuntimeAdapter {
     state: DiscoveryState
     devices: DiscoveredDevice[]
   }>
+  listDiscoveredDevices(): Promise<ListDiscoveredDevicesResult>
+  /** Native Synra TCP probe (e.g. Capacitor). Optional on hosts that fold probe into `startDiscovery`. */
+  probeSynraPeers?(options: ProbeSynraPeersOptions): Promise<ProbeSynraPeersResult>
   openSession(options: OpenSessionOptions): Promise<{
     sessionId: string
     state: SessionState
@@ -37,6 +45,7 @@ export interface ConnectionRuntimeAdapter {
   }>
   closeSession(sessionId?: string): Promise<void>
   sendMessage(options: SendMessageOptions): Promise<void>
+  sendLanEvent(options: SendLanEventOptions): Promise<void>
   getSessionState(sessionId?: string): Promise<GetSessionStateResult>
   addDeviceConnectableUpdatedListener(
     listener: (event: DeviceConnectableUpdatedEvent) => void
@@ -49,4 +58,7 @@ export interface ConnectionRuntimeAdapter {
   ): Promise<ListenerHandle>
   addMessageAckListener(listener: (event: MessageAckEvent) => void): Promise<ListenerHandle>
   addTransportErrorListener(listener: (event: TransportErrorEvent) => void): Promise<ListenerHandle>
+  addLanWireEventReceivedListener(
+    listener: (event: LanWireEventReceivedEvent) => void
+  ): Promise<ListenerHandle>
 }

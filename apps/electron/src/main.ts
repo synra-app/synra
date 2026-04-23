@@ -6,14 +6,17 @@ import type {
   DeviceDiscoveryHostEvent,
   DeviceDiscoveryStartOptions,
   DeviceSessionOpenOptions,
+  DeviceSessionSendLanEventOptions,
   DeviceSessionSendMessageOptions
 } from '@synra/capacitor-electron'
 
 type MainHooksBridge = {
   startDiscovery: (options?: DeviceDiscoveryStartOptions) => Promise<unknown>
+  listDiscoveredDevices: () => Promise<unknown>
   openSession: (options: DeviceSessionOpenOptions) => Promise<unknown>
   closeSession: (sessionId?: string) => Promise<unknown>
   sendMessage: (options: DeviceSessionSendMessageOptions) => Promise<unknown>
+  sendLanEvent: (options: DeviceSessionSendLanEventOptions) => Promise<unknown>
   getSessionState: (sessionId?: string) => Promise<unknown>
   onHostEvent: (listener: (event: DeviceDiscoveryHostEvent) => void) => () => void
 }
@@ -177,9 +180,11 @@ function registerCapacitorElectronBridge(): void {
   const bridgeTarget = globalThis as MainHooksGlobal
   bridgeTarget.__synraHooksMainBridge = {
     startDiscovery: (options) => runtime.deviceDiscoveryService.startDiscovery(options),
+    listDiscoveredDevices: () => runtime.deviceDiscoveryService.listDevices(),
     openSession: (options) => runtime.connectionService.openSession(options),
     closeSession: (sessionId) => runtime.connectionService.closeSession({ sessionId }),
     sendMessage: (options) => runtime.connectionService.sendMessage(options),
+    sendLanEvent: (options) => runtime.connectionService.sendLanEvent(options),
     getSessionState: (sessionId) => runtime.connectionService.getSessionState({ sessionId }),
     onHostEvent(listener) {
       hostEventListeners.add(listener)

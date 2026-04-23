@@ -1,3 +1,5 @@
+export * from './lan-events'
+
 export const PROTOCOL_VERSION = '1.0' as const
 
 export type DeviceId = string

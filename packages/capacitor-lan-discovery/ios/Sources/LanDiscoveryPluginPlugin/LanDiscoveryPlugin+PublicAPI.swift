@@ -17,7 +17,6 @@ extension LanDiscoveryPlugin {
     ) -> [String: Any] {
         if reset {
             devices.removeAll()
-            closeAllOutboundSessions()
         }
 
         startBackgroundDiscoveryServices()
@@ -27,21 +26,21 @@ extension LanDiscoveryPlugin {
         self.scanWindowMs = scanWindowMs?.intValue ?? defaultScanWindowMs
         let mode = discoveryMode ?? "hybrid"
         let includeMdns = mode == "hybrid" || mode == "mdns"
-        let includeUdpFallback = mode == "hybrid"
+        let isHybrid = mode == "hybrid"
         // Match Android: include manual targets whenever mode is not "none"
         let includeManual = mode != "none"
         let discoveryTimeout = max(200, discoveryTimeoutMs?.intValue ?? defaultDiscoveryTimeoutMs)
-        _ = enableProbeFallback
         _ = subnetCidrs
 
         var candidateIps: [String] = []
+        var manualHosts = Set<String>()
         if includeMdns {
             candidateIps.append(contentsOf: discoverByMdns(
                 serviceType: mdnsServiceType ?? defaultMdnsServiceType,
                 timeoutMs: discoveryTimeout
             ))
         }
-        if candidateIps.isEmpty, includeUdpFallback {
+        if isHybrid, enableProbeFallback {
             candidateIps.append(contentsOf: discoverByUdp(timeoutMs: discoveryTimeout))
         }
         if includeManual {
@@ -49,6 +48,7 @@ extension LanDiscoveryPlugin {
                 let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !t.isEmpty {
                     candidateIps.append(t)
+                    manualHosts.insert(t)
                 }
             }
         }
@@ -59,9 +59,8 @@ extension LanDiscoveryPlugin {
         }
         uniqueCandidates = pruneSelfCandidateIps(uniqueCandidates, scanIncludeLoopback: includeLoopback)
 
-        let targetPort = probePort?.uint16Value ?? defaultTcpPort
-        let targetProbeTimeout = max(200, probeTimeoutMs?.intValue ?? defaultDiscoveryTimeoutMs)
-        populateDevicesFromSynraProbes(candidateIps: uniqueCandidates, port: targetPort, timeoutMs: targetProbeTimeout)
+        let targetPort = Int(probePort?.uint16Value ?? defaultTcpPort)
+        populateCandidateDevicesFromIps(ips: uniqueCandidates, port: targetPort, manualHosts: manualHosts)
         pruneSelfDevices(scanIncludeLoopback: includeLoopback)
 
         var result = listDevices()
@@ -100,95 +99,12 @@ extension LanDiscoveryPlugin {
         return updated.toDictionary()
     }
 
-    @objc public func ensureOutboundSession(
-        host: String,
-        port: NSNumber,
-        timeoutMs: NSNumber?
-    ) -> [String: Any] {
-        let trimmed = host.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            return ["error": "INVALID_HOST"]
-        }
-        let p = port.uint16Value
-        let t = max(200, timeoutMs?.intValue ?? defaultDiscoveryTimeoutMs)
-        _ = probeDevice(host: trimmed, port: p, timeoutMs: t)
-        let key = outboundHostPortKey(host: trimmed, port: p)
-        if let sid = outboundHostPortToSessionId[key], outboundConnections[sid] != nil {
-            return [
-                "sessionId": sid,
-                "state": "open",
-                "transport": "tcp",
-            ]
-        }
-        return ["error": "ENSURE_FAILED", "host": trimmed, "port": Int(p)]
-    }
-
-    @objc public func sendMessage(
-        sessionId: String,
-        messageType: String,
-        payload: Any,
-        messageId: String?
-    ) -> [String: Any]? {
-        let targetMessageId = messageId ?? UUID().uuidString
-        let envelope: [String: Any] = [
-            "messageType": messageType,
-            "payload": payload,
-        ]
-        let frameToSend = frame(type: "message", sessionId: sessionId, messageId: targetMessageId, payload: envelope)
-        if let outbound = outboundConnections[sessionId] {
-            sendFrame(frameToSend, through: outbound.connection)
-            return [
-                "success": true,
-                "sessionId": sessionId,
-                "messageId": targetMessageId,
-                "transport": "tcp",
-            ]
-        }
-        guard let context = inboundConnections.first(where: { $0.value.sessionId == sessionId })?.value else {
-            return nil
-        }
-        sendFrame(frameToSend, through: context.connection)
-        return [
-            "success": true,
-            "sessionId": sessionId,
-            "messageId": targetMessageId,
-            "transport": "tcp",
-        ]
-    }
-
-    @objc public func closeSession(sessionId: String) -> [String: Any] {
-        if outboundConnections[sessionId] != nil {
-            closeOutboundSession(sessionId: sessionId, reason: "closed-by-host", emitSessionClosed: true)
-            return [
-                "success": true,
-                "sessionId": sessionId,
-                "transport": "tcp",
-            ]
-        }
-        guard let connectionId = inboundConnections.first(where: { $0.value.sessionId == sessionId })?.key else {
-            return [
-                "success": true,
-                "sessionId": sessionId,
-                "transport": "tcp",
-            ]
-        }
-        closeInboundConnection(connectionId: connectionId, reason: "closed-by-host", emitSessionClosed: true)
-        return [
-            "success": true,
-            "sessionId": sessionId,
-            "transport": "tcp",
-        ]
-    }
-
     @objc public func startBackgroundDiscoveryServices() {
         startMdnsAdvertisement()
         startUdpDiscoveryResponder()
-        startTcpServer()
     }
 
     @objc public func stopBackgroundDiscoveryServices() {
-        closeAllOutboundSessions()
-        stopTcpServer()
         stopMdnsAdvertisement()
         stopUdpDiscoveryResponder()
     }

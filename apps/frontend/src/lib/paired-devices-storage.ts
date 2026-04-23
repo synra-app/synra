@@ -7,6 +7,7 @@ import {
   type SynraPairedDeviceRecord,
   type SynraPairedDevicesPayload
 } from '@synra/capacitor-preferences'
+import { logDiscoveryPairHandshakeDebug } from '@synra/hooks'
 
 export type { SynraPairedDeviceRecord, SynraPairedDevicesPayload }
 
@@ -66,6 +67,11 @@ export async function patchPairedDeviceDisplayName(
 }
 
 export async function removePairedDeviceRecord(deviceId: string): Promise<void> {
+  const stack = new Error().stack?.split('\n').slice(1, 10).join(' <- ') ?? ''
+  logDiscoveryPairHandshakeDebug('paired_storage_remove', {
+    deviceId,
+    stack
+  })
   const payload = await loadPairedDevicesPayload()
   await savePairedDevicesPayload({
     ...payload,

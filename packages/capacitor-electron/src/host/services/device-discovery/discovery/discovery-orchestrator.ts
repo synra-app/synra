@@ -52,8 +52,9 @@ export function createDiscoveryOrchestrator(
         startOptions.discoveryTimeoutMs && startOptions.discoveryTimeoutMs > 0
           ? startOptions.discoveryTimeoutMs
           : DEFAULT_DISCOVERY_TIMEOUT_MS
+      const enableProbeFallback = startOptions.enableProbeFallback !== false
       const shouldUseMdns = mode === 'mdns' || mode === 'hybrid'
-      const shouldUseUdp = mode === 'hybrid' || mode === 'subnet'
+      const shouldUseUdp = mode === 'subnet' || (mode === 'hybrid' && enableProbeFallback)
       const shouldUseManual = mode === 'hybrid' || mode === 'manual' || mode === 'subnet'
 
       const activeKinds = new Set<string>([
@@ -81,13 +82,24 @@ export function createDiscoveryOrchestrator(
         port: probePort,
         timeoutMs: startOptions.timeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS,
         concurrency: startOptions.concurrency ?? DEFAULT_PROBE_CONCURRENCY,
+        probeConnectWirePayload: startOptions.probeConnectWirePayload,
         probeSocketRegistry: options.probeSocketRegistry
       })
       options.registry.reset()
-      const accepted = probed.filter(
-        (device) =>
-          device.connectable && typeof device.name === 'string' && device.name.trim().length > 0
-      )
+      const accepted = probed
+        .filter(
+          (device) =>
+            device.connectable &&
+            typeof device.deviceId === 'string' &&
+            device.deviceId.trim().length > 0
+        )
+        .map((device) => {
+          const name =
+            typeof device.name === 'string' && device.name.trim().length > 0
+              ? device.name.trim()
+              : device.deviceId
+          return { ...device, name }
+        })
       options.registry.merge(accepted)
       const keepProbeSockets = new Set(accepted.map((d) => `${d.ipAddress}:${probePort}`))
       options.probeSocketRegistry?.closeStale(keepProbeSockets)

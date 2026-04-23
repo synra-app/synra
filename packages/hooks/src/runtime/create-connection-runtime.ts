@@ -8,12 +8,17 @@ import type {
   SynraConnectionFilter,
   SynraConnectionMessage,
   SynraConnectionSendInput,
-  SynraDiscoveryStartOptions
+  SynraDiscoveryStartOptions,
+  SynraLanWireEvent,
+  SynraLanWireFilter,
+  SynraLanWireSendInput
 } from '../types'
 import type { ConnectionRuntimeAdapter } from './adapter'
 import { registerAdapterListeners } from './adapter-listeners'
 import { ConnectedSessionsBook } from './connected-sessions-book'
 import { createDiscoveryModule } from './discovery-module'
+import { registerLanTransportAppLifecycle } from './lan-app-lifecycle'
+import { createLanWireListenersRegistry } from './lan-wire-listeners'
 import { createMessageListenersRegistry } from './message-listeners'
 import { createSessionOperationsModule } from './session-operations-module'
 
@@ -29,11 +34,16 @@ export type ConnectionRuntime = {
   openSession(options: RuntimeOpenSessionInput): Promise<void>
   closeSession(sessionId?: string): Promise<void>
   sendMessage(input: SynraConnectionSendInput): Promise<void>
+  sendLanEvent(input: SynraLanWireSendInput): Promise<void>
   setSessionAppLink(sessionId: string, app: AppLinkState, lastAppError?: string): void
   setAppLinkForDevice(deviceId: string, app: AppLinkState, lastAppError?: string): void
   onMessage(
     handler: (message: SynraConnectionMessage) => void | Promise<void>,
     filter?: SynraConnectionFilter
+  ): () => void
+  onLanWireEvent(
+    handler: (event: SynraLanWireEvent) => void | Promise<void>,
+    filter?: SynraLanWireFilter
   ): () => void
 }
 
@@ -55,9 +65,11 @@ export function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): Conn
   })
   const connectedSessions = ref<RuntimeConnectedSession[]>([])
   let listenersRegistered = false
+  let lanAppLifecycle: { remove: () => Promise<void> } | undefined
 
   const sessionsBook = new ConnectedSessionsBook(connectedSessions)
   const messageRegistry = createMessageListenersRegistry()
+  const lanWireRegistry = createLanWireListenersRegistry()
 
   const discoveryModule = createDiscoveryModule({
     adapter,
@@ -91,8 +103,19 @@ export function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): Conn
       sessionState,
       error,
       sessionsBook,
-      messageRegistry
+      connectedSessions,
+      messageRegistry,
+      lanWireRegistry
     })
+
+    if (isMobileRuntime && lanAppLifecycle === undefined) {
+      lanAppLifecycle = await registerLanTransportAppLifecycle({
+        adapter,
+        scanState,
+        devices,
+        connectedSessions
+      })
+    }
 
     listenersRegistered = true
   }
@@ -117,8 +140,10 @@ export function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): Conn
     openSession: sessionModule.openSession.bind(sessionModule),
     closeSession: sessionModule.closeSession.bind(sessionModule),
     sendMessage: sessionModule.sendMessage.bind(sessionModule),
+    sendLanEvent: sessionModule.sendLanEvent.bind(sessionModule),
     setSessionAppLink,
     setAppLinkForDevice,
-    onMessage: messageRegistry.onMessage.bind(messageRegistry)
+    onMessage: messageRegistry.onMessage.bind(messageRegistry),
+    onLanWireEvent: lanWireRegistry.onLanWireEvent.bind(lanWireRegistry)
   }
 }

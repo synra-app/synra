@@ -1,13 +1,19 @@
+/** DeviceConnection exposes transport + opaque `connectAck` payloads; app-specific pairing keys live in hooks/frontend. */
 import type { PluginListenerHandle } from '@capacitor/core'
 import type { SynraMessageType } from '@synra/protocol'
 
 export type ConnectionTransport = 'tcp'
+
+/** App-layer enum for Synra `connect` payload; native code forwards only. */
+export type SynraLanConnectType = 'fresh' | 'paired'
 
 export type OpenSessionOptions = {
   deviceId: string
   host: string
   port: number
   token?: string
+  /** Copied onto Synra `connect` payload by transport; set by caller (e.g. hooks). */
+  connectType: SynraLanConnectType
   transport?: ConnectionTransport
 }
 
@@ -31,8 +37,8 @@ export type OpenSessionResult = {
   sessionId: string
   state: SessionState
   transport: ConnectionTransport
-  /** From peer helloAck: LAN ids they still treat as paired partners (may be empty). */
-  pairedPeerDeviceIds?: string[]
+  /** Raw `connectAck` JSON payload from the peer (protocol-level; app interprets keys). */
+  connectAckPayload?: Record<string, unknown>
 }
 
 export type CloseSessionOptions = {
@@ -61,6 +67,21 @@ export type SendMessageResult = {
   transport: ConnectionTransport
 }
 
+export type SendLanEventOptions = {
+  sessionId: string
+  eventName: string
+  payload?: unknown
+  eventId?: string
+  schemaVersion?: number
+  transport?: ConnectionTransport
+}
+
+export type SendLanEventResult = {
+  success: true
+  sessionId: string
+  transport: ConnectionTransport
+}
+
 export type GetSessionStateOptions = {
   sessionId?: string
   transport?: ConnectionTransport
@@ -75,6 +96,7 @@ export type HostEvent = {
     | 'transport.session.opened'
     | 'transport.session.closed'
     | 'transport.message.received'
+    | 'transport.lan.event.received'
     | 'transport.message.ack'
     | 'transport.error'
     | 'host.member.online'
@@ -101,14 +123,52 @@ export type SessionOpenedEvent = {
   direction?: 'inbound' | 'outbound'
   host?: string
   port?: number
-  /** Optional display name from hello / helloAck handshake metadata. */
+  /** Optional display name from connect / connectAck. */
   displayName?: string
-  /** From helloAck: LAN device ids this peer still keeps as paired partners (may be empty). */
-  pairedPeerDeviceIds?: string[]
-  /** Handshake intent reported by the remote peer for this session. */
-  handshakeKind?: 'paired' | 'fresh'
-  /** Whether remote says current target is paired on its side. */
-  claimsPeerPaired?: boolean
+  /** Opaque peer `connect` frame payload (transport pass-through). */
+  incomingSynraConnectPayload?: Record<string, unknown>
+  /** Local or peer `connectAck` envelope payload (opaque to the plugin). */
+  connectAckPayload?: Record<string, unknown>
+}
+
+export type SynraProbeTarget = {
+  host: string
+  port?: number
+  /** Merged into Synra `connect` payload for this probe (caller-defined wire keys). */
+  connectWirePayload?: Record<string, unknown>
+}
+
+export type SynraProbeResult = {
+  host: string
+  port: number
+  ok: boolean
+  wireSourceDeviceId?: string
+  displayName?: string
+  connectAckPayload?: Record<string, unknown>
+  error?: string
+}
+
+/**
+ * Returned by Electron main `probeSynraPeers` stub: discovery already validated peers,
+ * so failed probe rows must not prune the scan list.
+ */
+export const SYNRA_PROBE_EMBEDDED_IN_DISCOVERY = 'SYNRA_PROBE_EMBEDDED_IN_DISCOVERY' as const
+
+export type ProbeSynraPeersOptions = {
+  targets: SynraProbeTarget[]
+  timeoutMs?: number
+}
+
+export type ProbeSynraPeersResult = {
+  results: SynraProbeResult[]
+}
+
+export type LanWireEventReceivedEvent = {
+  sessionId: string
+  eventName: string
+  eventPayload: unknown
+  fromDeviceId?: string
+  transport: ConnectionTransport
 }
 
 export type SessionClosedEvent = {
@@ -144,8 +204,10 @@ export interface DeviceConnectionPlugin {
   openSession(options: OpenSessionOptions): Promise<OpenSessionResult>
   closeSession(options?: CloseSessionOptions): Promise<CloseSessionResult>
   sendMessage(options: SendMessageOptions): Promise<SendMessageResult>
+  sendLanEvent(options: SendLanEventOptions): Promise<SendLanEventResult>
   getSessionState(options?: GetSessionStateOptions): Promise<GetSessionStateResult>
   pullHostEvents(options?: { transport?: ConnectionTransport }): Promise<PullHostEventsResult>
+  probeSynraPeers(options: ProbeSynraPeersOptions): Promise<ProbeSynraPeersResult>
   addListener(
     eventName: 'sessionOpened',
     listenerFunc: (event: SessionOpenedEvent) => void
@@ -165,6 +227,10 @@ export interface DeviceConnectionPlugin {
   addListener(
     eventName: 'transportError',
     listenerFunc: (event: TransportErrorEvent) => void
+  ): Promise<PluginListenerHandle>
+  addListener(
+    eventName: 'lanWireEventReceived',
+    listenerFunc: (event: LanWireEventReceivedEvent) => void
   ): Promise<PluginListenerHandle>
   addListener(
     eventName: 'hostEvent',

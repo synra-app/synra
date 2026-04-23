@@ -1,3 +1,4 @@
+import type { OpenSessionOptions } from '@synra/capacitor-device-connection'
 import type { ConnectionRuntimeAdapter } from '../adapter'
 
 function unsupportedError(): Error {
@@ -11,13 +12,19 @@ export function createUnsupportedMainAdapter(): ConnectionRuntimeAdapter {
     async startDiscovery() {
       throw unsupportedError()
     },
-    async openSession() {
+    async listDiscoveredDevices() {
+      throw unsupportedError()
+    },
+    async openSession(_options: OpenSessionOptions) {
       throw unsupportedError()
     },
     async closeSession() {
       throw unsupportedError()
     },
     async sendMessage() {
+      throw unsupportedError()
+    },
+    async sendLanEvent() {
       throw unsupportedError()
     },
     async getSessionState() {
@@ -42,6 +49,9 @@ export function createUnsupportedMainAdapter(): ConnectionRuntimeAdapter {
       throw unsupportedError()
     },
     async addTransportErrorListener() {
+      throw unsupportedError()
+    },
+    async addLanWireEventReceivedListener() {
       throw unsupportedError()
     }
   }

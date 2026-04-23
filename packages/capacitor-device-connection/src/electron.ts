@@ -7,7 +7,11 @@ import type {
   HostEvent,
   OpenSessionOptions,
   OpenSessionResult,
+  ProbeSynraPeersOptions,
+  ProbeSynraPeersResult,
   PullHostEventsResult,
+  SendLanEventOptions,
+  SendLanEventResult,
   SendMessageOptions,
   SendMessageResult,
   DeviceConnectionPlugin
@@ -30,6 +34,7 @@ type ConnectionBridgeMethods = {
   'connection.openSession': { payload: OpenSessionOptions; result: OpenSessionResult }
   'connection.closeSession': { payload: CloseSessionOptions; result: CloseSessionResult }
   'connection.sendMessage': { payload: SendMessageOptions; result: SendMessageResult }
+  'connection.sendLanEvent': { payload: SendLanEventOptions; result: SendLanEventResult }
   'connection.getSessionState': { payload: GetSessionStateOptions; result: GetSessionStateResult }
   'connection.pullHostEvents': { payload: Record<string, never>; result: PullHostEventsResult }
 }
@@ -112,13 +117,15 @@ export class DeviceConnectionElectron extends WebPlugin implements DeviceConnect
                 host?: string
                 port?: number
                 displayName?: string
+                incomingSynraConnectPayload?: Record<string, unknown>
+                connectAckPayload?: Record<string, unknown>
               })
             : undefined
         const displayName =
           typeof payload?.displayName === 'string' && payload.displayName.trim().length > 0
             ? payload.displayName.trim()
             : undefined
-        this.notifyListeners('sessionOpened', {
+        const opened: Record<string, unknown> = {
           sessionId: normalized.sessionId,
           transport: normalized.transport,
           deviceId: payload?.deviceId,
@@ -126,6 +133,35 @@ export class DeviceConnectionElectron extends WebPlugin implements DeviceConnect
           host: payload?.host,
           port: payload?.port,
           displayName
+        }
+        if (
+          payload?.incomingSynraConnectPayload &&
+          typeof payload.incomingSynraConnectPayload === 'object'
+        ) {
+          opened.incomingSynraConnectPayload = payload.incomingSynraConnectPayload
+        }
+        if (payload?.connectAckPayload && typeof payload.connectAckPayload === 'object') {
+          opened.connectAckPayload = payload.connectAckPayload
+        }
+        this.notifyListeners('sessionOpened', opened)
+      } else if (
+        normalized.type === 'transport.lan.event.received' &&
+        normalized.sessionId &&
+        normalized.payload &&
+        typeof normalized.payload === 'object'
+      ) {
+        const pl = normalized.payload as {
+          eventName?: unknown
+          eventPayload?: unknown
+          fromDeviceId?: unknown
+        }
+        const eventName = typeof pl.eventName === 'string' ? pl.eventName : ''
+        this.notifyListeners('lanWireEventReceived', {
+          sessionId: normalized.sessionId,
+          eventName,
+          eventPayload: pl.eventPayload,
+          fromDeviceId: typeof pl.fromDeviceId === 'string' ? pl.fromDeviceId : undefined,
+          transport: normalized.transport
         })
       } else if (normalized.type === 'transport.session.closed') {
         this.notifyListeners('sessionClosed', {
@@ -193,6 +229,11 @@ export class DeviceConnectionElectron extends WebPlugin implements DeviceConnect
     return this.invokeBridge('connection.sendMessage', options)
   }
 
+  async sendLanEvent(options: SendLanEventOptions): Promise<SendLanEventResult> {
+    this.ensureHostEventSubscription()
+    return this.invokeBridge('connection.sendLanEvent', options)
+  }
+
   async getSessionState(options: GetSessionStateOptions = {}): Promise<GetSessionStateResult> {
     this.ensureHostEventSubscription()
     return this.invokeBridge('connection.getSessionState', options)
@@ -201,5 +242,18 @@ export class DeviceConnectionElectron extends WebPlugin implements DeviceConnect
   async pullHostEvents(): Promise<PullHostEventsResult> {
     this.ensureHostEventSubscription()
     return this.invokeBridge('connection.pullHostEvents', {})
+  }
+
+  async probeSynraPeers(options: ProbeSynraPeersOptions): Promise<ProbeSynraPeersResult> {
+    this.ensureHostEventSubscription()
+    const portDefault = 32100
+    return {
+      results: options.targets.map((target) => ({
+        host: target.host,
+        port: typeof target.port === 'number' && target.port > 0 ? target.port : portDefault,
+        ok: false,
+        error: 'SYNRA_PROBE_USE_DISCOVERY_ON_DESKTOP'
+      }))
+    }
   }
 }

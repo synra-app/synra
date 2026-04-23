@@ -9,15 +9,15 @@ import { syncPairedDiscoveryExclusionFromRecords } from '../lib/discovery-paired
 import {
   listPairedDeviceRecords,
   patchPairedDeviceDisplayName,
+  removePairedDeviceRecord,
   repairPairedDevicesPersistenceIfNeeded
 } from '../lib/paired-devices-storage'
 import { registerPairedAutoConnect } from '../composables/use-paired-auto-connect'
-import { applyHandshakePairedSync } from '../lib/apply-handshake-paired-sync'
 import { registerPairingProtocol } from './register-pairing-protocol'
 import { useLanDiscoveryStore } from '../stores/lan-discovery'
 import { usePairingStore } from '../stores/pairing'
 
-/** Cold start: retry once if no connectable Synra peer (TCP helloAck succeeded on native). */
+/** Cold start: retry once if no connectable Synra peer (TCP connectAck succeeded on native). */
 function initialDiscoveryLooksIncomplete(peers: ReadonlyArray<{ connectable?: boolean }>): boolean {
   if (peers.length === 0) {
     return true
@@ -67,22 +67,34 @@ export function setupSynraRuntime(pinia: Pinia): void {
       const localDiscoveryDeviceId = await hashDeviceIdFromInstanceUuid(deviceInstanceUuid)
       configureHooksRuntime({
         localDiscoveryDeviceId,
-        onHandshakePairedPeerIds: (peerDeviceId, theirPairedPeerDeviceIds, meta) => {
-          void applyHandshakePairedSync({
-            pinia,
-            peerDeviceId,
-            theirPairedPeerDeviceIds,
-            openedSessionId: meta?.sessionId,
-            remoteHandshakeKind: meta?.handshakeKind,
-            remoteClaimsPeerPaired: meta?.claimsPeerPaired
-          })
-        },
+        enableDiscoveryPairHandshakeDebug: import.meta.env.DEV,
         onRemoteDeviceProfile: (deviceId, displayName) => {
           void patchPairedDeviceDisplayName(deviceId, displayName).then((ok) => {
             if (ok) {
               usePairingStore(pinia).bumpPairedList()
             }
           })
+        },
+        resolveSynraConnectType: async (deviceId) => {
+          const items = await listPairedDeviceRecords()
+          return items.some((row) => row.deviceId === deviceId) ? 'paired' : 'fresh'
+        },
+        repairStalePairingAfterInboundFreshConnect: async (event) => {
+          const wire = event.incomingSynraConnectPayload
+          const ct =
+            wire && typeof wire.connectType === 'string'
+              ? wire.connectType.trim().toLowerCase()
+              : ''
+          if (ct !== 'fresh' || !event.deviceId) {
+            return
+          }
+          const items = await listPairedDeviceRecords()
+          if (!items.some((row) => row.deviceId === event.deviceId)) {
+            return
+          }
+          await removePairedDeviceRecord(event.deviceId)
+          syncPairedDiscoveryExclusionFromRecords(await listPairedDeviceRecords())
+          usePairingStore(pinia).bumpPairedList()
         }
       })
       await ensureRuntimeListeners()

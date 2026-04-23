@@ -2,7 +2,6 @@
 import { storeToRefs } from 'pinia'
 import { ref } from 'vue'
 import { setPairAwaitingAccept } from '@synra/hooks'
-import { PAIR_MESSAGE_ACCEPT, PAIR_MESSAGE_REJECT } from '../../lib/pair-protocol'
 import { upsertPairedDeviceRecord } from '../../lib/paired-devices-storage'
 import { useLanDiscoveryStore } from '../../stores/lan-discovery'
 import { usePairingStore } from '../../stores/pairing'
@@ -49,10 +48,10 @@ async function onAccept(): Promise<void> {
           }
         : recordBase
     )
-    await lanStore.sendConnectionMessage({
+    await lanStore.sendLanEvent({
       sessionId: current.sessionId,
-      messageType: PAIR_MESSAGE_ACCEPT,
-      payload: { requestId: current.requestId }
+      eventName: 'pairing.response',
+      payload: { requestId: current.requestId, accepted: true }
     })
     setPairAwaitingAccept(current.initiator.deviceId, false)
     pairingStore.bumpPairedList()
@@ -69,10 +68,10 @@ async function onReject(): Promise<void> {
   }
   busy.value = true
   try {
-    await lanStore.sendConnectionMessage({
+    await lanStore.sendLanEvent({
       sessionId: current.sessionId,
-      messageType: PAIR_MESSAGE_REJECT,
-      payload: { requestId: current.requestId, reason: 'Declined' }
+      eventName: 'pairing.response',
+      payload: { requestId: current.requestId, accepted: false, reason: 'Declined' }
     })
   } catch {
     // Session may already be half-closed; still tear down UI and TCP below.

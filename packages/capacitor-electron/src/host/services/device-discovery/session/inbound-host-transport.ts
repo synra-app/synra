@@ -5,6 +5,7 @@ import { networkInterfaces } from 'node:os'
 import { Bonjour, type Service as BonjourService } from 'bonjour-service'
 import type {
   DeviceDiscoveryHostEvent,
+  DeviceSessionSendLanEventOptions,
   DeviceSessionSnapshot,
   DeviceSessionSendMessageOptions
 } from '../../../../shared/protocol/types'
@@ -39,7 +40,6 @@ type InboundHostTransportOptions = {
   eventBus: HostEventBus
   resolveLocalDeviceUuid: () => string
   port?: number
-  readPairedPeerDeviceIds?: () => string[]
 }
 
 const UDP_OFFLINE_ANNOUNCEMENT_TYPE = 'offline'
@@ -49,6 +49,7 @@ export interface InboundHostTransport {
   stop(): Promise<void>
   closeSession(sessionId?: string): Promise<void>
   sendMessage(options: DeviceSessionSendMessageOptions): Promise<boolean>
+  sendLanEvent(options: DeviceSessionSendLanEventOptions): Promise<boolean>
   getSessionState(sessionId?: string): DeviceSessionSnapshot | undefined
   heartbeatTick(): Promise<void>
 }
@@ -172,15 +173,15 @@ export function createInboundHostTransport(
   }
 
   const handleFrame = async (socket: Socket, frame: LanFrame): Promise<void> => {
-    if (frame.type === 'hello') {
+    if (frame.type === 'connect') {
       const payload =
         frame.payload && typeof frame.payload === 'object'
           ? (frame.payload as Record<string, unknown>)
           : {}
       const remoteDeviceId =
-        typeof payload.sourceDeviceId === 'string' && payload.sourceDeviceId.length > 0
-          ? payload.sourceDeviceId
-          : (frame.sessionId ?? randomUUID())
+        typeof payload.sourceDeviceId === 'string' && payload.sourceDeviceId.trim().length > 0
+          ? payload.sourceDeviceId.trim()
+          : ''
       const sessionId = frame.sessionId ?? randomUUID()
       const peerHost = peerAddressFromSocket(socket.remoteAddress)
       const remote = `${peerHost ?? 'unknown'}:${String(socket.remotePort ?? 0)}`
@@ -188,24 +189,20 @@ export function createInboundHostTransport(
         typeof payload.displayName === 'string' && payload.displayName.length > 0
           ? payload.displayName
           : undefined
-      const handshakeKind =
-        payload.handshakeKind === 'paired' || payload.handshakeKind === 'fresh'
-          ? payload.handshakeKind
-          : undefined
-      const claimsPeerPaired =
-        typeof payload.claimsPeerPaired === 'boolean'
-          ? payload.claimsPeerPaired
-          : handshakeKind === 'paired'
-            ? true
-            : handshakeKind === 'fresh'
-              ? false
-              : undefined
-      const inboundPairedRaw = payload.pairedPeerDeviceIds
-      const remotePairedPeerDeviceIds = Array.isArray(inboundPairedRaw)
-        ? inboundPairedRaw
-            .filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
-            .map((id) => id.trim())
-        : []
+      const incomingSynraConnectPayload: Record<string, unknown> = { ...payload }
+      const appOk = frame.appId === LAN_APP_ID
+      if (!appOk || !remoteDeviceId) {
+        await writeFrame(socket, {
+          version: LAN_PROTOCOL_VERSION,
+          type: 'error',
+          sessionId,
+          timestamp: Date.now(),
+          appId: LAN_APP_ID,
+          error: 'CONNECT_INVALID'
+        }).catch(() => undefined)
+        socket.end()
+        return
+      }
       options.eventBus.publish({
         type: 'host.member.online',
         remote,
@@ -219,20 +216,18 @@ export function createInboundHostTransport(
         },
         transport: 'tcp'
       })
-      const pairedPeerDeviceIds = options.readPairedPeerDeviceIds?.() ?? []
       await writeFrame(socket, {
         version: LAN_PROTOCOL_VERSION,
-        type: 'helloAck',
+        type: 'connectAck',
         sessionId,
         timestamp: Date.now(),
         appId: LAN_APP_ID,
         protocolVersion: LAN_PROTOCOL_VERSION,
-        capabilities: ['message'],
+        capabilities: ['message', 'event'],
         payload: {
           sourceDeviceId: options.resolveLocalDeviceUuid(),
           sourceHostIp: normalizeRemoteIp(socket.localAddress),
-          displayName: localDisplayName(),
-          pairedPeerDeviceIds
+          displayName: localDisplayName()
         }
       })
       sessions.set(sessionId, {
@@ -252,9 +247,7 @@ export function createInboundHostTransport(
           direction: 'inbound',
           deviceId: hashDeviceId(remoteDeviceId),
           displayName: peerDisplayName,
-          pairedPeerDeviceIds: remotePairedPeerDeviceIds,
-          ...(handshakeKind ? { handshakeKind } : {}),
-          ...(typeof claimsPeerPaired === 'boolean' ? { claimsPeerPaired } : {}),
+          incomingSynraConnectPayload,
           ...(peerHost
             ? {
                 host: peerHost,
@@ -306,6 +299,25 @@ export function createInboundHostTransport(
         messageId: frame.messageId,
         messageType,
         payload: frame.payload,
+        transport: 'tcp'
+      })
+      return
+    }
+    if (frame.type === 'event') {
+      const pl =
+        frame.payload && typeof frame.payload === 'object'
+          ? (frame.payload as Record<string, unknown>)
+          : {}
+      const eventName = typeof pl.eventName === 'string' ? pl.eventName : ''
+      options.eventBus.publish({
+        type: 'transport.lan.event.received',
+        remote: session.remote,
+        sessionId: session.sessionId,
+        payload: {
+          eventName,
+          eventPayload: pl.payload,
+          fromDeviceId: session.remoteDeviceId
+        },
         transport: 'tcp'
       })
       return
@@ -526,6 +538,30 @@ export function createInboundHostTransport(
           messageType: sendOptions.messageType,
           payload: sendOptions.payload
         }
+      })
+      return true
+    },
+    async sendLanEvent(sendOptions) {
+      const session = sessions.get(sendOptions.sessionId)
+      if (!session || session.socket.destroyed) {
+        return false
+      }
+      const envelope: Record<string, unknown> = {
+        eventName: sendOptions.eventName,
+        payload: sendOptions.payload
+      }
+      if (sendOptions.eventId !== undefined) {
+        envelope.eventId = sendOptions.eventId
+      }
+      if (sendOptions.schemaVersion !== undefined) {
+        envelope.schemaVersion = sendOptions.schemaVersion
+      }
+      await writeFrame(session.socket, {
+        version: LAN_PROTOCOL_VERSION,
+        type: 'event',
+        sessionId: sendOptions.sessionId,
+        timestamp: Date.now(),
+        payload: envelope
       })
       return true
     },

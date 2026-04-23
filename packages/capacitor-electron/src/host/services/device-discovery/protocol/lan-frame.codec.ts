@@ -8,8 +8,9 @@ export const MAX_FRAME_BYTES = 256 * 1024
 export type LanFrame = {
   version: string
   type:
-    | 'hello'
-    | 'helloAck'
+    | 'connect'
+    | 'connectAck'
+    | 'event'
     | 'message'
     | 'ack'
     | 'close'

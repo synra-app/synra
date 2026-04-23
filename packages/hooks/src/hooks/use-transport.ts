@@ -4,13 +4,11 @@ import { computed } from 'vue'
 import type {
   SynraConnectionFilter,
   SynraConnectionMessage,
-  RuntimeOpenSessionInput
+  RuntimeOpenSessionInput,
+  SynraLanWireSendInput
 } from '../types'
 import { getConnectionRuntime } from '../runtime/core'
-import {
-  DEVICE_PROFILE_UPDATED_MESSAGE_TYPE,
-  type DeviceProfileUpdatedPayload
-} from '../runtime/device-profile'
+import { type DeviceProfileUpdatedPayload } from '../runtime/device-profile'
 import { normalizeHost } from '../runtime/host-normalization'
 
 type SynraTransportOutgoing = {
@@ -258,10 +256,10 @@ export function useTransport() {
     await Promise.all(
       sessions.map((s) =>
         runtime
-          .sendMessage({
+          .sendLanEvent({
             sessionId: s.sessionId as string,
-            messageType: DEVICE_PROFILE_UPDATED_MESSAGE_TYPE,
-            payload: profile
+            eventName: 'device.displayName.changed',
+            payload: { deviceId: profile.deviceId, displayName: profile.displayName }
           })
           .catch(() => undefined)
       )
@@ -300,6 +298,10 @@ export function useTransport() {
       payload: input.payload,
       messageId: input.messageId
     })
+  }
+
+  async function sendLanEvent(input: SynraLanWireSendInput): Promise<void> {
+    await runtime.sendLanEvent(input)
   }
 
   function onSynraMessage(
@@ -354,6 +356,7 @@ export function useTransport() {
     broadcastDeviceProfileToOpenSessions,
     broadcast,
     sendConnectionMessage,
+    sendLanEvent,
     onMessage,
     onSynraMessage
   }

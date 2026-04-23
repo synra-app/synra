@@ -36,62 +36,6 @@ final class DeviceRecord {
         this.lastSeenAt = lastSeenAt;
     }
 
-    DeviceRecord merge(DeviceRecord incoming) {
-        return new DeviceRecord(
-            this.deviceId,
-            incoming.name,
-            incoming.ipAddress,
-            incoming.source,
-            incoming.connectable,
-            incoming.connectCheckAt,
-            incoming.connectCheckError,
-            this.discoveredAt,
-            System.currentTimeMillis()
-        );
-    }
-
-    DeviceRecord withConnectable(boolean connectable, String connectCheckError) {
-        return new DeviceRecord(
-            this.deviceId,
-            this.name,
-            this.ipAddress,
-            this.source,
-            connectable,
-            System.currentTimeMillis(),
-            connectCheckError,
-            this.discoveredAt,
-            System.currentTimeMillis()
-        );
-    }
-
-    DeviceRecord withDeviceId(String newDeviceId, String newName) {
-        return new DeviceRecord(
-            newDeviceId,
-            newName,
-            this.ipAddress,
-            this.source,
-            this.connectable,
-            this.connectCheckAt,
-            this.connectCheckError,
-            this.discoveredAt,
-            this.lastSeenAt
-        );
-    }
-
-    DeviceRecord withName(String newName) {
-        return new DeviceRecord(
-            this.deviceId,
-            newName,
-            this.ipAddress,
-            this.source,
-            this.connectable,
-            this.connectCheckAt,
-            this.connectCheckError,
-            this.discoveredAt,
-            this.lastSeenAt
-        );
-    }
-
     JSObject toJSObject() {
         JSObject object = new JSObject();
         object.put("deviceId", this.deviceId);

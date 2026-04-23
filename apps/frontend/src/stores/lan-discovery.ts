@@ -19,6 +19,7 @@ export const useLanDiscoveryStore = defineStore('lan-discovery', () => {
     broadcastDeviceProfileToOpenSessions: transport.broadcastDeviceProfileToOpenSessions,
     disconnectDevice: transport.disconnectDevice,
     sendConnectionMessage: transport.sendConnectionMessage,
+    sendLanEvent: transport.sendLanEvent,
     onSynraMessage: transport.onSynraMessage
   }
 })

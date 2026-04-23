@@ -1,7 +1,7 @@
 import Foundation
 import Network
 
-final class InboundConnectionContext {
+final class SynraInboundConnectionContext {
     let connection: NWConnection
     let remote: String
     var sessionId: String?

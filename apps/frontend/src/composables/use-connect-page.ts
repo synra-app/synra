@@ -3,6 +3,7 @@ import {
   getPairAwaitingAcceptDeviceIds,
   getPairedLinkPhases,
   mergePairedAndDiscoveredDevices,
+  pairedDevicesStorageEpoch,
   setPairAwaitingAccept,
   type DisplayDevice
 } from '@synra/hooks'
@@ -11,7 +12,6 @@ import { computed, onMounted, ref, watch } from 'vue'
 import type { DiscoveredDevice } from '@synra/capacitor-lan-discovery'
 import { buildLocalPairInitiatorProfile } from '../lib/pair-profile'
 import { resolveSelfOnLanForPairing } from '../lib/resolve-self-on-lan-for-pairing'
-import { PAIR_MESSAGE_REQUEST, PAIR_MESSAGE_UNPAIR_REQUIRED } from '../lib/pair-protocol'
 import { registerPairingOutbound } from '../lib/pairing-outbound-pending'
 import { syncPairedDiscoveryExclusionFromRecords } from '../lib/discovery-paired-exclusion'
 import {
@@ -148,9 +148,9 @@ export function useConnectPage() {
       registerPairingOutbound(requestId, device)
       const selfOnLan = await resolveSelfOnLanForPairing()
       const initiator = await buildLocalPairInitiatorProfile(selfOnLan)
-      await store.sendConnectionMessage({
+      await store.sendLanEvent({
         sessionId,
-        messageType: PAIR_MESSAGE_REQUEST,
+        eventName: 'pairing.request',
         payload: { requestId, initiator }
       })
     } catch {
@@ -178,9 +178,9 @@ export function useConnectPage() {
       )
       if (openedSession?.sessionId) {
         await store
-          .sendConnectionMessage({
+          .sendLanEvent({
             sessionId: openedSession.sessionId,
-            messageType: PAIR_MESSAGE_UNPAIR_REQUIRED,
+            eventName: 'pairing.unpairRequired',
             payload: {
               mode: 'stale',
               reason: 'Peer manually removed this pairing.'
@@ -203,6 +203,10 @@ export function useConnectPage() {
   })
 
   watch(pairedListEpoch, () => {
+    void refreshPairedRecords()
+  })
+
+  watch(pairedDevicesStorageEpoch, () => {
     void refreshPairedRecords()
   })
 

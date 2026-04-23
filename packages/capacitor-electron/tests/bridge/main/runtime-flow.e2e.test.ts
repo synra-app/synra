@@ -74,6 +74,11 @@ describe('bridge/main runtime e2e flow', () => {
           messageId: 'msg-e2e-1',
           sessionId: 'session-e2e-1'
         })),
+        sendLanEvent: vi.fn(async () => ({
+          success: true as const,
+          sessionId: 'session-e2e-1',
+          transport: 'tcp' as const
+        })),
         getSessionState: vi.fn(async () => ({
           sessionId: 'session-e2e-1',
           state: 'open' as const
@@ -95,6 +100,11 @@ describe('bridge/main runtime e2e flow', () => {
         sendMessage: vi.fn(async () => ({
           success: true as const,
           messageId: 'msg-e2e-1',
+          sessionId: 'session-e2e-1',
+          transport: 'tcp' as const
+        })),
+        sendLanEvent: vi.fn(async () => ({
+          success: true as const,
           sessionId: 'session-e2e-1',
           transport: 'tcp' as const
         })),
@@ -206,6 +216,11 @@ describe('bridge/main runtime e2e flow', () => {
           messageId: 'msg-e2e-2',
           sessionId: 'session-e2e-2'
         })),
+        sendLanEvent: vi.fn(async () => ({
+          success: true as const,
+          sessionId: 'session-e2e-2',
+          transport: 'tcp' as const
+        })),
         getSessionState: vi.fn(async () => ({
           sessionId: 'session-e2e-2',
           state: 'open' as const
@@ -227,6 +242,11 @@ describe('bridge/main runtime e2e flow', () => {
         sendMessage: vi.fn(async () => ({
           success: true as const,
           messageId: 'msg-e2e-2',
+          sessionId: 'session-e2e-2',
+          transport: 'tcp' as const
+        })),
+        sendLanEvent: vi.fn(async () => ({
+          success: true as const,
           sessionId: 'session-e2e-2',
           transport: 'tcp' as const
         })),

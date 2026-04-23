@@ -57,26 +57,6 @@ extension LanDiscoveryPlugin {
         defaults.set(str, forKey: deviceBasicInfoDefaultsKey)
     }
 
-    func readPairedPeerDeviceIdsFromDefaults() -> [String] {
-        let defaults = UserDefaults.standard
-        guard let raw = defaults.string(forKey: pairedDevicesDefaultsKey), !raw.isEmpty,
-              let data = raw.data(using: .utf8),
-              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let items = obj["items"] as? [Any]
-        else {
-            return []
-        }
-        return items.compactMap { entry -> String? in
-            guard let row = entry as? [String: Any],
-                  let id = row["deviceId"] as? String
-            else {
-                return nil
-            }
-            let trimmed = id.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.isEmpty ? nil : trimmed
-        }
-    }
-
     func localDeviceUuid() -> String {
         let defaults = UserDefaults.standard
         if let existing = defaults.string(forKey: unifiedDeviceUuidDefaultsKey), !existing.isEmpty {

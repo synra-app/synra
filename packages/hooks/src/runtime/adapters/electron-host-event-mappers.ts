@@ -1,6 +1,7 @@
-import type { SendMessageOptions } from '@synra/capacitor-device-connection'
 import type {
   HostEvent,
+  LanWireEventReceivedEvent,
+  SendMessageOptions,
   SessionClosedEvent,
   SessionOpenedEvent,
   TransportErrorEvent
@@ -48,16 +49,10 @@ export function mapSessionOpenedHostEvent(event: HostEvent): SessionOpenedEvent 
       ? payload.direction
       : undefined
   const displayName = typeof payload.displayName === 'string' ? payload.displayName : undefined
-  const pairedRaw = payload.pairedPeerDeviceIds
-  const pairedPeerDeviceIds = Array.isArray(pairedRaw)
-    ? pairedRaw.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
-    : undefined
-  const handshakeKind =
-    payload.handshakeKind === 'paired' || payload.handshakeKind === 'fresh'
-      ? payload.handshakeKind
+  const incomingSynraConnectPayload =
+    payload.incomingSynraConnectPayload && typeof payload.incomingSynraConnectPayload === 'object'
+      ? (payload.incomingSynraConnectPayload as Record<string, unknown>)
       : undefined
-  const claimsPeerPaired =
-    typeof payload.claimsPeerPaired === 'boolean' ? payload.claimsPeerPaired : undefined
   const fallbackRemote = typeof event.remote === 'string' ? event.remote : ''
   const [hostPart, portText] = fallbackRemote.split(':')
   const parsedRemotePort = Number.parseInt(portText ?? '', 10)
@@ -73,9 +68,27 @@ export function mapSessionOpenedHostEvent(event: HostEvent): SessionOpenedEvent 
         ? parsedRemotePort
         : undefined,
     displayName: displayName && displayName.length > 0 ? displayName : undefined,
-    pairedPeerDeviceIds,
-    handshakeKind,
-    claimsPeerPaired,
+    incomingSynraConnectPayload,
+    transport: event.transport ?? 'tcp'
+  }
+}
+
+export function mapLanWireEventReceivedHostEvent(
+  event: HostEvent
+): LanWireEventReceivedEvent | undefined {
+  if (event.type !== 'transport.lan.event.received' || !event.sessionId) {
+    return undefined
+  }
+  const pl =
+    event.payload && typeof event.payload === 'object'
+      ? (event.payload as Record<string, unknown>)
+      : {}
+  const eventName = typeof pl.eventName === 'string' ? pl.eventName : ''
+  return {
+    sessionId: event.sessionId,
+    eventName,
+    eventPayload: pl.payload,
+    fromDeviceId: typeof pl.fromDeviceId === 'string' ? pl.fromDeviceId : undefined,
     transport: event.transport ?? 'tcp'
   }
 }

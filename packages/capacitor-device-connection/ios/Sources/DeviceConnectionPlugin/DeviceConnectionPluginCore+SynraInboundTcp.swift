@@ -1,26 +1,18 @@
 import Foundation
 import Network
 
-extension LanDiscoveryPlugin {
-    static func logLanDiscovery(_ message: String) {
-        #if DEBUG
-            print("[lan-discovery] \(message)")
-        #endif
-    }
-
-    func startTcpServer() {
+extension DeviceConnectionPluginCore {
+    func startSynraTcpServerIfNeeded() {
         if tcpListener != nil {
             return
         }
-        guard let port = NWEndpoint.Port(rawValue: defaultTcpPort) else {
+        guard let port = NWEndpoint.Port(rawValue: synraDefaultTcpPort) else {
             return
         }
         do {
             let listener = try NWListener(using: .tcp, on: port)
             listener.stateUpdateHandler = { [weak self] state in
                 switch state {
-                case .ready:
-                    break
                 case .failed(let error):
                     self?.onTransportError?([
                         "code": "TRANSPORT_IO_ERROR",
@@ -32,26 +24,26 @@ extension LanDiscoveryPlugin {
                 }
             }
             listener.newConnectionHandler = { [weak self] connection in
-                self?.acceptInboundConnection(connection)
+                self?.acceptSynraInboundConnection(connection)
             }
             listener.start(queue: tcpServerQueue)
             tcpListener = listener
         } catch {}
     }
 
-    func stopTcpServer() {
+    func stopSynraTcpServer() {
         tcpListener?.cancel()
         tcpListener = nil
         let connectionIds = Array(inboundConnections.keys)
         for connectionId in connectionIds {
-            closeInboundConnection(connectionId: connectionId, reason: "server-stopped", emitSessionClosed: true)
+            closeSynraInboundConnection(connectionId: connectionId, reason: "server-stopped", emitSessionClosed: true)
         }
     }
 
-    func acceptInboundConnection(_ connection: NWConnection) {
+    private func acceptSynraInboundConnection(_ connection: NWConnection) {
         let connectionId = UUID().uuidString
-        let remote = describeEndpoint(connection.endpoint)
-        inboundConnections[connectionId] = InboundConnectionContext(connection: connection, remote: remote)
+        let remote = describeSynraEndpoint(connection.endpoint)
+        inboundConnections[connectionId] = SynraInboundConnectionContext(connection: connection, remote: remote)
 
         connection.stateUpdateHandler = { [weak self] state in
             guard let self else { return }
@@ -62,13 +54,13 @@ extension LanDiscoveryPlugin {
                     "message": error.localizedDescription,
                     "transport": "tcp",
                 ])
-                self.closeInboundConnection(
+                self.closeSynraInboundConnection(
                     connectionId: connectionId,
                     reason: "socket-failed",
                     emitSessionClosed: true
                 )
             case .cancelled:
-                self.closeInboundConnection(
+                self.closeSynraInboundConnection(
                     connectionId: connectionId,
                     reason: "socket-cancelled",
                     emitSessionClosed: true
@@ -79,10 +71,10 @@ extension LanDiscoveryPlugin {
         }
 
         connection.start(queue: tcpServerQueue)
-        startInboundReceiveLoop(connectionId: connectionId)
+        startSynraInboundReceiveLoop(connectionId: connectionId)
     }
 
-    func startInboundReceiveLoop(connectionId: String) {
+    private func startSynraInboundReceiveLoop(connectionId: String) {
         guard let context = inboundConnections[connectionId] else {
             return
         }
@@ -95,7 +87,7 @@ extension LanDiscoveryPlugin {
                 return
             }
             guard let frame else {
-                self.closeInboundConnection(
+                self.closeSynraInboundConnection(
                     connectionId: connectionId,
                     reason: "peer-closed",
                     emitSessionClosed: true
@@ -105,129 +97,78 @@ extension LanDiscoveryPlugin {
 
             let type = frame["type"] as? String ?? ""
             let sessionId = current.sessionId ?? frame["sessionId"] as? String ?? UUID().uuidString
-            if type == "hello" {
-                let helloPayload = frame["payload"] as? [String: Any]
-                let sourceDeviceId = helloPayload?["sourceDeviceId"] as? String
-                let isProbe = (helloPayload?["probe"] as? Bool) ?? false
-                let peerDisplayName = (helloPayload?["displayName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-                let handshakeKind = helloPayload?["handshakeKind"] as? String
-                let claimsPeerPaired = helloPayload?["claimsPeerPaired"] as? Bool
-                let remotePairedPeerDeviceIds =
-                    (helloPayload?["pairedPeerDeviceIds"] as? [Any] ?? [])
-                        .compactMap { item -> String? in
-                            guard let text = item as? String else {
-                                return nil
-                            }
-                            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                            return trimmed.isEmpty ? nil : trimmed
-                        }
-                guard let sourceDeviceId, !sourceDeviceId.isEmpty else {
+            if type == "connect" {
+                let connectPayload = frame["payload"] as? [String: Any]
+                let sourceDeviceId = connectPayload?["sourceDeviceId"] as? String
+                let peerDisplayName = (connectPayload?["displayName"] as? String)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                let appOk = frame["appId"] as? String == self.appId
+                guard appOk, let sourceDeviceId, !sourceDeviceId.isEmpty else {
                     self.sendFrame(
                         self.frame(
                             type: "error",
                             sessionId: sessionId,
                             messageId: nil,
-                            payload: "SOURCE_DEVICE_ID_REQUIRED"
+                            payload: "CONNECT_INVALID"
                         ),
                         through: current.connection
                     )
-                    self.closeInboundConnection(
+                    self.closeSynraInboundConnection(
                         connectionId: connectionId,
-                        reason: "missing-device-id",
+                        reason: "connect-invalid",
                         emitSessionClosed: false
                     )
                     return
                 }
                 current.sessionId = sessionId
-                let sourceHostIpRaw =
-                    (helloPayload?["sourceHostIp"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-                let (observedPeerIp, _) = self.describeHostPort(current.connection.endpoint)
-                let resolvedPeerIpv4 = self.normalizeInboundPeerHost(
-                    sourceHostIp: sourceHostIpRaw,
-                    observedHost: observedPeerIp
-                )
-                if let hostForPeerList = resolvedPeerIpv4 ?? observedPeerIp,
-                   self.isIpv4String(hostForPeerList)
-                {
-                    let canonicalPeerId = self.canonicalLanDeviceId(fromWireSourceDeviceId: sourceDeviceId)
-                    let peerListName: String
-                    if let peerDisplayName, !peerDisplayName.isEmpty {
-                        peerListName = peerDisplayName
-                    } else {
-                        peerListName = self.fallbackPeerDisplayName(forCanonicalDeviceId: canonicalPeerId)
-                    }
-                    let trimmedHost = hostForPeerList.trimmingCharacters(in: .whitespacesAndNewlines)
-                    Self.logLanDiscovery(
-                        "inbound hello probe=\(isProbe) peer=\(canonicalPeerId) host=\(trimmedHost) name=\(peerListName)"
-                    )
-                    let checkedAt = self.now()
-                    let record = DeviceRecord(
-                        deviceId: canonicalPeerId,
-                        name: peerListName,
-                        ipAddress: trimmedHost,
-                        source: "session",
-                        connectable: true,
-                        connectCheckAt: checkedAt,
-                        connectCheckError: nil,
-                        discoveredAt: checkedAt,
-                        lastSeenAt: checkedAt
-                    )
-                    self.devices[canonicalPeerId] = record
-                    var peerPayload = record.toDictionary()
-                    peerPayload["port"] = Int(self.defaultTcpPort)
-                    self.onDiscoveredPeerDevice?(["device": peerPayload])
-                } else {
-                    Self.logLanDiscovery(
-                        "inbound hello probe=\(isProbe) unresolvedIPv4 observed=\(observedPeerIp ?? "nil") sourceHostIp=\(sourceHostIpRaw ?? "nil")"
-                    )
-                }
-                var helloAckPayload: [String: Any] = [
+                var connectAckPayload: [String: Any] = [
                     "sourceDeviceId": self.localDeviceUuid(),
                     "displayName": self.localSynraDisplayName(),
-                    "pairedPeerDeviceIds": self.readPairedPeerDeviceIdsFromDefaults(),
                 ]
                 if let selfIp = self.primarySourceHostIpv4(), !selfIp.isEmpty {
-                    helloAckPayload["sourceHostIp"] = selfIp
+                    connectAckPayload["sourceHostIp"] = selfIp
                 }
-                if let observedPeerIp, !observedPeerIp.isEmpty {
-                    helloAckPayload["observedPeerIp"] = observedPeerIp
+                let (observedPeerIpRaw, _) = self.describeSynraHostPort(current.connection.endpoint)
+                if let observedPeerIp = observedPeerIpRaw, !observedPeerIp.isEmpty {
+                    connectAckPayload["observedPeerIp"] = observedPeerIp
                 }
                 self.sendFrame(
                     self.frame(
-                        type: "helloAck",
+                        type: "connectAck",
                         sessionId: sessionId,
                         messageId: nil,
-                        payload: helloAckPayload
+                        payload: connectAckPayload
                     ),
                     through: current.connection
                 )
-                let (hostFallback, _) = self.describeHostPort(current.connection.endpoint)
+                let (hostFallback, _) = self.describeSynraHostPort(current.connection.endpoint)
+                let sourceHostIpRaw =
+                    (connectPayload?["sourceHostIp"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let resolvedPeerIpv4 = self.normalizeSynraInboundPeerHost(
+                    sourceHostIp: sourceHostIpRaw,
+                    observedHost: observedPeerIpRaw
+                )
                 let host =
                     (resolvedPeerIpv4 ?? hostFallback)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? hostFallback
-                let canonicalForOpened = self.canonicalLanDeviceId(fromWireSourceDeviceId: sourceDeviceId)
+                let canonicalForOpened = self.canonicalSynraDeviceId(fromWireSourceDeviceId: sourceDeviceId)
                 let openedDisplayName: String
                 if let peerDisplayName, !peerDisplayName.isEmpty {
                     openedDisplayName = peerDisplayName
                 } else {
                     openedDisplayName = self.fallbackPeerDisplayName(forCanonicalDeviceId: canonicalForOpened)
                 }
-                var opened: [String: Any] = [
+                let incomingSynraConnectPayload: [String: Any] = connectPayload ?? [:]
+                let opened: [String: Any] = [
                     "sessionId": sessionId,
                     "deviceId": canonicalForOpened,
                     "direction": "inbound",
                     "transport": "tcp",
                     "host": host as Any,
-                    // Always report host TCP server port for reverse-connect handoff.
-                    "port": Int(self.defaultTcpPort),
-                    "pairedPeerDeviceIds": remotePairedPeerDeviceIds,
+                    "port": Int(self.synraDefaultTcpPort),
                     "displayName": openedDisplayName,
+                    "connectAckPayload": connectAckPayload,
+                    "incomingSynraConnectPayload": incomingSynraConnectPayload,
                 ]
-                if let handshakeKind, handshakeKind == "paired" || handshakeKind == "fresh" {
-                    opened["handshakeKind"] = handshakeKind
-                }
-                if let claimsPeerPaired {
-                    opened["claimsPeerPaired"] = claimsPeerPaired
-                }
                 self.onSessionOpened?(opened)
             } else if type == "message" {
                 guard let establishedSessionId = current.sessionId, establishedSessionId == sessionId else {
@@ -240,7 +181,7 @@ extension LanDiscoveryPlugin {
                         ),
                         through: current.connection
                     )
-                    self.startInboundReceiveLoop(connectionId: connectionId)
+                    self.startSynraInboundReceiveLoop(connectionId: connectionId)
                     return
                 }
                 let payload = frame["payload"] as? [String: Any]
@@ -259,9 +200,22 @@ extension LanDiscoveryPlugin {
                         through: current.connection
                     )
                 }
+            } else if type == "event" {
+                guard let establishedSessionId = current.sessionId, establishedSessionId == sessionId else {
+                    self.startSynraInboundReceiveLoop(connectionId: connectionId)
+                    return
+                }
+                let pl = frame["payload"] as? [String: Any]
+                let name = pl?["eventName"] as? String ?? ""
+                self.onLanWireEventReceived?([
+                    "sessionId": establishedSessionId,
+                    "eventName": name,
+                    "eventPayload": pl?["payload"] as Any,
+                    "transport": "tcp",
+                ])
             } else if type == "close" {
                 guard let establishedSessionId = current.sessionId, establishedSessionId == sessionId else {
-                    self.closeInboundConnection(
+                    self.closeSynraInboundConnection(
                         connectionId: connectionId,
                         reason: "peer-closed",
                         emitSessionClosed: false
@@ -269,7 +223,7 @@ extension LanDiscoveryPlugin {
                     return
                 }
                 current.sessionId = establishedSessionId
-                self.closeInboundConnection(
+                self.closeSynraInboundConnection(
                     connectionId: connectionId,
                     reason: "peer-closed",
                     emitSessionClosed: true
@@ -277,11 +231,11 @@ extension LanDiscoveryPlugin {
                 return
             }
 
-            self.startInboundReceiveLoop(connectionId: connectionId)
+            self.startSynraInboundReceiveLoop(connectionId: connectionId)
         }
     }
 
-    func closeInboundConnection(
+    func closeSynraInboundConnection(
         connectionId: String,
         reason: String,
         emitSessionClosed: Bool
@@ -299,7 +253,7 @@ extension LanDiscoveryPlugin {
         context.connection.cancel()
     }
 
-    func describeEndpoint(_ endpoint: NWEndpoint) -> String {
+    private func describeSynraEndpoint(_ endpoint: NWEndpoint) -> String {
         switch endpoint {
         case .hostPort(let host, let port):
             return "\(host):\(port.rawValue)"
@@ -308,7 +262,7 @@ extension LanDiscoveryPlugin {
         }
     }
 
-    func describeHostPort(_ endpoint: NWEndpoint) -> (String?, Int?) {
+    private func describeSynraHostPort(_ endpoint: NWEndpoint) -> (String?, Int?) {
         switch endpoint {
         case .hostPort(let host, let port):
             return ("\(host)", Int(port.rawValue))
@@ -317,7 +271,7 @@ extension LanDiscoveryPlugin {
         }
     }
 
-    func isIpv4String(_ value: String) -> Bool {
+    private func isSynraIpv4String(_ value: String) -> Bool {
         let t = value.trimmingCharacters(in: .whitespacesAndNewlines)
         if t.isEmpty || t.contains(":") {
             return false
@@ -334,24 +288,13 @@ extension LanDiscoveryPlugin {
         return true
     }
 
-    /// Prefer `sourceHostIp` from hello when it is a valid IPv4 (matches Android `normalizePeerHost`).
-    func normalizeInboundPeerHost(sourceHostIp: String?, observedHost: String?) -> String? {
-        if let s = sourceHostIp, isIpv4String(s) {
+    private func normalizeSynraInboundPeerHost(sourceHostIp: String?, observedHost: String?) -> String? {
+        if let s = sourceHostIp, isSynraIpv4String(s) {
             return s.trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        if let o = observedHost, isIpv4String(o) {
+        if let o = observedHost, isSynraIpv4String(o) {
             return o.trimmingCharacters(in: .whitespacesAndNewlines)
         }
         return nil
-    }
-
-    func fallbackPeerDisplayName(forCanonicalDeviceId id: String) -> String {
-        let trimmed = id.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty {
-            return "Synra device"
-        }
-        let tail = trimmed.hasPrefix("device-") ? String(trimmed.dropFirst("device-".count)) : trimmed
-        let prefix = String(tail.prefix(6))
-        return prefix.isEmpty ? "Synra device" : "Peer \(prefix)"
     }
 }
