@@ -42,7 +42,7 @@ public final class DeviceConnectionPluginCore: NSObject {
             return nil
         }
 
-        if sessionState.state == "open", let replacedSessionId = sessionState.sessionId {
+        if sessionState.state == "open" {
             onSessionClosed?([
                 "deviceId": sessionState.deviceId as Any,
                 "reason": "replaced",
@@ -64,7 +64,7 @@ public final class DeviceConnectionPluginCore: NSObject {
         var opened = false
         var openError: String?
         var lastConnectAckPayload: [String: Any]?
-        let generatedSessionId = UUID().uuidString
+        let connectRequestId = UUID().uuidString
 
         let connectPayload: Any? = {
             var payload: [String: Any] = [
@@ -85,11 +85,15 @@ public final class DeviceConnectionPluginCore: NSObject {
             }
             switch state {
             case .ready:
-                let frame = self.frame(
+                let frame = self.synraLanFrame(
                     type: "connect",
-                    sessionId: generatedSessionId,
+                    requestId: connectRequestId,
                     messageId: nil,
-                    payload: connectPayload
+                    sourceDeviceId: self.localDeviceUuid(),
+                    targetDeviceId: deviceId.trimmingCharacters(in: .whitespacesAndNewlines),
+                    replyToRequestId: nil,
+                    payload: connectPayload,
+                    error: nil
                 )
                 self.sendFrame(frame, through: nwConnection)
                 self.receiveSingleFrame(through: nwConnection) { response in
@@ -122,7 +126,6 @@ public final class DeviceConnectionPluginCore: NSObject {
                         (ackDisplay?.isEmpty == false) ? ackDisplay : nil
                     self.sessionState.state = "open"
                     self.sessionState.deviceId = remoteDeviceId
-                    self.sessionState.sessionId = (response["sessionId"] as? String) ?? generatedSessionId
                     self.sessionState.openedAt = self.now()
                     opened = true
                     self.startReceiveLoop(on: nwConnection)
@@ -166,22 +169,32 @@ public final class DeviceConnectionPluginCore: NSObject {
     }
 
     public func closeSession(targetDeviceId: String?) -> [String: Any] {
-        let sid = inboundConnections.first(where: { $0.value.canonicalDeviceId == targetDeviceId })?.value.sessionId ?? sessionState.sessionId
-        if let sid {
-            if let inboundId = inboundConnections.first(where: { $0.value.sessionId == sid })?.key {
-                closeSynraInboundConnection(connectionId: inboundId, reason: "closed-by-client", emitSessionClosed: true)
-                return [
-                    "success": true,
-                    "targetDeviceId": targetDeviceId as Any,
-                    "transport": "tcp",
-                ]
-            }
+        if let targetDeviceId,
+           let inboundEntry = inboundConnections.first(where: { $0.value.canonicalDeviceId == targetDeviceId })
+        {
+            closeSynraInboundConnection(
+                connectionId: inboundEntry.key,
+                reason: "closed-by-client",
+                emitSessionClosed: true
+            )
+            return [
+                "success": true,
+                "targetDeviceId": targetDeviceId as Any,
+                "transport": "tcp",
+            ]
         }
-        if let sid = sid {
-            let closeFrame = frame(type: "close", sessionId: sid, messageId: nil, payload: nil)
-            if let conn = connection {
-                sendFrame(closeFrame, through: conn)
-            }
+        if sessionState.state == "open", let remoteId = sessionState.deviceId, let conn = connection {
+            let closeFrame = synraLanFrame(
+                type: "close",
+                requestId: UUID().uuidString,
+                messageId: nil,
+                sourceDeviceId: localDeviceUuid(),
+                targetDeviceId: remoteId,
+                replyToRequestId: nil,
+                payload: nil,
+                error: nil
+            )
+            sendFrame(closeFrame, through: conn)
         }
         connection?.cancel()
         connection = nil
@@ -204,23 +217,21 @@ public final class DeviceConnectionPluginCore: NSObject {
         messageId: String?
     ) -> [String: Any]? {
         let targetMessageId = messageId ?? UUID().uuidString
-        let envelope: [String: Any] = [
-            "requestId": requestId,
-            "sourceDeviceId": sourceDeviceId,
-            "targetDeviceId": targetDeviceId,
-            "replyToRequestId": replyToRequestId as Any,
+        let innerPayload: [String: Any] = [
             "messageType": messageType,
             "payload": payload,
         ]
-        let sessionId = inboundConnections.first(where: { $0.value.canonicalDeviceId == targetDeviceId })?.value.sessionId ?? sessionState.sessionId
-        guard let sessionId else { return nil }
-        let messageFrame = frame(
+        let messageFrame = synraLanFrame(
             type: "message",
-            sessionId: sessionId,
+            requestId: requestId,
             messageId: targetMessageId,
-            payload: envelope
+            sourceDeviceId: sourceDeviceId,
+            targetDeviceId: targetDeviceId,
+            replyToRequestId: replyToRequestId,
+            payload: innerPayload,
+            error: nil
         )
-        if let inbound = inboundConnections.first(where: { $0.value.sessionId == sessionId })?.value {
+        if let inbound = inboundConnections.first(where: { $0.value.canonicalDeviceId == targetDeviceId })?.value {
             sendFrame(messageFrame, through: inbound.connection)
             return [
                 "success": true,
@@ -253,31 +264,29 @@ public final class DeviceConnectionPluginCore: NSObject {
         eventId: String?,
         schemaVersion: Int?
     ) -> [String: Any]? {
-        var envelope: [String: Any] = [
-            "requestId": requestId,
-            "sourceDeviceId": sourceDeviceId,
-            "targetDeviceId": targetDeviceId,
-            "replyToRequestId": replyToRequestId as Any,
+        var innerPayload: [String: Any] = [
             "eventName": eventName,
         ]
         if let payload {
-            envelope["payload"] = payload
+            innerPayload["payload"] = payload
         }
         if let eventId, !eventId.isEmpty {
-            envelope["eventId"] = eventId
+            innerPayload["eventId"] = eventId
         }
         if let schemaVersion {
-            envelope["schemaVersion"] = schemaVersion
+            innerPayload["schemaVersion"] = schemaVersion
         }
-        let sessionId = inboundConnections.first(where: { $0.value.canonicalDeviceId == targetDeviceId })?.value.sessionId ?? sessionState.sessionId
-        guard let sessionId else { return nil }
-        let eventFrame = frame(
+        let eventFrame = synraLanFrame(
             type: "event",
-            sessionId: sessionId,
+            requestId: requestId,
             messageId: nil,
-            payload: envelope
+            sourceDeviceId: sourceDeviceId,
+            targetDeviceId: targetDeviceId,
+            replyToRequestId: replyToRequestId,
+            payload: innerPayload,
+            error: nil
         )
-        if let inbound = inboundConnections.first(where: { $0.value.sessionId == sessionId })?.value {
+        if let inbound = inboundConnections.first(where: { $0.value.canonicalDeviceId == targetDeviceId })?.value {
             sendFrame(eventFrame, through: inbound.connection)
             return [
                 "success": true,
@@ -439,11 +448,20 @@ public final class DeviceConnectionPluginCore: NSObject {
         return ips.sorted().first
     }
 
-    internal func frame(type: String, sessionId: String, messageId: String?, payload: Any?) -> [String: Any] {
+    internal func synraLanFrame(
+        type: String,
+        requestId: String,
+        messageId: String?,
+        sourceDeviceId: String?,
+        targetDeviceId: String?,
+        replyToRequestId: String?,
+        payload: Any?,
+        error: String?
+    ) -> [String: Any] {
         var base: [String: Any] = [
             "version": protocolVersion,
             "type": type,
-            "sessionId": sessionId,
+            "requestId": requestId,
             "timestamp": now(),
             "appId": appId,
             "protocolVersion": protocolVersion,
@@ -452,8 +470,20 @@ public final class DeviceConnectionPluginCore: NSObject {
         if let messageId {
             base["messageId"] = messageId
         }
+        if let sourceDeviceId, !sourceDeviceId.isEmpty {
+            base["sourceDeviceId"] = sourceDeviceId
+        }
+        if let targetDeviceId, !targetDeviceId.isEmpty {
+            base["targetDeviceId"] = targetDeviceId
+        }
+        if let replyToRequestId, !replyToRequestId.isEmpty {
+            base["replyToRequestId"] = replyToRequestId
+        }
         if let payload {
             base["payload"] = payload
+        }
+        if let error, !error.isEmpty {
+            base["error"] = error
         }
         return base
     }
@@ -509,13 +539,12 @@ public final class DeviceConnectionPluginCore: NSObject {
                 return
             }
             guard let frame else {
-                let closedSessionId = self.sessionState.sessionId
                 let shouldNotifyClosed = self.sessionState.state == "open"
                 self.sessionState.state = "closed"
                 self.sessionState.closedAt = self.now()
                 self.connection?.cancel()
                 self.connection = nil
-                if shouldNotifyClosed, let closedSessionId, !closedSessionId.isEmpty {
+                if shouldNotifyClosed {
                     self.onSessionClosed?([
                         "deviceId": self.sessionState.deviceId as Any,
                         "reason": "socket-closed",
@@ -539,11 +568,12 @@ public final class DeviceConnectionPluginCore: NSObject {
             }
             if frame["type"] as? String == "message" {
                 let payload = frame["payload"] as? [String: Any]
+                let topRequestId = frame["requestId"] as? String
                 self.onMessageReceived?([
-                    "requestId": payload?["requestId"] as Any,
-                    "sourceDeviceId": payload?["sourceDeviceId"] as Any,
-                    "targetDeviceId": payload?["targetDeviceId"] as Any,
-                    "replyToRequestId": payload?["replyToRequestId"] as Any,
+                    "requestId": (topRequestId ?? payload?["requestId"]) as Any,
+                    "sourceDeviceId": (frame["sourceDeviceId"] as? String ?? payload?["sourceDeviceId"]) as Any,
+                    "targetDeviceId": (frame["targetDeviceId"] as? String ?? payload?["targetDeviceId"]) as Any,
+                    "replyToRequestId": (frame["replyToRequestId"] as? String ?? payload?["replyToRequestId"]) as Any,
                     "messageId": frame["messageId"] as Any,
                     "messageType": payload?["messageType"] as? String ?? "transport.message.received",
                     "payload": payload?["payload"] as Any,
@@ -561,11 +591,12 @@ public final class DeviceConnectionPluginCore: NSObject {
             } else if frame["type"] as? String == "event" {
                 let pl = frame["payload"] as? [String: Any]
                 let name = pl?["eventName"] as? String ?? ""
+                let topRid = frame["requestId"] as? String
                 self.onLanWireEventReceived?([
-                    "requestId": pl?["requestId"] as Any,
-                    "sourceDeviceId": pl?["sourceDeviceId"] as Any,
-                    "targetDeviceId": pl?["targetDeviceId"] as Any,
-                    "replyToRequestId": pl?["replyToRequestId"] as Any,
+                    "requestId": (topRid ?? pl?["requestId"]) as Any,
+                    "sourceDeviceId": (frame["sourceDeviceId"] as? String ?? pl?["sourceDeviceId"]) as Any,
+                    "targetDeviceId": (frame["targetDeviceId"] as? String ?? pl?["targetDeviceId"]) as Any,
+                    "replyToRequestId": (frame["replyToRequestId"] as? String ?? pl?["replyToRequestId"]) as Any,
                     "eventName": name,
                     "eventPayload": pl?["payload"] as Any,
                     "transport": "tcp",
@@ -584,7 +615,6 @@ public final class DeviceConnectionPluginCore: NSObject {
 }
 
 private struct SessionState {
-    var sessionId: String?
     var deviceId: String?
     var host: String?
     var port: Int?

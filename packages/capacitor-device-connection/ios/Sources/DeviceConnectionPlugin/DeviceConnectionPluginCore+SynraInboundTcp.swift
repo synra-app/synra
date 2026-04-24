@@ -96,7 +96,9 @@ extension DeviceConnectionPluginCore {
             }
 
             let type = frame["type"] as? String ?? ""
-            let sessionId = current.sessionId ?? frame["sessionId"] as? String ?? UUID().uuidString
+            let rawConnectRid = (frame["requestId"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let connectRequestId =
+                (rawConnectRid?.isEmpty == false) ? rawConnectRid! : UUID().uuidString
             if type == "connect" {
                 let connectPayload = frame["payload"] as? [String: Any]
                 let sourceDeviceId = connectPayload?["sourceDeviceId"] as? String
@@ -105,11 +107,15 @@ extension DeviceConnectionPluginCore {
                 let appOk = frame["appId"] as? String == self.appId
                 guard appOk, let sourceDeviceId, !sourceDeviceId.isEmpty else {
                     self.sendFrame(
-                        self.frame(
+                        self.synraLanFrame(
                             type: "error",
-                            sessionId: sessionId,
+                            requestId: connectRequestId,
                             messageId: nil,
-                            payload: "CONNECT_INVALID"
+                            sourceDeviceId: self.localDeviceUuid(),
+                            targetDeviceId: nil,
+                            replyToRequestId: nil,
+                            payload: nil,
+                            error: "CONNECT_INVALID"
                         ),
                         through: current.connection
                     )
@@ -120,7 +126,6 @@ extension DeviceConnectionPluginCore {
                     )
                     return
                 }
-                current.sessionId = sessionId
                 var connectAckPayload: [String: Any] = [
                     "sourceDeviceId": self.localDeviceUuid(),
                     "displayName": self.localSynraDisplayName(),
@@ -132,12 +137,17 @@ extension DeviceConnectionPluginCore {
                 if let observedPeerIp = observedPeerIpRaw, !observedPeerIp.isEmpty {
                     connectAckPayload["observedPeerIp"] = observedPeerIp
                 }
+                let canonicalForAck = self.canonicalSynraDeviceId(fromWireSourceDeviceId: sourceDeviceId)
                 self.sendFrame(
-                    self.frame(
+                    self.synraLanFrame(
                         type: "connectAck",
-                        sessionId: sessionId,
+                        requestId: connectRequestId,
                         messageId: nil,
-                        payload: connectAckPayload
+                        sourceDeviceId: self.localDeviceUuid(),
+                        targetDeviceId: canonicalForAck,
+                        replyToRequestId: nil,
+                        payload: connectAckPayload,
+                        error: nil
                     ),
                     through: current.connection
                 )
@@ -150,7 +160,8 @@ extension DeviceConnectionPluginCore {
                 )
                 let host =
                     (resolvedPeerIpv4 ?? hostFallback)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? hostFallback
-                let canonicalForOpened = self.canonicalSynraDeviceId(fromWireSourceDeviceId: sourceDeviceId)
+                let canonicalForOpened = canonicalForAck
+                current.canonicalDeviceId = canonicalForOpened
                 let openedDisplayName: String
                 if let peerDisplayName, !peerDisplayName.isEmpty {
                     openedDisplayName = peerDisplayName
@@ -170,13 +181,18 @@ extension DeviceConnectionPluginCore {
                 ]
                 self.onSessionOpened?(opened)
             } else if type == "message" {
-                guard let establishedSessionId = current.sessionId, establishedSessionId == sessionId else {
+                guard current.canonicalDeviceId != nil else {
+                    let errRid = (frame["requestId"] as? String) ?? UUID().uuidString
                     self.sendFrame(
-                        self.frame(
+                        self.synraLanFrame(
                             type: "error",
-                            sessionId: sessionId,
+                            requestId: errRid,
                             messageId: nil,
-                            payload: "SESSION_NOT_ESTABLISHED"
+                            sourceDeviceId: self.localDeviceUuid(),
+                            targetDeviceId: nil,
+                            replyToRequestId: nil,
+                            payload: nil,
+                            error: "CONNECT_NOT_ESTABLISHED"
                         ),
                         through: current.connection
                     )
@@ -185,11 +201,12 @@ extension DeviceConnectionPluginCore {
                 }
                 let payload = frame["payload"] as? [String: Any]
                 let messageId = frame["messageId"] as? String
+                let topRid = frame["requestId"] as? String
                 self.onMessageReceived?([
-                    "requestId": payload?["requestId"] as Any,
-                    "sourceDeviceId": payload?["sourceDeviceId"] as Any,
-                    "targetDeviceId": payload?["targetDeviceId"] as Any,
-                    "replyToRequestId": payload?["replyToRequestId"] as Any,
+                    "requestId": (topRid ?? payload?["requestId"]) as Any,
+                    "sourceDeviceId": (frame["sourceDeviceId"] as? String ?? payload?["sourceDeviceId"]) as Any,
+                    "targetDeviceId": (frame["targetDeviceId"] as? String ?? payload?["targetDeviceId"]) as Any,
+                    "replyToRequestId": (frame["replyToRequestId"] as? String ?? payload?["replyToRequestId"]) as Any,
                     "messageId": messageId as Any,
                     "messageType": payload?["messageType"] as? String ?? "transport.message.received",
                     "payload": payload?["payload"] as Any,
@@ -197,41 +214,43 @@ extension DeviceConnectionPluginCore {
                     "transport": "tcp",
                 ])
                 if let messageId, !messageId.isEmpty {
+                    let ackRid = topRid ?? UUID().uuidString
                     self.sendFrame(
-                        self.frame(type: "ack", sessionId: establishedSessionId, messageId: messageId, payload: nil),
+                        self.synraLanFrame(
+                            type: "ack",
+                            requestId: ackRid,
+                            messageId: messageId,
+                            sourceDeviceId: self.localDeviceUuid(),
+                            targetDeviceId: current.canonicalDeviceId,
+                            replyToRequestId: nil,
+                            payload: nil,
+                            error: nil
+                        ),
                         through: current.connection
                     )
                 }
             } else if type == "event" {
-                guard let establishedSessionId = current.sessionId, establishedSessionId == sessionId else {
+                guard current.canonicalDeviceId != nil else {
                     self.startSynraInboundReceiveLoop(connectionId: connectionId)
                     return
                 }
                 let pl = frame["payload"] as? [String: Any]
                 let name = pl?["eventName"] as? String ?? ""
+                let topEvRid = frame["requestId"] as? String
                 self.onLanWireEventReceived?([
-                    "requestId": pl?["requestId"] as Any,
-                    "sourceDeviceId": pl?["sourceDeviceId"] as Any,
-                    "targetDeviceId": pl?["targetDeviceId"] as Any,
-                    "replyToRequestId": pl?["replyToRequestId"] as Any,
+                    "requestId": (topEvRid ?? pl?["requestId"]) as Any,
+                    "sourceDeviceId": (frame["sourceDeviceId"] as? String ?? pl?["sourceDeviceId"]) as Any,
+                    "targetDeviceId": (frame["targetDeviceId"] as? String ?? pl?["targetDeviceId"]) as Any,
+                    "replyToRequestId": (frame["replyToRequestId"] as? String ?? pl?["replyToRequestId"]) as Any,
                     "eventName": name,
                     "eventPayload": pl?["payload"] as Any,
                     "transport": "tcp",
                 ])
             } else if type == "close" {
-                guard let establishedSessionId = current.sessionId, establishedSessionId == sessionId else {
-                    self.closeSynraInboundConnection(
-                        connectionId: connectionId,
-                        reason: "peer-closed",
-                        emitSessionClosed: false
-                    )
-                    return
-                }
-                current.sessionId = establishedSessionId
                 self.closeSynraInboundConnection(
                     connectionId: connectionId,
                     reason: "peer-closed",
-                    emitSessionClosed: true
+                    emitSessionClosed: current.canonicalDeviceId != nil
                 )
                 return
             }
@@ -248,7 +267,7 @@ extension DeviceConnectionPluginCore {
         guard let context = inboundConnections.removeValue(forKey: connectionId) else {
             return
         }
-        if emitSessionClosed, context.sessionId != nil {
+        if emitSessionClosed, context.canonicalDeviceId != nil {
             onSessionClosed?([
                 "deviceId": context.canonicalDeviceId as Any,
                 "reason": reason,

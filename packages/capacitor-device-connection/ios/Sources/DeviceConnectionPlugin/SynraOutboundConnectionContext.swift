@@ -6,7 +6,6 @@ final class SynraOutboundConnectionContext {
     let host: String
     let port: UInt16
     let hostPortKey: String
-    var sessionId: String
     let remoteLabel: String
     let remoteDeviceId: String
     let remoteDisplayName: String
@@ -16,7 +15,6 @@ final class SynraOutboundConnectionContext {
         host: String,
         port: UInt16,
         hostPortKey: String,
-        sessionId: String,
         remoteLabel: String,
         remoteDeviceId: String,
         remoteDisplayName: String
@@ -25,7 +23,6 @@ final class SynraOutboundConnectionContext {
         self.host = host
         self.port = port
         self.hostPortKey = hostPortKey
-        self.sessionId = sessionId
         self.remoteLabel = remoteLabel
         self.remoteDeviceId = remoteDeviceId
         self.remoteDisplayName = remoteDisplayName

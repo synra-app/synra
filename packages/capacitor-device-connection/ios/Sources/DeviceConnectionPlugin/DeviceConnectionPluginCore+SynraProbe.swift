@@ -43,7 +43,7 @@ extension DeviceConnectionPluginCore {
         let connection = NWConnection(host: NWEndpoint.Host(host), port: endpointPort, using: .tcp)
         let semaphore = DispatchSemaphore(value: 0)
         var finished = false
-        let outgoingSessionId = UUID().uuidString
+        let connectRequestId = UUID().uuidString
         connection.stateUpdateHandler = { [weak self] state in
             guard let self else {
                 semaphore.signal()
@@ -62,11 +62,15 @@ extension DeviceConnectionPluginCore {
                 if let selfIp = self.primarySourceHostIpv4(), !selfIp.isEmpty {
                     probeConnect["sourceHostIp"] = selfIp
                 }
-                let connectFrame = self.frame(
+                let connectFrame = self.synraLanFrame(
                     type: "connect",
-                    sessionId: outgoingSessionId,
+                    requestId: connectRequestId,
                     messageId: nil,
-                    payload: probeConnect
+                    sourceDeviceId: self.localDeviceUuid(),
+                    targetDeviceId: nil,
+                    replyToRequestId: nil,
+                    payload: probeConnect,
+                    error: nil
                 )
                 self.sendFrame(connectFrame, through: connection) {
                     self.receiveSingleFrame(through: connection) { frame in
