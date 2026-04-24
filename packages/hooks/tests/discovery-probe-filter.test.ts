@@ -1,8 +1,8 @@
 import { expect, test } from 'vite-plus/test'
 import type { DiscoveredDevice } from '@synra/capacitor-lan-discovery'
 import type {
-  GetSessionStateResult,
-  OpenSessionOptions,
+  GetTransportStateResult,
+  OpenTransportOptions,
   ProbeSynraPeersOptions,
   ProbeSynraPeersResult
 } from '@synra/capacitor-device-connection'
@@ -38,13 +38,13 @@ function createProbeFilterAdapter(probe: ProbeSynraPeersResult): ConnectionRunti
     async probeSynraPeers(_options: ProbeSynraPeersOptions): Promise<ProbeSynraPeersResult> {
       return probe
     },
-    async openSession(_options: OpenSessionOptions) {
+    async openTransport(_options: OpenTransportOptions) {
       return { deviceId: _options.deviceId, state: 'open' as const, transport: 'tcp' as const }
     },
-    async closeSession() {},
+    async closeTransport() {},
     async sendMessage() {},
     async sendLanEvent() {},
-    async getSessionState(): Promise<GetSessionStateResult> {
+    async getTransportState(): Promise<GetTransportStateResult> {
       return { state: 'idle', transport: 'tcp' }
     },
     async addDeviceConnectableUpdatedListener() {
@@ -53,10 +53,10 @@ function createProbeFilterAdapter(probe: ProbeSynraPeersResult): ConnectionRunti
     async addDeviceLostListener() {
       return { remove: async () => {} }
     },
-    async addSessionOpenedListener() {
+    async addTransportOpenedListener() {
       return { remove: async () => {} }
     },
-    async addSessionClosedListener() {
+    async addTransportClosedListener() {
       return { remove: async () => {} }
     },
     async addMessageReceivedListener() {

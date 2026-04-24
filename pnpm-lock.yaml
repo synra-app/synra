@@ -215,6 +215,9 @@ importers:
       '@synra/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
+      '@synra/transport-events':
+        specifier: workspace:*
+        version: link:../../packages/transport-events
       pinia:
         specifier: ^3.0.4
         version: 3.0.4(typescript@6.0.3)(vue@3.5.33(typescript@6.0.3))
@@ -466,6 +469,9 @@ importers:
       '@synra/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@synra/transport-events':
+        specifier: workspace:*
+        version: link:../transport-events
       vue:
         specifier: catalog:vue
         version: 3.5.33(typescript@6.0.3)
@@ -596,6 +602,22 @@ importers:
       bumpp:
         specifier: ^11.0.1
         version: 11.0.1
+      typescript:
+        specifier: catalog:types
+        version: 6.0.3
+      vite-plus:
+        specifier: catalog:vite
+        version: 0.1.19(@tsdown/css@0.21.9)(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(typescript@6.0.3)(vite@8.0.8(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(yaml@2.8.3))(yaml@2.8.3)
+
+  packages/transport-events:
+    dependencies:
+      '@capacitor/core':
+        specifier: catalog:capacitor
+        version: 8.3.1
+    devDependencies:
+      '@types/node':
+        specifier: catalog:types
+        version: 25.6.0
       typescript:
         specifier: catalog:types
         version: 6.0.3
@@ -4443,16 +4465,6 @@ packages:
     resolution: {integrity: sha512-0Mqk3AT2TZCXWKdcoaufeXNukv2mTrEZExeXlHIOZXdqYoHHr4n51pymnwV8x2BOVxwXbK2HLlI7usrqMpycdg==}
     engines: {node: ^20.19.0 || >=22.12.0}
 
-  unrun@0.2.36:
-    resolution: {integrity: sha512-ICAGv44LHSKjCdI4B4rk99lJLHXBweutO4MUwu3cavMlYtXID0Tn5e1Kwe/Uj6BSAuHHXfi1JheFVCYhcXHfAg==}
-    engines: {node: '>=20.19.0'}
-    hasBin: true
-    peerDependencies:
-      synckit: ^0.11.11
-    peerDependenciesMeta:
-      synckit:
-        optional: true
-
   unrun@0.2.37:
     resolution: {integrity: sha512-AA7vDuYsgeSYVzJMm16UKA+aXFKhy7nFqW9z5l7q44K4ppFWZAMqYS58ePRZbugMLPH0fwwMzD5A8nP0avxwZQ==}
     engines: {node: '>=20.19.0'}
@@ -8268,7 +8280,7 @@ snapshots:
       tinyglobby: 0.2.16
       tree-kill: 1.2.2
       unconfig-core: 7.5.0
-      unrun: 0.2.36
+      unrun: 0.2.37
     optionalDependencies:
       '@tsdown/css': 0.21.9(jiti@2.6.1)(postcss@8.5.10)(sass@1.99.0)(tsdown@0.21.9)(tsx@4.21.0)(yaml@2.8.3)
       typescript: 6.0.3
@@ -8465,11 +8477,6 @@ snapshots:
       picomatch: 4.0.4
       webpack-virtual-modules: 0.6.2
 
-  unrun@0.2.36:
-    dependencies:
-      rolldown: 1.0.0-rc.16
-    optional: true
-
   unrun@0.2.37:
     dependencies:
       rolldown: 1.0.0-rc.17
@@ -8636,7 +8643,7 @@ snapshots:
     dependencies:
       lightningcss: 1.32.0
       picomatch: 4.0.4
-      postcss: 8.5.9
+      postcss: 8.5.10
       rolldown: 1.0.0-rc.15
       tinyglobby: 0.2.16
     optionalDependencies:

@@ -3,7 +3,7 @@ import { type Ref, ref } from 'vue'
 import type {
   AppLinkState,
   RuntimeConnectedSession,
-  RuntimeOpenSessionInput,
+  RuntimeOpenTransportInput,
   RuntimeSessionState,
   SynraConnectionFilter,
   SynraConnectionMessage,
@@ -31,8 +31,8 @@ export type ConnectionRuntime = {
   connectedSessions: Ref<RuntimeConnectedSession[]>
   ensureListeners(): Promise<void>
   startDiscovery(options?: SynraDiscoveryStartOptions): Promise<void>
-  openSession(options: RuntimeOpenSessionInput): Promise<void>
-  closeSession(deviceId?: string): Promise<void>
+  openTransport(options: RuntimeOpenTransportInput): Promise<void>
+  closeTransport(deviceId?: string): Promise<void>
   sendMessage(input: SynraConnectionSendInput): Promise<void>
   sendLanEvent(input: SynraLanWireSendInput): Promise<void>
   setSessionAppLink(deviceId: string, app: AppLinkState, lastAppError?: string): void
@@ -137,8 +137,8 @@ export function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): Conn
     connectedSessions,
     ensureListeners,
     startDiscovery,
-    openSession: sessionModule.openSession.bind(sessionModule),
-    closeSession: sessionModule.closeSession.bind(sessionModule),
+    openTransport: sessionModule.openTransport.bind(sessionModule),
+    closeTransport: sessionModule.closeTransport.bind(sessionModule),
     sendMessage: sessionModule.sendMessage.bind(sessionModule),
     sendLanEvent: sessionModule.sendLanEvent.bind(sessionModule),
     setSessionAppLink,

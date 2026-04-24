@@ -31,14 +31,14 @@ export type RuntimeConnectedSession = {
   lastAppError?: string
 }
 
-export type RuntimeOpenSessionInput = {
+export type RuntimeOpenTransportInput = {
   deviceId: string
   host: string
   port: number
   /** Overrides `resolveSynraConnectType` from hooks runtime options when set. */
   connectType?: SynraLanConnectType
   /**
-   * When true, `openSession` failures do not populate the shared transport `error` ref (best-effort
+   * When true, `openTransport` failures do not populate the shared transport `error` ref (best-effort
    * auto-reconnect while the peer host is still starting its listener).
    */
   suppressGlobalError?: boolean

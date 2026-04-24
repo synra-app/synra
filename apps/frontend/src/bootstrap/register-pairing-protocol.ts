@@ -1,5 +1,10 @@
 import type { Pinia } from 'pinia'
 import {
+  createSynraEvent,
+  synraHandlersAllPlatforms,
+  type SynraWireEventContext
+} from '@synra/transport-events'
+import {
   getConnectionRuntime,
   setPairAwaitingAccept,
   setPairedDeviceConnecting
@@ -29,28 +34,29 @@ export async function registerPairingProtocol(pinia: Pinia): Promise<void> {
     pairingStore.pushFeedback(reason)
   }
 
-  runtime.onLanWireEvent(
-    (evt) => {
-      if (!isPairRequestPayload(evt.payload)) {
+  createSynraEvent({
+    eventName: 'pairing.request',
+    handlers: synraHandlersAllPlatforms((ctx: SynraWireEventContext) => {
+      if (!isPairRequestPayload(ctx.payload)) {
         return
       }
       if (pairingStore.hasOpenIncoming()) {
         return
       }
       pairingStore.setIncoming({
-        requestId: evt.payload.requestId,
-        sourceDeviceId: evt.sourceDeviceId,
-        targetDeviceId: evt.targetDeviceId,
-        initiator: evt.payload.initiator
+        requestId: ctx.payload.requestId,
+        sourceDeviceId: ctx.sourceDeviceId,
+        targetDeviceId: ctx.targetDeviceId,
+        initiator: ctx.payload.initiator
       })
-      setPairAwaitingAccept(evt.payload.initiator.deviceId, true)
-    },
-    { eventName: 'pairing.request' }
-  )
+      setPairAwaitingAccept(ctx.payload.initiator.deviceId, true)
+    })
+  })
 
-  runtime.onLanWireEvent(
-    (evt) => {
-      const pl = evt.payload
+  createSynraEvent({
+    eventName: 'pairing.response',
+    handlers: synraHandlersAllPlatforms((ctx: SynraWireEventContext) => {
+      const pl = ctx.payload
       if (!pl || typeof pl !== 'object') {
         return
       }
@@ -96,7 +102,7 @@ export async function registerPairingProtocol(pinia: Pinia): Promise<void> {
         setPairedDeviceConnecting(rejected.target.deviceId, false)
         runtime.setAppLinkForDevice(rejected.target.deviceId, 'failed', 'Pairing was declined.')
       } else {
-        const declinedDeviceId = evt.sourceDeviceId
+        const declinedDeviceId = ctx.sourceDeviceId
         if (declinedDeviceId) {
           setPairAwaitingAccept(declinedDeviceId, false)
           setPairedDeviceConnecting(declinedDeviceId, false)
@@ -109,15 +115,15 @@ export async function registerPairingProtocol(pinia: Pinia): Promise<void> {
           ? (pl as { reason: string }).reason.trim()
           : 'Pairing was declined.'
       pairingStore.pushFeedback(reason)
-    },
-    { eventName: 'pairing.response' }
-  )
+    })
+  })
 
-  runtime.onLanWireEvent(
-    async (evt) => {
+  createSynraEvent({
+    eventName: 'pairing.peerReset',
+    handlers: synraHandlersAllPlatforms(async (ctx: SynraWireEventContext) => {
       const pl =
-        evt.payload && typeof evt.payload === 'object'
-          ? (evt.payload as { fromDeviceId?: unknown; reason?: unknown })
+        ctx.payload && typeof ctx.payload === 'object'
+          ? (ctx.payload as { fromDeviceId?: unknown; reason?: unknown })
           : {}
       const fromDeviceId =
         typeof pl.fromDeviceId === 'string' && pl.fromDeviceId.trim().length > 0
@@ -138,26 +144,25 @@ export async function registerPairingProtocol(pinia: Pinia): Promise<void> {
       setPairedDeviceConnecting(fromDeviceId, false)
       runtime.setAppLinkForDevice(fromDeviceId, 'disconnected', reason)
       pairingStore.pushFeedback(reason)
-    },
-    { eventName: 'pairing.peerReset' }
-  )
+    })
+  })
 
-  runtime.onLanWireEvent(
-    async (evt) => {
-      const deviceId = evt.sourceDeviceId
+  createSynraEvent({
+    eventName: 'pairing.unpairRequired',
+    handlers: synraHandlersAllPlatforms(async (ctx: SynraWireEventContext) => {
+      const deviceId = ctx.sourceDeviceId
       if (!deviceId) {
         return
       }
       const pl =
-        evt.payload && typeof evt.payload === 'object'
-          ? (evt.payload as { reason?: unknown; mode?: unknown })
+        ctx.payload && typeof ctx.payload === 'object'
+          ? (ctx.payload as { reason?: unknown; mode?: unknown })
           : {}
       const reason =
         typeof pl.reason === 'string' && pl.reason.trim().length > 0
           ? pl.reason.trim()
           : 'Peer requested to cancel pairing.'
       await unpairLocalOnly(deviceId, reason)
-    },
-    { eventName: 'pairing.unpairRequired' }
-  )
+    })
+  })
 }

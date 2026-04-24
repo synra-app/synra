@@ -158,7 +158,7 @@ export type DeviceDiscoveryListResult = {
 
 export type SynraLanConnectType = 'fresh' | 'paired'
 
-export type DeviceSessionOpenOptions = {
+export type DeviceTransportOpenOptions = {
   deviceId: string
   host: string
   port: number
@@ -168,14 +168,14 @@ export type DeviceSessionOpenOptions = {
   transport?: ConnectionTransport
 }
 
-export type DeviceSessionState = 'idle' | 'connecting' | 'open' | 'closed' | 'error'
+export type DeviceTransportState = 'idle' | 'connecting' | 'open' | 'closed' | 'error'
 export type ConnectionTransport = 'tcp'
 
-export type DeviceSessionSnapshot = {
+export type DeviceTransportSnapshot = {
   deviceId?: string
   host?: string
   port?: number
-  state: DeviceSessionState
+  state: DeviceTransportState
   direction?: 'inbound' | 'outbound'
   transport?: ConnectionTransport
   lastError?: string
@@ -183,25 +183,25 @@ export type DeviceSessionSnapshot = {
   closedAt?: number
 }
 
-export type DeviceSessionOpenResult = {
+export type DeviceTransportOpenResult = {
   success: true
   deviceId: string
-  state: DeviceSessionState
+  state: DeviceTransportState
   transport?: ConnectionTransport
 }
 
-export type DeviceSessionCloseOptions = {
+export type DeviceTransportCloseOptions = {
   targetDeviceId?: string
   transport?: ConnectionTransport
 }
 
-export type DeviceSessionCloseResult = {
+export type DeviceTransportCloseResult = {
   success: true
   targetDeviceId?: string
   transport?: ConnectionTransport
 }
 
-export type DeviceSessionSendMessageOptions = {
+export type DeviceTransportSendMessageOptions = {
   requestId: string
   sourceDeviceId: string
   targetDeviceId: string
@@ -212,14 +212,14 @@ export type DeviceSessionSendMessageOptions = {
   transport?: ConnectionTransport
 }
 
-export type DeviceSessionSendMessageResult = {
+export type DeviceTransportSendMessageResult = {
   success: true
   messageId: string
   targetDeviceId: string
   transport?: ConnectionTransport
 }
 
-export type DeviceSessionSendLanEventOptions = {
+export type DeviceTransportSendLanEventOptions = {
   requestId: string
   sourceDeviceId: string
   targetDeviceId: string
@@ -231,13 +231,13 @@ export type DeviceSessionSendLanEventOptions = {
   transport?: ConnectionTransport
 }
 
-export type DeviceSessionSendLanEventResult = {
+export type DeviceTransportSendLanEventResult = {
   success: true
   targetDeviceId: string
   transport?: ConnectionTransport
 }
 
-export type DeviceSessionGetStateOptions = {
+export type DeviceTransportGetStateOptions = {
   targetDeviceId?: string
   transport?: ConnectionTransport
 }
@@ -246,8 +246,8 @@ export type DeviceDiscoveryHostEvent = {
   id: number
   timestamp: number
   type:
-    | 'transport.session.opened'
-    | 'transport.session.closed'
+    | 'transport.opened'
+    | 'transport.closed'
     | 'transport.message.received'
     | 'transport.lan.event.received'
     | 'transport.message.ack'
@@ -279,11 +279,11 @@ export type MethodPayloadMap = {
   'discovery.start': DeviceDiscoveryStartOptions
   'discovery.stop': Record<string, never>
   'discovery.list': Record<string, never>
-  'connection.openSession': DeviceSessionOpenOptions
-  'connection.closeSession': DeviceSessionCloseOptions
-  'connection.sendMessage': DeviceSessionSendMessageOptions
-  'connection.sendLanEvent': DeviceSessionSendLanEventOptions
-  'connection.getSessionState': DeviceSessionGetStateOptions
+  'connection.openTransport': DeviceTransportOpenOptions
+  'connection.closeTransport': DeviceTransportCloseOptions
+  'connection.sendMessage': DeviceTransportSendMessageOptions
+  'connection.sendLanEvent': DeviceTransportSendLanEventOptions
+  'connection.getTransportState': DeviceTransportGetStateOptions
   'connection.pullHostEvents': Record<string, never>
   'preferences.get': { key: string }
   'preferences.set': { key: string; value: string }
@@ -300,11 +300,11 @@ export type MethodResultMap = {
   'discovery.start': DeviceDiscoveryStartResult
   'discovery.stop': OperationResult
   'discovery.list': DeviceDiscoveryListResult
-  'connection.openSession': DeviceSessionOpenResult
-  'connection.closeSession': DeviceSessionCloseResult
-  'connection.sendMessage': DeviceSessionSendMessageResult
-  'connection.sendLanEvent': DeviceSessionSendLanEventResult
-  'connection.getSessionState': DeviceSessionSnapshot
+  'connection.openTransport': DeviceTransportOpenResult
+  'connection.closeTransport': DeviceTransportCloseResult
+  'connection.sendMessage': DeviceTransportSendMessageResult
+  'connection.sendLanEvent': DeviceTransportSendLanEventResult
+  'connection.getTransportState': DeviceTransportSnapshot
   'connection.pullHostEvents': DeviceDiscoveryPullHostEventsResult
   'preferences.get': { value: string | null }
   'preferences.set': OperationResult

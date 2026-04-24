@@ -4,15 +4,15 @@ import type {
   DeviceConnectableUpdatedEvent
 } from '@synra/capacitor-lan-discovery'
 import type {
-  GetSessionStateResult,
+  GetTransportStateResult,
   LanWireEventReceivedEvent,
   MessageAckEvent,
   MessageReceivedEvent,
-  OpenSessionOptions,
+  OpenTransportOptions,
   SendLanEventOptions,
   SendMessageOptions,
-  SessionClosedEvent,
-  SessionOpenedEvent,
+  TransportClosedEvent,
+  TransportOpenedEvent,
   TransportErrorEvent
 } from '@synra/capacitor-device-connection'
 import {
@@ -37,7 +37,7 @@ function createMockAdapter(): ConnectionRuntimeAdapter {
     }
   ]
 
-  let sessionOpenedListener: ((event: SessionOpenedEvent) => void) | undefined
+  let sessionOpenedListener: ((event: TransportOpenedEvent) => void) | undefined
   let messageListener: ((event: MessageReceivedEvent) => void) | undefined
 
   return {
@@ -47,8 +47,8 @@ function createMockAdapter(): ConnectionRuntimeAdapter {
     async listDiscoveredDevices() {
       return { state: 'scanning', devices }
     },
-    async openSession(options: OpenSessionOptions) {
-      const event: SessionOpenedEvent = {
+    async openTransport(options: OpenTransportOptions) {
+      const event: TransportOpenedEvent = {
         deviceId: options.deviceId,
         host: options.host,
         port: options.port,
@@ -58,7 +58,7 @@ function createMockAdapter(): ConnectionRuntimeAdapter {
       sessionOpenedListener?.(event)
       return { deviceId: event.deviceId, state: 'open', transport: 'tcp' }
     },
-    async closeSession() {},
+    async closeTransport() {},
     async sendMessage(options: SendMessageOptions) {
       messageListener?.({
         requestId: options.requestId,
@@ -73,7 +73,7 @@ function createMockAdapter(): ConnectionRuntimeAdapter {
       })
     },
     async sendLanEvent(_options: SendLanEventOptions) {},
-    async getSessionState(_deviceId?: string): Promise<GetSessionStateResult> {
+    async getTransportState(_deviceId?: string): Promise<GetTransportStateResult> {
       return { state: 'idle', transport: 'tcp' }
     },
     async addDeviceConnectableUpdatedListener(
@@ -84,11 +84,11 @@ function createMockAdapter(): ConnectionRuntimeAdapter {
     async addDeviceLostListener(_listener: (event: DeviceLostEvent) => void) {
       return { remove: async () => {} }
     },
-    async addSessionOpenedListener(listener: (event: SessionOpenedEvent) => void) {
+    async addTransportOpenedListener(listener: (event: TransportOpenedEvent) => void) {
       sessionOpenedListener = listener
       return { remove: async () => {} }
     },
-    async addSessionClosedListener(_listener: (event: SessionClosedEvent) => void) {
+    async addTransportClosedListener(_listener: (event: TransportClosedEvent) => void) {
       return { remove: async () => {} }
     },
     async addMessageReceivedListener(listener: (event: MessageReceivedEvent) => void) {
@@ -133,7 +133,7 @@ test('cleanup runtime options', () => {
 })
 
 test('transport error closes connected session state', async () => {
-  let sessionOpenedListener: ((event: SessionOpenedEvent) => void) | undefined
+  let sessionOpenedListener: ((event: TransportOpenedEvent) => void) | undefined
   let transportErrorListener: ((event: TransportErrorEvent) => void) | undefined
 
   configureHooksRuntime({
@@ -173,8 +173,8 @@ test('transport error closes connected session state', async () => {
           ]
         }
       },
-      async openSession(options: OpenSessionOptions) {
-        const openedEvent: SessionOpenedEvent = {
+      async openTransport(options: OpenTransportOptions) {
+        const openedEvent: TransportOpenedEvent = {
           deviceId: options.deviceId,
           host: options.host,
           port: options.port,
@@ -184,10 +184,10 @@ test('transport error closes connected session state', async () => {
         sessionOpenedListener?.(openedEvent)
         return { deviceId: openedEvent.deviceId, state: 'open', transport: 'tcp' as const }
       },
-      async closeSession() {},
+      async closeTransport() {},
       async sendMessage() {},
       async sendLanEvent() {},
-      async getSessionState(): Promise<GetSessionStateResult> {
+      async getTransportState(): Promise<GetTransportStateResult> {
         return { state: 'idle', transport: 'tcp' }
       },
       async addDeviceConnectableUpdatedListener() {
@@ -196,11 +196,11 @@ test('transport error closes connected session state', async () => {
       async addDeviceLostListener() {
         return { remove: async () => {} }
       },
-      async addSessionOpenedListener(listener: (event: SessionOpenedEvent) => void) {
+      async addTransportOpenedListener(listener: (event: TransportOpenedEvent) => void) {
         sessionOpenedListener = listener
         return { remove: async () => {} }
       },
-      async addSessionClosedListener() {
+      async addTransportClosedListener() {
         return { remove: async () => {} }
       },
       async addMessageReceivedListener() {
@@ -270,13 +270,13 @@ test('startScan clears peer list when discovery returns empty', async () => {
       async listDiscoveredDevices() {
         return { state: 'scanning' as const, devices: [] }
       },
-      async openSession() {
+      async openTransport() {
         throw new Error('should not probe-verify on empty scan')
       },
-      async closeSession() {},
+      async closeTransport() {},
       async sendMessage() {},
       async sendLanEvent() {},
-      async getSessionState(): Promise<GetSessionStateResult> {
+      async getTransportState(): Promise<GetTransportStateResult> {
         return { state: 'idle', transport: 'tcp' }
       },
       async addDeviceConnectableUpdatedListener() {
@@ -285,10 +285,10 @@ test('startScan clears peer list when discovery returns empty', async () => {
       async addDeviceLostListener() {
         return { remove: async () => {} }
       },
-      async addSessionOpenedListener() {
+      async addTransportOpenedListener() {
         return { remove: async () => {} }
       },
-      async addSessionClosedListener() {
+      async addTransportClosedListener() {
         return { remove: async () => {} }
       },
       async addMessageReceivedListener() {
@@ -317,7 +317,7 @@ test('startScan clears peer list when discovery returns empty', async () => {
 
 test('session is not open error marks transport dead and reconnects', async () => {
   let openCounter = 0
-  let sessionOpenedListener: ((event: SessionOpenedEvent) => void) | undefined
+  let sessionOpenedListener: ((event: TransportOpenedEvent) => void) | undefined
   configureHooksRuntime({
     resolveSynraConnectType: () => 'fresh',
     adapterFactory: () => ({
@@ -355,7 +355,7 @@ test('session is not open error marks transport dead and reconnects', async () =
           ]
         }
       },
-      async openSession(options: OpenSessionOptions) {
+      async openTransport(options: OpenTransportOptions) {
         openCounter += 1
         sessionOpenedListener?.({
           deviceId: options.deviceId,
@@ -370,12 +370,12 @@ test('session is not open error marks transport dead and reconnects', async () =
           transport: 'tcp'
         }
       },
-      async closeSession() {},
+      async closeTransport() {},
       async sendMessage() {},
       async sendLanEvent() {
         throw new Error('Session is not open.')
       },
-      async getSessionState(): Promise<GetSessionStateResult> {
+      async getTransportState(): Promise<GetTransportStateResult> {
         return { state: 'idle', transport: 'tcp' }
       },
       async addDeviceConnectableUpdatedListener() {
@@ -384,11 +384,11 @@ test('session is not open error marks transport dead and reconnects', async () =
       async addDeviceLostListener() {
         return { remove: async () => {} }
       },
-      async addSessionOpenedListener(listener: (event: SessionOpenedEvent) => void) {
+      async addTransportOpenedListener(listener: (event: TransportOpenedEvent) => void) {
         sessionOpenedListener = listener
         return { remove: async () => {} }
       },
-      async addSessionClosedListener() {
+      async addTransportClosedListener() {
         return { remove: async () => {} }
       },
       async addMessageReceivedListener() {

@@ -3,8 +3,8 @@ declare global {
     id: number
     timestamp: number
     type:
-      | 'transport.session.opened'
-      | 'transport.session.closed'
+      | 'transport.opened'
+      | 'transport.closed'
       | 'transport.message.received'
       | 'transport.message.ack'
       | 'transport.error'

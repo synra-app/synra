@@ -2,14 +2,14 @@ import { BridgeError } from '../shared/errors/bridge-error'
 import { BRIDGE_ERROR_CODES } from '../shared/errors/codes'
 import type {
   DeviceDiscoveryListResult,
-  DeviceSessionCloseOptions,
-  DeviceSessionCloseResult,
-  DeviceSessionGetStateOptions,
-  DeviceSessionOpenOptions,
-  DeviceSessionOpenResult,
-  DeviceSessionSendMessageOptions,
-  DeviceSessionSendMessageResult,
-  DeviceSessionSnapshot,
+  DeviceTransportCloseOptions,
+  DeviceTransportCloseResult,
+  DeviceTransportGetStateOptions,
+  DeviceTransportOpenOptions,
+  DeviceTransportOpenResult,
+  DeviceTransportSendMessageOptions,
+  DeviceTransportSendMessageResult,
+  DeviceTransportSnapshot,
   DeviceDiscoveryPullHostEventsResult,
   DeviceDiscoveryStartOptions,
   DeviceDiscoveryStartResult,
@@ -70,22 +70,22 @@ export interface ElectronBridgePlugin {
     timeoutMs?: number
     signal?: AbortSignal
   }): Promise<DeviceDiscoveryListResult>
-  openConnectionSession(
-    options: DeviceSessionOpenOptions,
+  openConnectionTransport(
+    options: DeviceTransportOpenOptions,
     invokeOptions?: { timeoutMs?: number; signal?: AbortSignal }
-  ): Promise<DeviceSessionOpenResult>
-  closeConnectionSession(
-    options?: DeviceSessionCloseOptions,
+  ): Promise<DeviceTransportOpenResult>
+  closeConnectionTransport(
+    options?: DeviceTransportCloseOptions,
     invokeOptions?: { timeoutMs?: number; signal?: AbortSignal }
-  ): Promise<DeviceSessionCloseResult>
-  sendConnectionSessionMessage(
-    options: DeviceSessionSendMessageOptions,
+  ): Promise<DeviceTransportCloseResult>
+  sendConnectionTransportMessage(
+    options: DeviceTransportSendMessageOptions,
     invokeOptions?: { timeoutMs?: number; signal?: AbortSignal }
-  ): Promise<DeviceSessionSendMessageResult>
-  getConnectionSessionState(
-    options?: DeviceSessionGetStateOptions,
+  ): Promise<DeviceTransportSendMessageResult>
+  getConnectionTransportState(
+    options?: DeviceTransportGetStateOptions,
     invokeOptions?: { timeoutMs?: number; signal?: AbortSignal }
-  ): Promise<DeviceSessionSnapshot>
+  ): Promise<DeviceTransportSnapshot>
   pullConnectionHostEvents(invokeOptions?: {
     timeoutMs?: number
     signal?: AbortSignal
@@ -163,33 +163,33 @@ export function createElectronBridgePlugin(invoke: BridgeInvoke): ElectronBridge
     ): Promise<DeviceDiscoveryListResult> {
       return invoke(API_METHODS.listDiscoveredDevices, {}, invokeOptions)
     },
-    async openConnectionSession(
-      options: DeviceSessionOpenOptions,
+    async openConnectionTransport(
+      options: DeviceTransportOpenOptions,
       invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {}
-    ): Promise<DeviceSessionOpenResult> {
-      ensureObject(options, 'openConnectionSession options must be an object.')
-      return invoke(API_METHODS.openConnectionSession, options, invokeOptions)
+    ): Promise<DeviceTransportOpenResult> {
+      ensureObject(options, 'openConnectionTransport options must be an object.')
+      return invoke(API_METHODS.openConnectionTransport, options, invokeOptions)
     },
-    async closeConnectionSession(
-      options: DeviceSessionCloseOptions = {},
+    async closeConnectionTransport(
+      options: DeviceTransportCloseOptions = {},
       invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {}
-    ): Promise<DeviceSessionCloseResult> {
-      ensureObject(options, 'closeConnectionSession options must be an object.')
-      return invoke(API_METHODS.closeConnectionSession, options, invokeOptions)
+    ): Promise<DeviceTransportCloseResult> {
+      ensureObject(options, 'closeConnectionTransport options must be an object.')
+      return invoke(API_METHODS.closeConnectionTransport, options, invokeOptions)
     },
-    async sendConnectionSessionMessage(
-      options: DeviceSessionSendMessageOptions,
+    async sendConnectionTransportMessage(
+      options: DeviceTransportSendMessageOptions,
       invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {}
-    ): Promise<DeviceSessionSendMessageResult> {
-      ensureObject(options, 'sendConnectionSessionMessage options must be an object.')
-      return invoke(API_METHODS.sendConnectionSessionMessage, options, invokeOptions)
+    ): Promise<DeviceTransportSendMessageResult> {
+      ensureObject(options, 'sendConnectionTransportMessage options must be an object.')
+      return invoke(API_METHODS.sendConnectionTransportMessage, options, invokeOptions)
     },
-    async getConnectionSessionState(
-      options: DeviceSessionGetStateOptions = {},
+    async getConnectionTransportState(
+      options: DeviceTransportGetStateOptions = {},
       invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {}
-    ): Promise<DeviceSessionSnapshot> {
-      ensureObject(options, 'getConnectionSessionState options must be an object.')
-      return invoke(API_METHODS.getConnectionSessionState, options, invokeOptions)
+    ): Promise<DeviceTransportSnapshot> {
+      ensureObject(options, 'getConnectionTransportState options must be an object.')
+      return invoke(API_METHODS.getConnectionTransportState, options, invokeOptions)
     },
     async pullConnectionHostEvents(
       invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {}

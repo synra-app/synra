@@ -81,7 +81,9 @@ describe('host/services/plugin-runtime.service', () => {
     const seenTypes: string[] = []
 
     const result = await runtime.executeSelected({
-      sessionId: 'session-1',
+      requestId: 'req-exec-1',
+      sourceDeviceId: 'local',
+      targetDeviceId: 'remote',
       input: { type: 'url', raw: 'https://github.com/synra' },
       action: buildAction(),
       emitMessage: (message) => {
@@ -98,7 +100,9 @@ describe('host/services/plugin-runtime.service', () => {
     runtime.register(createTestPlugin(true))
 
     const result = await runtime.executeSelected({
-      sessionId: 'session-1',
+      requestId: 'req-exec-2',
+      sourceDeviceId: 'local',
+      targetDeviceId: 'remote',
       input: { type: 'url', raw: 'https://github.com/synra' },
       action: buildAction()
     })

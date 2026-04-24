@@ -6,16 +6,16 @@ import type {
   DeviceDiscoveryPullHostEventsResult,
   DeviceDiscoveryStartOptions,
   DeviceDiscoveryStartResult,
-  DeviceSessionCloseOptions,
-  DeviceSessionCloseResult,
-  DeviceSessionGetStateOptions,
-  DeviceSessionOpenOptions,
-  DeviceSessionOpenResult,
-  DeviceSessionSendLanEventOptions,
-  DeviceSessionSendLanEventResult,
-  DeviceSessionSendMessageOptions,
-  DeviceSessionSendMessageResult,
-  DeviceSessionSnapshot
+  DeviceTransportCloseOptions,
+  DeviceTransportCloseResult,
+  DeviceTransportGetStateOptions,
+  DeviceTransportOpenOptions,
+  DeviceTransportOpenResult,
+  DeviceTransportSendLanEventOptions,
+  DeviceTransportSendLanEventResult,
+  DeviceTransportSendMessageOptions,
+  DeviceTransportSendMessageResult,
+  DeviceTransportSnapshot
 } from '../../shared/protocol/types'
 import { DEFAULT_HEARTBEAT_INTERVAL_MS } from './device-discovery/core/constants'
 import { getOrCreateLocalDeviceUuid } from './device-discovery/core/device-identity'
@@ -38,11 +38,13 @@ export interface DeviceDiscoveryService {
   startDiscovery(options?: DeviceDiscoveryStartOptions): Promise<DeviceDiscoveryStartResult>
   stopDiscovery(): Promise<{ success: true }>
   listDevices(): Promise<DeviceDiscoveryListResult>
-  openSession(options: DeviceSessionOpenOptions): Promise<DeviceSessionOpenResult>
-  closeSession(options?: DeviceSessionCloseOptions): Promise<DeviceSessionCloseResult>
-  sendMessage(options: DeviceSessionSendMessageOptions): Promise<DeviceSessionSendMessageResult>
-  sendLanEvent(options: DeviceSessionSendLanEventOptions): Promise<DeviceSessionSendLanEventResult>
-  getSessionState(options?: DeviceSessionGetStateOptions): Promise<DeviceSessionSnapshot>
+  openTransport(options: DeviceTransportOpenOptions): Promise<DeviceTransportOpenResult>
+  closeTransport(options?: DeviceTransportCloseOptions): Promise<DeviceTransportCloseResult>
+  sendMessage(options: DeviceTransportSendMessageOptions): Promise<DeviceTransportSendMessageResult>
+  sendLanEvent(
+    options: DeviceTransportSendLanEventOptions
+  ): Promise<DeviceTransportSendLanEventResult>
+  getTransportState(options?: DeviceTransportGetStateOptions): Promise<DeviceTransportSnapshot>
   pullHostEvents(): Promise<DeviceDiscoveryPullHostEventsResult>
 }
 
@@ -99,11 +101,11 @@ export function createDeviceDiscoveryService(
     hostStarted = false
   }
 
-  const resolveSessionState = async (
-    queryOptions: DeviceSessionGetStateOptions = {}
-  ): Promise<DeviceSessionSnapshot> => {
+  const resolveTransportState = async (
+    queryOptions: DeviceTransportGetStateOptions = {}
+  ): Promise<DeviceTransportSnapshot> => {
     if (queryOptions.targetDeviceId) {
-      const inboundState = inboundTransport.getSessionState(queryOptions.targetDeviceId)
+      const inboundState = inboundTransport.getTransportState(queryOptions.targetDeviceId)
       if (inboundState) {
         return inboundState
       }
@@ -113,7 +115,7 @@ export function createDeviceDiscoveryService(
     if (outboundState.state === 'open') {
       return outboundState
     }
-    return inboundTransport.getSessionState() ?? outboundState
+    return inboundTransport.getTransportState() ?? outboundState
   }
 
   return {
@@ -133,15 +135,15 @@ export function createDeviceDiscoveryService(
         devices: registry.list()
       }
     },
-    async openSession(openOptions) {
+    async openTransport(openOptions) {
       await ensureHostStarted()
       return outboundSession.open(openOptions)
     },
-    async closeSession(closeOptions = {}) {
+    async closeTransport(closeOptions = {}) {
       const targetDeviceId = closeOptions.targetDeviceId
       if (!targetDeviceId) {
         await outboundSession.close(closeOptions)
-        await inboundTransport.closeSession()
+        await inboundTransport.closeTransport()
         return {
           success: true,
           targetDeviceId: undefined,
@@ -152,7 +154,7 @@ export function createDeviceDiscoveryService(
       if (outboundState.deviceId === targetDeviceId) {
         return outboundSession.close(closeOptions)
       }
-      await inboundTransport.closeSession(targetDeviceId)
+      await inboundTransport.closeTransport(targetDeviceId)
       return {
         success: true,
         targetDeviceId,
@@ -168,7 +170,7 @@ export function createDeviceDiscoveryService(
       }
       const sentViaInbound = await inboundTransport.sendMessage(sendOptions)
       if (!sentViaInbound) {
-        throw new BridgeError(BRIDGE_ERROR_CODES.unsupportedOperation, 'Session is not open.')
+        throw new BridgeError(BRIDGE_ERROR_CODES.unsupportedOperation, 'Transport is not open.')
       }
       return {
         success: true,
@@ -186,7 +188,7 @@ export function createDeviceDiscoveryService(
       }
       const sentViaInbound = await inboundTransport.sendLanEvent(sendOptions)
       if (!sentViaInbound) {
-        throw new BridgeError(BRIDGE_ERROR_CODES.unsupportedOperation, 'Session is not open.')
+        throw new BridgeError(BRIDGE_ERROR_CODES.unsupportedOperation, 'Transport is not open.')
       }
       return {
         success: true,
@@ -194,8 +196,8 @@ export function createDeviceDiscoveryService(
         transport: 'tcp'
       }
     },
-    async getSessionState(getStateOptions = {}) {
-      return resolveSessionState(getStateOptions)
+    async getTransportState(getStateOptions = {}) {
+      return resolveTransportState(getStateOptions)
     },
     async pullHostEvents() {
       return eventBus.drain()

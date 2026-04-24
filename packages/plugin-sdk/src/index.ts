@@ -143,6 +143,11 @@ export function getSynraPluginMetaFromManifest(
 }
 
 export { normalizePluginPagePath, pluginFilePathToPagePath } from './page-path'
+export {
+  createSynraPluginEvent,
+  type SynraPluginEvent,
+  type SynraPluginEventSpec
+} from './transport/create-synra-plugin-event'
 
 export type {
   PluginWorkerRuntime,

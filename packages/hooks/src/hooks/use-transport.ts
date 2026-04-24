@@ -4,7 +4,7 @@ import { computed } from 'vue'
 import type {
   SynraConnectionFilter,
   SynraConnectionMessage,
-  RuntimeOpenSessionInput,
+  RuntimeOpenTransportInput,
   SynraLanWireSendInput
 } from '../types'
 import { getConnectionRuntime } from '../runtime/core'
@@ -24,7 +24,7 @@ type SynraTransportIncoming = {
   receivedAt: number
 }
 
-export type ConnectToDeviceOptions = Pick<RuntimeOpenSessionInput, 'suppressGlobalError'>
+export type ConnectToDeviceOptions = Pick<RuntimeOpenTransportInput, 'suppressGlobalError'>
 
 function isTransportLive(session: { transport: string }): boolean {
   return session.transport === 'ready' || session.transport === 'handshaking'
@@ -139,7 +139,7 @@ export function useTransport() {
     if (openedSession?.deviceId) {
       return openedSession.deviceId
     }
-    await runtime.openSession({
+    await runtime.openTransport({
       deviceId: target.deviceId,
       host: target.ipAddress,
       port: target.port ?? 32100,
@@ -171,7 +171,7 @@ export function useTransport() {
     if (openedSession?.deviceId) {
       return openedSession.deviceId
     }
-    await runtime.openSession({
+    await runtime.openTransport({
       deviceId,
       host: hostTrimmed,
       port: resolvedPort,
@@ -207,7 +207,7 @@ export function useTransport() {
       return
     }
     for (const session of liveSessions) {
-      await runtime.closeSession(session.deviceId)
+      await runtime.closeTransport(session.deviceId)
     }
   }
 

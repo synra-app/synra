@@ -67,7 +67,9 @@ describe('api/plugin', () => {
     }
     const plugin = createElectronBridgePlugin(invoke)
     const result = await plugin.executeRuntimeAction({
-      sessionId: 'session-1',
+      requestId: 'req-exec-1',
+      sourceDeviceId: 'local',
+      targetDeviceId: 'remote',
       input: { type: 'url', raw: 'https://github.com/synra' },
       action: {
         actionId: 'a1',

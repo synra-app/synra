@@ -1,7 +1,7 @@
 import { unknownToErrorMessage } from '@synra/protocol'
 import type { Ref } from 'vue'
 import type {
-  RuntimeOpenSessionInput,
+  RuntimeOpenTransportInput,
   RuntimeSessionState,
   SynraConnectionSendInput,
   SynraLanWireSendInput
@@ -11,8 +11,8 @@ import type { ConnectedSessionsBook } from './connected-sessions-book'
 import { getHooksRuntimeOptions } from './config'
 import { setSessionStateWithTransitionLog } from './session-state-transition-log'
 
-const OPEN_SESSION_ERROR_MESSAGE = 'Failed to open session.'
-const CLOSE_SESSION_ERROR_MESSAGE = 'Failed to close session.'
+const OPEN_TRANSPORT_ERROR_MESSAGE = 'Failed to open transport.'
+const CLOSE_TRANSPORT_ERROR_MESSAGE = 'Failed to close transport.'
 const SEND_MESSAGE_ERROR_MESSAGE = 'Failed to send message.'
 const SEND_LAN_EVENT_ERROR_MESSAGE = 'Failed to send LAN event.'
 
@@ -21,7 +21,10 @@ function isSessionNotOpenFailure(unknownError: unknown): boolean {
   if (message.length === 0) {
     return false
   }
-  return message.toLowerCase().includes('session is not open')
+  return (
+    message.toLowerCase().includes('session is not open') ||
+    message.toLowerCase().includes('transport is not open')
+  )
 }
 
 export function createSessionOperationsModule(options: {
@@ -30,27 +33,27 @@ export function createSessionOperationsModule(options: {
   sessionState: Ref<RuntimeSessionState>
   sessionsBook: ConnectedSessionsBook
 }): {
-  openSession(options: RuntimeOpenSessionInput): Promise<void>
-  closeSession(deviceId?: string): Promise<void>
+  openTransport(options: RuntimeOpenTransportInput): Promise<void>
+  closeTransport(deviceId?: string): Promise<void>
   sendMessage(input: SynraConnectionSendInput): Promise<void>
   sendLanEvent(input: SynraLanWireSendInput): Promise<void>
 } {
   const { adapter, error, sessionState, sessionsBook } = options
 
-  const openSessionInflightKeys = new Set<string>()
+  const openTransportInflightKeys = new Set<string>()
 
-  function openSessionInflightKey(openOptions: RuntimeOpenSessionInput): string {
+  function openTransportInflightKey(openOptions: RuntimeOpenTransportInput): string {
     const host = openOptions.host.trim().toLowerCase()
     const port = openOptions.port > 0 ? openOptions.port : 32100
     return `${openOptions.deviceId}:${host}:${port}`
   }
 
-  async function openSession(openOptions: RuntimeOpenSessionInput): Promise<void> {
-    const key = openSessionInflightKey(openOptions)
-    if (openSessionInflightKeys.has(key)) {
+  async function openTransport(openOptions: RuntimeOpenTransportInput): Promise<void> {
+    const key = openTransportInflightKey(openOptions)
+    if (openTransportInflightKeys.has(key)) {
       return
     }
-    openSessionInflightKeys.add(key)
+    openTransportInflightKeys.add(key)
     const suppressGlobalError = openOptions.suppressGlobalError === true
     try {
       const hook = getHooksRuntimeOptions().resolveSynraConnectType
@@ -58,10 +61,10 @@ export function createSessionOperationsModule(options: {
       const connectType = openOptions.connectType ?? fromHook
       if (connectType !== 'fresh' && connectType !== 'paired') {
         throw new Error(
-          'connectType is required: set RuntimeOpenSessionInput.connectType or configureHooksRuntime({ resolveSynraConnectType }).'
+          'connectType is required: set RuntimeOpenTransportInput.connectType or configureHooksRuntime({ resolveSynraConnectType }).'
         )
       }
-      await adapter.openSession({
+      await adapter.openTransport({
         deviceId: openOptions.deviceId,
         host: openOptions.host,
         port: openOptions.port,
@@ -70,17 +73,17 @@ export function createSessionOperationsModule(options: {
       error.value = null
     } catch (unknownError) {
       if (!suppressGlobalError) {
-        error.value = unknownToErrorMessage(unknownError, OPEN_SESSION_ERROR_MESSAGE)
+        error.value = unknownToErrorMessage(unknownError, OPEN_TRANSPORT_ERROR_MESSAGE)
       }
       throw unknownError
     } finally {
-      openSessionInflightKeys.delete(key)
+      openTransportInflightKeys.delete(key)
     }
   }
 
-  async function closeSession(deviceId?: string): Promise<void> {
+  async function closeTransport(deviceId?: string): Promise<void> {
     try {
-      await adapter.closeSession(deviceId)
+      await adapter.closeTransport(deviceId)
       const shouldClearCurrentSession =
         !sessionState.value.deviceId || !deviceId || sessionState.value.deviceId === deviceId
       setSessionStateWithTransitionLog(
@@ -93,12 +96,12 @@ export function createSessionOperationsModule(options: {
           state: 'closed',
           closedAt: Date.now()
         },
-        { reason: 'manual_close_session' }
+        { reason: 'manual_close_transport' }
       )
       sessionsBook.markTransportDead(deviceId, Date.now())
       error.value = null
     } catch (unknownError) {
-      error.value = unknownToErrorMessage(unknownError, CLOSE_SESSION_ERROR_MESSAGE)
+      error.value = unknownToErrorMessage(unknownError, CLOSE_TRANSPORT_ERROR_MESSAGE)
     }
   }
 
@@ -178,8 +181,8 @@ export function createSessionOperationsModule(options: {
   }
 
   return {
-    openSession,
-    closeSession,
+    openTransport,
+    closeTransport,
     sendMessage,
     sendLanEvent
   }

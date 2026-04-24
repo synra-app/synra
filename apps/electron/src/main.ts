@@ -5,19 +5,19 @@ import { BRIDGE_HOST_EVENT_CHANNEL, setupBridgeMainRuntime } from './bridge/main
 import type {
   DeviceDiscoveryHostEvent,
   DeviceDiscoveryStartOptions,
-  DeviceSessionOpenOptions,
-  DeviceSessionSendLanEventOptions,
-  DeviceSessionSendMessageOptions
+  DeviceTransportOpenOptions,
+  DeviceTransportSendLanEventOptions,
+  DeviceTransportSendMessageOptions
 } from '@synra/capacitor-electron'
 
 type MainHooksBridge = {
   startDiscovery: (options?: DeviceDiscoveryStartOptions) => Promise<unknown>
   listDiscoveredDevices: () => Promise<unknown>
-  openSession: (options: DeviceSessionOpenOptions) => Promise<unknown>
-  closeSession: (sessionId?: string) => Promise<unknown>
-  sendMessage: (options: DeviceSessionSendMessageOptions) => Promise<unknown>
-  sendLanEvent: (options: DeviceSessionSendLanEventOptions) => Promise<unknown>
-  getSessionState: (sessionId?: string) => Promise<unknown>
+  openTransport: (options: DeviceTransportOpenOptions) => Promise<unknown>
+  closeTransport: (targetDeviceId?: string) => Promise<unknown>
+  sendMessage: (options: DeviceTransportSendMessageOptions) => Promise<unknown>
+  sendLanEvent: (options: DeviceTransportSendLanEventOptions) => Promise<unknown>
+  getTransportState: (targetDeviceId?: string) => Promise<unknown>
   onHostEvent: (listener: (event: DeviceDiscoveryHostEvent) => void) => () => void
 }
 
@@ -181,11 +181,13 @@ function registerCapacitorElectronBridge(): void {
   bridgeTarget.__synraHooksMainBridge = {
     startDiscovery: (options) => runtime.deviceDiscoveryService.startDiscovery(options),
     listDiscoveredDevices: () => runtime.deviceDiscoveryService.listDevices(),
-    openSession: (options) => runtime.connectionService.openSession(options),
-    closeSession: (sessionId) => runtime.connectionService.closeSession({ sessionId }),
+    openTransport: (options) => runtime.connectionService.openTransport(options),
+    closeTransport: (targetDeviceId) =>
+      runtime.connectionService.closeTransport({ targetDeviceId }),
     sendMessage: (options) => runtime.connectionService.sendMessage(options),
     sendLanEvent: (options) => runtime.connectionService.sendLanEvent(options),
-    getSessionState: (sessionId) => runtime.connectionService.getSessionState({ sessionId }),
+    getTransportState: (targetDeviceId) =>
+      runtime.connectionService.getTransportState({ targetDeviceId }),
     onHostEvent(listener) {
       hostEventListeners.add(listener)
       return () => {

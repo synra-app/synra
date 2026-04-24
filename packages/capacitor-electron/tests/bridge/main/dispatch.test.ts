@@ -53,53 +53,60 @@ function createHandlers() {
         state: 'idle' as const,
         devices: []
       })),
-      openSession: vi.fn(async () => ({
+      openTransport: vi.fn(async () => ({
         success: true as const,
-        sessionId: 'session-1',
-        state: 'open' as const
+        deviceId: 'dev-1',
+        state: 'open' as const,
+        transport: 'tcp' as const
       })),
-      closeSession: vi.fn(async () => ({ success: true as const, sessionId: 'session-1' })),
+      closeTransport: vi.fn(async () => ({
+        success: true as const,
+        targetDeviceId: 'dev-1',
+        transport: 'tcp' as const
+      })),
       sendMessage: vi.fn(async () => ({
         success: true as const,
         messageId: 'msg-1',
-        sessionId: 'session-1'
+        targetDeviceId: 'dev-1',
+        transport: 'tcp' as const
       })),
       sendLanEvent: vi.fn(async () => ({
         success: true as const,
-        sessionId: 'session-1',
+        targetDeviceId: 'dev-1',
         transport: 'tcp' as const
       })),
-      getSessionState: vi.fn(async () => ({
-        sessionId: 'session-1',
-        state: 'open' as const
+      getTransportState: vi.fn(async () => ({
+        deviceId: 'dev-1',
+        state: 'open' as const,
+        transport: 'tcp' as const
       })),
       pullHostEvents: vi.fn(async () => ({ events: [] }))
     },
     connectionService: {
-      openSession: vi.fn(async () => ({
+      openTransport: vi.fn(async () => ({
         success: true as const,
-        sessionId: 'session-1',
+        deviceId: 'dev-1',
         state: 'open' as const,
         transport: 'tcp' as const
       })),
-      closeSession: vi.fn(async () => ({
+      closeTransport: vi.fn(async () => ({
         success: true as const,
-        sessionId: 'session-1',
+        targetDeviceId: 'dev-1',
         transport: 'tcp' as const
       })),
       sendMessage: vi.fn(async () => ({
         success: true as const,
         messageId: 'msg-1',
-        sessionId: 'session-1',
+        targetDeviceId: 'dev-1',
         transport: 'tcp' as const
       })),
       sendLanEvent: vi.fn(async () => ({
         success: true as const,
-        sessionId: 'session-1',
+        targetDeviceId: 'dev-1',
         transport: 'tcp' as const
       })),
-      getSessionState: vi.fn(async () => ({
-        sessionId: 'session-1',
+      getTransportState: vi.fn(async () => ({
+        deviceId: 'dev-1',
         state: 'open' as const,
         transport: 'tcp' as const
       })),
@@ -199,53 +206,60 @@ describe('bridge/main/dispatch', () => {
           state: 'idle' as const,
           devices: []
         })),
-        openSession: vi.fn(async () => ({
+        openTransport: vi.fn(async () => ({
           success: true as const,
-          sessionId: 'session-1',
-          state: 'open' as const
+          deviceId: 'dev-1',
+          state: 'open' as const,
+          transport: 'tcp' as const
         })),
-        closeSession: vi.fn(async () => ({ success: true as const, sessionId: 'session-1' })),
+        closeTransport: vi.fn(async () => ({
+          success: true as const,
+          targetDeviceId: 'dev-1',
+          transport: 'tcp' as const
+        })),
         sendMessage: vi.fn(async () => ({
           success: true as const,
           messageId: 'msg-1',
-          sessionId: 'session-1'
+          targetDeviceId: 'dev-1',
+          transport: 'tcp' as const
         })),
         sendLanEvent: vi.fn(async () => ({
           success: true as const,
-          sessionId: 'session-1',
+          targetDeviceId: 'dev-1',
           transport: 'tcp' as const
         })),
-        getSessionState: vi.fn(async () => ({
-          sessionId: 'session-1',
-          state: 'open' as const
+        getTransportState: vi.fn(async () => ({
+          deviceId: 'dev-1',
+          state: 'open' as const,
+          transport: 'tcp' as const
         })),
         pullHostEvents: vi.fn(async () => ({ events: [] }))
       },
       connectionService: {
-        openSession: vi.fn(async () => ({
+        openTransport: vi.fn(async () => ({
           success: true as const,
-          sessionId: 'session-1',
+          deviceId: 'dev-1',
           state: 'open' as const,
           transport: 'tcp' as const
         })),
-        closeSession: vi.fn(async () => ({
+        closeTransport: vi.fn(async () => ({
           success: true as const,
-          sessionId: 'session-1',
+          targetDeviceId: 'dev-1',
           transport: 'tcp' as const
         })),
         sendMessage: vi.fn(async () => ({
           success: true as const,
           messageId: 'msg-1',
-          sessionId: 'session-1',
+          targetDeviceId: 'dev-1',
           transport: 'tcp' as const
         })),
         sendLanEvent: vi.fn(async () => ({
           success: true as const,
-          sessionId: 'session-1',
+          targetDeviceId: 'dev-1',
           transport: 'tcp' as const
         })),
-        getSessionState: vi.fn(async () => ({
-          sessionId: 'session-1',
+        getTransportState: vi.fn(async () => ({
+          deviceId: 'dev-1',
           state: 'open' as const,
           transport: 'tcp' as const
         })),

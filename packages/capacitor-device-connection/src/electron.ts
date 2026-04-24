@@ -1,12 +1,12 @@
 import { WebPlugin } from '@capacitor/core'
 import type {
-  CloseSessionOptions,
-  CloseSessionResult,
-  GetSessionStateOptions,
-  GetSessionStateResult,
+  CloseTransportOptions,
+  CloseTransportResult,
+  GetTransportStateOptions,
+  GetTransportStateResult,
   HostEvent,
-  OpenSessionOptions,
-  OpenSessionResult,
+  OpenTransportOptions,
+  OpenTransportResult,
   ProbeSynraPeersOptions,
   ProbeSynraPeersResult,
   PullHostEventsResult,
@@ -32,11 +32,14 @@ type BridgeInvoke = (
 ) => Promise<unknown>
 
 type ConnectionBridgeMethods = {
-  'connection.openSession': { payload: OpenSessionOptions; result: OpenSessionResult }
-  'connection.closeSession': { payload: CloseSessionOptions; result: CloseSessionResult }
+  'connection.openTransport': { payload: OpenTransportOptions; result: OpenTransportResult }
+  'connection.closeTransport': { payload: CloseTransportOptions; result: CloseTransportResult }
   'connection.sendMessage': { payload: SendMessageOptions; result: SendMessageResult }
   'connection.sendLanEvent': { payload: SendLanEventOptions; result: SendLanEventResult }
-  'connection.getSessionState': { payload: GetSessionStateOptions; result: GetSessionStateResult }
+  'connection.getTransportState': {
+    payload: GetTransportStateOptions
+    result: GetTransportStateResult
+  }
   'connection.pullHostEvents': { payload: Record<string, never>; result: PullHostEventsResult }
 }
 
@@ -126,7 +129,7 @@ export class DeviceConnectionElectron extends WebPlugin implements DeviceConnect
           timestamp: normalized.timestamp,
           transport: normalized.transport
         })
-      } else if (normalized.type === 'transport.session.opened') {
+      } else if (normalized.type === 'transport.opened') {
         const payload =
           normalized.payload && typeof normalized.payload === 'object'
             ? (normalized.payload as {
@@ -160,7 +163,7 @@ export class DeviceConnectionElectron extends WebPlugin implements DeviceConnect
         if (payload?.connectAckPayload && typeof payload.connectAckPayload === 'object') {
           opened.connectAckPayload = payload.connectAckPayload
         }
-        this.notifyListeners('sessionOpened', opened)
+        this.notifyListeners('transportOpened', opened)
       } else if (
         normalized.type === 'transport.lan.event.received' &&
         normalized.payload &&
@@ -192,8 +195,8 @@ export class DeviceConnectionElectron extends WebPlugin implements DeviceConnect
           eventPayload: pl.eventPayload,
           transport: normalized.transport
         })
-      } else if (normalized.type === 'transport.session.closed') {
-        this.notifyListeners('sessionClosed', {
+      } else if (normalized.type === 'transport.closed') {
+        this.notifyListeners('transportClosed', {
           deviceId: normalized.deviceId,
           reason: 'peer-closed',
           transport: normalized.transport
@@ -228,10 +231,10 @@ export class DeviceConnectionElectron extends WebPlugin implements DeviceConnect
     return invoke(method, payload) as Promise<ConnectionBridgeMethods[TMethod]['result']>
   }
 
-  async openSession(options: OpenSessionOptions): Promise<OpenSessionResult> {
+  async openTransport(options: OpenTransportOptions): Promise<OpenTransportResult> {
     this.ensureHostEventSubscription()
-    const result = await this.invokeBridge('connection.openSession', options)
-    this.notifyListeners('sessionOpened', {
+    const result = await this.invokeBridge('connection.openTransport', options)
+    this.notifyListeners('transportOpened', {
       deviceId: result.deviceId,
       transport: result.transport,
       direction: 'outbound',
@@ -241,10 +244,10 @@ export class DeviceConnectionElectron extends WebPlugin implements DeviceConnect
     return result
   }
 
-  async closeSession(options: CloseSessionOptions = {}): Promise<CloseSessionResult> {
+  async closeTransport(options: CloseTransportOptions = {}): Promise<CloseTransportResult> {
     this.ensureHostEventSubscription()
-    const result = await this.invokeBridge('connection.closeSession', options)
-    this.notifyListeners('sessionClosed', {
+    const result = await this.invokeBridge('connection.closeTransport', options)
+    this.notifyListeners('transportClosed', {
       deviceId: result.targetDeviceId,
       reason: 'closed-by-client',
       transport: result.transport
@@ -262,9 +265,11 @@ export class DeviceConnectionElectron extends WebPlugin implements DeviceConnect
     return this.invokeBridge('connection.sendLanEvent', options)
   }
 
-  async getSessionState(options: GetSessionStateOptions = {}): Promise<GetSessionStateResult> {
+  async getTransportState(
+    options: GetTransportStateOptions = {}
+  ): Promise<GetTransportStateResult> {
     this.ensureHostEventSubscription()
-    return this.invokeBridge('connection.getSessionState', options)
+    return this.invokeBridge('connection.getTransportState', options)
   }
 
   async pullHostEvents(): Promise<PullHostEventsResult> {

@@ -7,7 +7,7 @@ export type ConnectionTransport = 'tcp'
 /** App-layer enum for Synra `connect` payload; native code forwards only. */
 export type SynraLanConnectType = 'fresh' | 'paired'
 
-export type OpenSessionOptions = {
+export type OpenTransportOptions = {
   deviceId: string
   host: string
   port: number
@@ -17,13 +17,13 @@ export type OpenSessionOptions = {
   transport?: ConnectionTransport
 }
 
-export type SessionState = 'idle' | 'connecting' | 'open' | 'closed' | 'error'
+export type TransportState = 'idle' | 'connecting' | 'open' | 'closed' | 'error'
 
-export type SessionSnapshot = {
+export type TransportSnapshot = {
   deviceId?: string
   host?: string
   port?: number
-  state: SessionState
+  state: TransportState
   direction?: 'inbound' | 'outbound'
   transport: ConnectionTransport
   lastError?: string
@@ -31,21 +31,21 @@ export type SessionSnapshot = {
   closedAt?: number
 }
 
-export type OpenSessionResult = {
+export type OpenTransportResult = {
   success: true
   deviceId: string
-  state: SessionState
+  state: TransportState
   transport: ConnectionTransport
   /** Raw `connectAck` JSON payload from the peer (protocol-level; app interprets keys). */
   connectAckPayload?: Record<string, unknown>
 }
 
-export type CloseSessionOptions = {
+export type CloseTransportOptions = {
   targetDeviceId?: string
   transport?: ConnectionTransport
 }
 
-export type CloseSessionResult = {
+export type CloseTransportResult = {
   success: true
   targetDeviceId?: string
   transport: ConnectionTransport
@@ -87,19 +87,19 @@ export type SendLanEventResult = {
   transport: ConnectionTransport
 }
 
-export type GetSessionStateOptions = {
+export type GetTransportStateOptions = {
   targetDeviceId?: string
   transport?: ConnectionTransport
 }
 
-export type GetSessionStateResult = SessionSnapshot
+export type GetTransportStateResult = TransportSnapshot
 
 export type HostEvent = {
   id: number
   timestamp: number
   type:
-    | 'transport.session.opened'
-    | 'transport.session.closed'
+    | 'transport.opened'
+    | 'transport.closed'
     | 'transport.message.received'
     | 'transport.lan.event.received'
     | 'transport.message.ack'
@@ -121,7 +121,7 @@ export type PullHostEventsResult = {
   events: HostEvent[]
 }
 
-export type SessionOpenedEvent = {
+export type TransportOpenedEvent = {
   deviceId: string
   transport: ConnectionTransport
   direction?: 'inbound' | 'outbound'
@@ -159,7 +159,7 @@ export type SynraProbeResult = {
 export const SYNRA_PROBE_EMBEDDED_IN_DISCOVERY = 'SYNRA_PROBE_EMBEDDED_IN_DISCOVERY' as const
 
 export type ProbeSynraPeersOptions = {
-  /** Empty targets are allowed and should resolve with `results: []` (silent no-op). */
+  /** Empty targets are allowed and will resolve with `results: []` (silent no-op). */
   targets: SynraProbeTarget[]
   timeoutMs?: number
 }
@@ -178,7 +178,7 @@ export type LanWireEventReceivedEvent = {
   transport: ConnectionTransport
 }
 
-export type SessionClosedEvent = {
+export type TransportClosedEvent = {
   deviceId?: string
   transport: ConnectionTransport
   reason?: string
@@ -212,20 +212,20 @@ export type TransportErrorEvent = {
 }
 
 export interface DeviceConnectionPlugin {
-  openSession(options: OpenSessionOptions): Promise<OpenSessionResult>
-  closeSession(options?: CloseSessionOptions): Promise<CloseSessionResult>
+  openTransport(options: OpenTransportOptions): Promise<OpenTransportResult>
+  closeTransport(options?: CloseTransportOptions): Promise<CloseTransportResult>
   sendMessage(options: SendMessageOptions): Promise<SendMessageResult>
   sendLanEvent(options: SendLanEventOptions): Promise<SendLanEventResult>
-  getSessionState(options?: GetSessionStateOptions): Promise<GetSessionStateResult>
+  getTransportState(options?: GetTransportStateOptions): Promise<GetTransportStateResult>
   pullHostEvents(options?: { transport?: ConnectionTransport }): Promise<PullHostEventsResult>
   probeSynraPeers(options: ProbeSynraPeersOptions): Promise<ProbeSynraPeersResult>
   addListener(
-    eventName: 'sessionOpened',
-    listenerFunc: (event: SessionOpenedEvent) => void
+    eventName: 'transportOpened',
+    listenerFunc: (event: TransportOpenedEvent) => void
   ): Promise<PluginListenerHandle>
   addListener(
-    eventName: 'sessionClosed',
-    listenerFunc: (event: SessionClosedEvent) => void
+    eventName: 'transportClosed',
+    listenerFunc: (event: TransportClosedEvent) => void
   ): Promise<PluginListenerHandle>
   addListener(
     eventName: 'messageReceived',

@@ -1,7 +1,7 @@
 {
-  "name": "@synra/hooks",
+  "name": "@synra/transport-events",
   "version": "0.0.0",
-  "description": "Unified runtime-driven hooks for Synra.",
+  "description": "Synra runtime platform + LAN wire event registry (SynraEvent / createSynraEvent).",
   "license": "MIT",
   "files": [
     "dist"
@@ -27,17 +27,10 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
-    "@capacitor/app": "catalog:capacitor",
-    "@synra/transport-events": "workspace:*",
-    "@synra/capacitor-device-connection": "workspace:*",
-    "@synra/capacitor-lan-discovery": "workspace:*",
-    "@synra/capacitor-preferences": "workspace:*",
-    "@synra/protocol": "workspace:*",
-    "vue": "catalog:vue"
+    "@capacitor/core": "catalog:capacitor"
   },
   "devDependencies": {
     "@types/node": "catalog:types",
-    "bumpp": "catalog:release",
     "typescript": "catalog:types",
     "vite-plus": "catalog:vite"
   }

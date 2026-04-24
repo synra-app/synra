@@ -10,19 +10,19 @@ import {
   lostDeviceFromHostEvent
 } from '@synra/capacitor-lan-discovery'
 import type {
-  GetSessionStateResult,
+  GetTransportStateResult,
   HostEvent,
   LanWireEventReceivedEvent,
   MessageAckEvent,
   MessageReceivedEvent,
-  OpenSessionOptions,
+  OpenTransportOptions,
   ProbeSynraPeersOptions,
   ProbeSynraPeersResult,
   SendLanEventOptions,
   SendMessageOptions,
-  SessionState,
-  SessionClosedEvent,
-  SessionOpenedEvent,
+  TransportState,
+  TransportClosedEvent,
+  TransportOpenedEvent,
   TransportErrorEvent
 } from '@synra/capacitor-device-connection'
 import { SYNRA_PROBE_EMBEDDED_IN_DISCOVERY } from '@synra/capacitor-device-connection'
@@ -30,8 +30,8 @@ import type { ConnectionRuntimeAdapter } from '../adapter'
 import {
   mapLanWireEventReceivedHostEvent,
   mapMessageTypeFromHostEvent,
-  mapSessionClosedHostEvent,
-  mapSessionOpenedHostEvent,
+  mapTransportClosedHostEvent,
+  mapTransportOpenedHostEvent,
   mapTransportErrorHostEvent
 } from './electron-host-event-mappers'
 
@@ -41,13 +41,13 @@ type MainHooksBridge = {
     devices: DiscoveredDevice[]
   }>
   listDiscoveredDevices: () => Promise<ListDiscoveredDevicesResult>
-  openSession: (
-    options: OpenSessionOptions
-  ) => Promise<{ deviceId: string; state: SessionState; transport: 'tcp' }>
-  closeSession: (deviceId?: string) => Promise<unknown>
+  openTransport: (
+    options: OpenTransportOptions
+  ) => Promise<{ deviceId: string; state: TransportState; transport: 'tcp' }>
+  closeTransport: (deviceId?: string) => Promise<unknown>
   sendMessage: (options: SendMessageOptions) => Promise<unknown>
   sendLanEvent: (options: SendLanEventOptions) => Promise<unknown>
-  getSessionState: (deviceId?: string) => Promise<GetSessionStateResult>
+  getTransportState: (deviceId?: string) => Promise<GetTransportStateResult>
   onHostEvent: (listener: (event: HostEvent) => void) => () => void
 }
 
@@ -88,9 +88,9 @@ export function createElectronMainRuntimeAdapter(): ConnectionRuntimeAdapter {
         error: SYNRA_PROBE_EMBEDDED_IN_DISCOVERY
       }))
     }),
-    openSession: (options) => bridge.openSession(options),
-    closeSession: async (deviceId) => {
-      await bridge.closeSession(deviceId)
+    openTransport: (options) => bridge.openTransport(options),
+    closeTransport: async (deviceId) => {
+      await bridge.closeTransport(deviceId)
     },
     sendMessage: async (options) => {
       await bridge.sendMessage(options)
@@ -98,7 +98,7 @@ export function createElectronMainRuntimeAdapter(): ConnectionRuntimeAdapter {
     sendLanEvent: async (options) => {
       await bridge.sendLanEvent(options)
     },
-    getSessionState: (deviceId) => bridge.getSessionState(deviceId),
+    getTransportState: (deviceId) => bridge.getTransportState(deviceId),
     addDeviceConnectableUpdatedListener: async (
       listener: (event: DeviceConnectableUpdatedEvent) => void
     ) =>
@@ -120,16 +120,16 @@ export function createElectronMainRuntimeAdapter(): ConnectionRuntimeAdapter {
           ipAddress: lost.ipAddress
         })
       }),
-    addSessionOpenedListener: async (listener: (event: SessionOpenedEvent) => void) =>
+    addTransportOpenedListener: async (listener: (event: TransportOpenedEvent) => void) =>
       addHostListener((event) => {
-        const mapped = mapSessionOpenedHostEvent(event)
+        const mapped = mapTransportOpenedHostEvent(event)
         if (mapped) {
           listener(mapped)
         }
       }),
-    addSessionClosedListener: async (listener: (event: SessionClosedEvent) => void) =>
+    addTransportClosedListener: async (listener: (event: TransportClosedEvent) => void) =>
       addHostListener((event) => {
-        const mapped = mapSessionClosedHostEvent(event)
+        const mapped = mapTransportClosedHostEvent(event)
         if (mapped) {
           listener(mapped)
         }

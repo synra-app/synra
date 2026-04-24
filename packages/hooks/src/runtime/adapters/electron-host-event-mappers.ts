@@ -2,8 +2,8 @@ import type {
   HostEvent,
   LanWireEventReceivedEvent,
   SendMessageOptions,
-  SessionClosedEvent,
-  SessionOpenedEvent,
+  TransportClosedEvent,
+  TransportOpenedEvent,
   TransportErrorEvent
 } from '@synra/capacitor-device-connection'
 
@@ -33,8 +33,8 @@ function normalizeTransportErrorMessage(payload: unknown): string {
   return 'Transport error'
 }
 
-export function mapSessionOpenedHostEvent(event: HostEvent): SessionOpenedEvent | undefined {
-  if (event.type !== 'transport.session.opened') {
+export function mapTransportOpenedHostEvent(event: HostEvent): TransportOpenedEvent | undefined {
+  if (event.type !== 'transport.opened') {
     return undefined
   }
   const payload =
@@ -100,8 +100,8 @@ export function mapLanWireEventReceivedHostEvent(
   }
 }
 
-export function mapSessionClosedHostEvent(event: HostEvent): SessionClosedEvent | undefined {
-  if (event.type === 'transport.session.closed') {
+export function mapTransportClosedHostEvent(event: HostEvent): TransportClosedEvent | undefined {
+  if (event.type === 'transport.closed') {
     const payload =
       event.payload && typeof event.payload === 'object'
         ? (event.payload as Record<string, unknown>)

@@ -1,4 +1,4 @@
-import type { SessionOpenedEvent, SynraLanConnectType } from '@synra/capacitor-device-connection'
+import type { TransportOpenedEvent, SynraLanConnectType } from '@synra/capacitor-device-connection'
 import type { ConnectionRuntimeAdapter } from './adapter'
 
 export type HooksRuntimeOptions = {
@@ -26,7 +26,7 @@ export type HooksRuntimeOptions = {
    * Inbound session where the peer sent `connectType: fresh` but this host may still list them as paired.
    * Used to drop stale paired rows and surface the peer in discovery UI.
    */
-  repairStalePairingAfterInboundFreshConnect?: (event: SessionOpenedEvent) => void | Promise<void>
+  repairStalePairingAfterInboundFreshConnect?: (event: TransportOpenedEvent) => void | Promise<void>
 }
 
 let configuredOptions: HooksRuntimeOptions = {}

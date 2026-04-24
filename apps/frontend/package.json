@@ -17,6 +17,7 @@
     "@synra/capacitor-lan-discovery": "workspace:*",
     "@synra/capacitor-preferences": "workspace:*",
     "@synra/hooks": "workspace:*",
+    "@synra/transport-events": "workspace:*",
     "@synra/plugin-sdk": "workspace:*",
     "@synra/protocol": "workspace:*",
     "pinia": "^3.0.4",

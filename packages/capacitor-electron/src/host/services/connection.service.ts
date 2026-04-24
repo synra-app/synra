@@ -1,24 +1,26 @@
 import type {
   DeviceDiscoveryPullHostEventsResult,
-  DeviceSessionCloseOptions,
-  DeviceSessionCloseResult,
-  DeviceSessionGetStateOptions,
-  DeviceSessionOpenOptions,
-  DeviceSessionOpenResult,
-  DeviceSessionSendLanEventOptions,
-  DeviceSessionSendLanEventResult,
-  DeviceSessionSendMessageOptions,
-  DeviceSessionSendMessageResult,
-  DeviceSessionSnapshot
+  DeviceTransportCloseOptions,
+  DeviceTransportCloseResult,
+  DeviceTransportGetStateOptions,
+  DeviceTransportOpenOptions,
+  DeviceTransportOpenResult,
+  DeviceTransportSendLanEventOptions,
+  DeviceTransportSendLanEventResult,
+  DeviceTransportSendMessageOptions,
+  DeviceTransportSendMessageResult,
+  DeviceTransportSnapshot
 } from '../../shared/protocol/types'
 import type { DeviceDiscoveryService } from './device-discovery.service'
 
 export interface ConnectionService {
-  openSession(options: DeviceSessionOpenOptions): Promise<DeviceSessionOpenResult>
-  closeSession(options?: DeviceSessionCloseOptions): Promise<DeviceSessionCloseResult>
-  sendMessage(options: DeviceSessionSendMessageOptions): Promise<DeviceSessionSendMessageResult>
-  sendLanEvent(options: DeviceSessionSendLanEventOptions): Promise<DeviceSessionSendLanEventResult>
-  getSessionState(options?: DeviceSessionGetStateOptions): Promise<DeviceSessionSnapshot>
+  openTransport(options: DeviceTransportOpenOptions): Promise<DeviceTransportOpenResult>
+  closeTransport(options?: DeviceTransportCloseOptions): Promise<DeviceTransportCloseResult>
+  sendMessage(options: DeviceTransportSendMessageOptions): Promise<DeviceTransportSendMessageResult>
+  sendLanEvent(
+    options: DeviceTransportSendLanEventOptions
+  ): Promise<DeviceTransportSendLanEventResult>
+  getTransportState(options?: DeviceTransportGetStateOptions): Promise<DeviceTransportSnapshot>
   pullHostEvents(): Promise<DeviceDiscoveryPullHostEventsResult>
 }
 
@@ -32,16 +34,16 @@ export function createConnectionService(
   discoveryService: DeviceDiscoveryService
 ): ConnectionService {
   return {
-    async openSession(options) {
+    async openTransport(options) {
       const transport = options.transport ?? 'tcp'
       assertTcpTransport(transport)
-      const result = await discoveryService.openSession(options)
+      const result = await discoveryService.openTransport(options)
       return { ...result, transport: 'tcp' }
     },
-    async closeSession(options = {}) {
+    async closeTransport(options = {}) {
       const transport = options.transport ?? 'tcp'
       assertTcpTransport(transport)
-      const result = await discoveryService.closeSession(options)
+      const result = await discoveryService.closeTransport(options)
       return { ...result, transport: 'tcp' }
     },
     async sendMessage(options) {
@@ -56,10 +58,10 @@ export function createConnectionService(
       const result = await discoveryService.sendLanEvent(options)
       return { ...result, transport: 'tcp' }
     },
-    async getSessionState(options = {}) {
+    async getTransportState(options = {}) {
       const transport = options.transport ?? 'tcp'
       assertTcpTransport(transport)
-      const result = await discoveryService.getSessionState(options)
+      const result = await discoveryService.getTransportState(options)
       return { ...result, transport: 'tcp' }
     },
     async pullHostEvents() {

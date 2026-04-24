@@ -33,7 +33,7 @@ export function discoveredDeviceFromHostEvent(
   event: HostEventLike,
   now: number = Date.now()
 ): DiscoveredDevice | undefined {
-  if (event.type !== 'host.member.online' && event.type !== 'transport.session.opened') {
+  if (event.type !== 'host.member.online' && event.type !== 'transport.opened') {
     return undefined
   }
   const payload = toPayloadRecord(event.payload)

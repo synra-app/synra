@@ -64,11 +64,11 @@ export function isSupportedMethod(method: string): boolean {
     method === BRIDGE_METHODS.discoveryStart ||
     method === BRIDGE_METHODS.discoveryStop ||
     method === BRIDGE_METHODS.discoveryList ||
-    method === BRIDGE_METHODS.connectionOpenSession ||
-    method === BRIDGE_METHODS.connectionCloseSession ||
+    method === BRIDGE_METHODS.connectionOpenTransport ||
+    method === BRIDGE_METHODS.connectionCloseTransport ||
     method === BRIDGE_METHODS.connectionSendMessage ||
     method === BRIDGE_METHODS.connectionSendLanEvent ||
-    method === BRIDGE_METHODS.connectionGetSessionState ||
+    method === BRIDGE_METHODS.connectionGetTransportState ||
     method === BRIDGE_METHODS.connectionPullHostEvents ||
     method === BRIDGE_METHODS.preferencesGet ||
     method === BRIDGE_METHODS.preferencesSet ||

@@ -4,16 +4,16 @@ import { BridgeError } from '../../../../shared/errors/bridge-error'
 import { BRIDGE_ERROR_CODES } from '../../../../shared/errors/codes'
 import type {
   DeviceDiscoveryHostEvent,
-  DeviceSessionCloseOptions,
-  DeviceSessionCloseResult,
-  DeviceSessionGetStateOptions,
-  DeviceSessionOpenOptions,
-  DeviceSessionOpenResult,
-  DeviceSessionSendLanEventOptions,
-  DeviceSessionSendLanEventResult,
-  DeviceSessionSendMessageOptions,
-  DeviceSessionSendMessageResult,
-  DeviceSessionSnapshot
+  DeviceTransportCloseOptions,
+  DeviceTransportCloseResult,
+  DeviceTransportGetStateOptions,
+  DeviceTransportOpenOptions,
+  DeviceTransportOpenResult,
+  DeviceTransportSendLanEventOptions,
+  DeviceTransportSendLanEventResult,
+  DeviceTransportSendMessageOptions,
+  DeviceTransportSendMessageResult,
+  DeviceTransportSnapshot
 } from '../../../../shared/protocol/types'
 import { DEFAULT_ACK_TIMEOUT_MS, DEFAULT_HEARTBEAT_TIMEOUT_MS } from '../core/constants'
 import { localDisplayName } from '../core/device-identity'
@@ -32,7 +32,7 @@ type OutboundState = {
   remoteDisplayName?: string
   host?: string
   port?: number
-  state: DeviceSessionSnapshot['state']
+  state: DeviceTransportSnapshot['state']
   openedAt?: number
   closedAt?: number
   lastError?: string
@@ -45,11 +45,13 @@ type OutboundClientSessionOptions = {
 }
 
 export interface OutboundClientSession {
-  open(options: DeviceSessionOpenOptions): Promise<DeviceSessionOpenResult>
-  close(options?: DeviceSessionCloseOptions): Promise<DeviceSessionCloseResult>
-  sendMessage(options: DeviceSessionSendMessageOptions): Promise<DeviceSessionSendMessageResult>
-  sendLanEvent(options: DeviceSessionSendLanEventOptions): Promise<DeviceSessionSendLanEventResult>
-  getState(options?: DeviceSessionGetStateOptions): Promise<DeviceSessionSnapshot>
+  open(options: DeviceTransportOpenOptions): Promise<DeviceTransportOpenResult>
+  close(options?: DeviceTransportCloseOptions): Promise<DeviceTransportCloseResult>
+  sendMessage(options: DeviceTransportSendMessageOptions): Promise<DeviceTransportSendMessageResult>
+  sendLanEvent(
+    options: DeviceTransportSendLanEventOptions
+  ): Promise<DeviceTransportSendLanEventResult>
+  getState(options?: DeviceTransportGetStateOptions): Promise<DeviceTransportSnapshot>
   heartbeatTick(): Promise<void>
 }
 
@@ -221,7 +223,7 @@ export function createOutboundClientSession(
     if (frame.type === 'close') {
       closeWithError('REMOTE_CLOSED')
       options.eventBus.publish({
-        type: 'transport.session.closed',
+        type: 'transport.closed',
         remote: `${state.host ?? ''}:${String(state.port ?? '')}`,
         deviceId: state.deviceId,
         payload: { reason: 'REMOTE_CLOSED' },
@@ -286,7 +288,7 @@ export function createOutboundClientSession(
         }
         attachSocketHandlers(socket)
         options.eventBus.publish({
-          type: 'transport.session.opened',
+          type: 'transport.opened',
           remote: `${openOptions.host}:${String(openOptions.port)}`,
           deviceId: openOptions.deviceId,
           payload: {
@@ -385,7 +387,7 @@ export function createOutboundClientSession(
         openedAt: now
       }
       options.eventBus.publish({
-        type: 'transport.session.opened',
+        type: 'transport.opened',
         remote: `${openOptions.host}:${String(openOptions.port)}`,
         deviceId: openOptions.deviceId,
         payload: {

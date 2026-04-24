@@ -6,11 +6,11 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "DeviceConnectionPluginPlugin"
     public let jsName = "DeviceConnection"
     public let pluginMethods: [CAPPluginMethod] = [
-        CAPPluginMethod(name: "openSession", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "closeSession", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "openTransport", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "closeTransport", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "sendMessage", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "sendLanEvent", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "getSessionState", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getTransportState", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "pullHostEvents", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "probeSynraPeers", returnType: CAPPluginReturnPromise),
     ]
@@ -21,7 +21,7 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
     public override func load() {
         implementation.startSynraTcpServerIfNeeded()
         implementation.onSessionOpened = { [weak self] payload in
-            self?.notifyListeners("sessionOpened", data: payload)
+            self?.notifyListeners("transportOpened", data: payload)
         }
         implementation.onMessageReceived = { [weak self] payload in
             self?.notifyListeners("messageReceived", data: payload)
@@ -30,7 +30,7 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
             self?.notifyListeners("messageAck", data: payload)
         }
         implementation.onSessionClosed = { [weak self] payload in
-            self?.notifyListeners("sessionClosed", data: payload)
+            self?.notifyListeners("transportClosed", data: payload)
         }
         implementation.onTransportError = { [weak self] payload in
             self?.notifyListeners("transportError", data: payload)
@@ -40,7 +40,7 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    @objc func openSession(_ call: CAPPluginCall) {
+    @objc func openTransport(_ call: CAPPluginCall) {
         guard
             let deviceId = call.getString("deviceId"),
             let host = call.getString("host"),
@@ -56,7 +56,7 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
 
         let token = call.getString("token")
         let openResult: [String: Any]? = sessionQueue.sync {
-            implementation.openSession(
+            implementation.openTransport(
                 deviceId: deviceId,
                 host: host,
                 port: NSNumber(value: port),
@@ -65,7 +65,7 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
             )
         }
         guard let result = openResult else {
-            call.reject("openSession failed.")
+            call.reject("openTransport failed.")
             return
         }
 
@@ -85,16 +85,16 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
         if let ack = result["connectAckPayload"] as? [String: Any] {
             opened["connectAckPayload"] = ack
         }
-        notifyListeners("sessionOpened", data: opened)
+        notifyListeners("transportOpened", data: opened)
         call.resolve(result)
     }
 
-    @objc func closeSession(_ call: CAPPluginCall) {
+    @objc func closeTransport(_ call: CAPPluginCall) {
         let targetDeviceId = call.getString("targetDeviceId")
         let result = sessionQueue.sync {
-            implementation.closeSession(targetDeviceId: targetDeviceId)
+            implementation.closeTransport(targetDeviceId: targetDeviceId)
         }
-        notifyListeners("sessionClosed", data: [
+        notifyListeners("transportClosed", data: [
             "deviceId": result["targetDeviceId"] as Any,
             "reason": "closed-by-client",
             "transport": "tcp",
@@ -168,10 +168,10 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
         call.resolve(result)
     }
 
-    @objc func getSessionState(_ call: CAPPluginCall) {
+    @objc func getTransportState(_ call: CAPPluginCall) {
         let targetDeviceId = call.getString("targetDeviceId")
         let snapshot = sessionQueue.sync {
-            implementation.getSessionState(targetDeviceId: targetDeviceId)
+            implementation.getTransportState(targetDeviceId: targetDeviceId)
         }
         call.resolve(snapshot)
     }

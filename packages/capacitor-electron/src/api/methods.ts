@@ -10,9 +10,9 @@ export const API_METHODS = {
   startDeviceDiscovery: BRIDGE_METHODS.discoveryStart,
   stopDeviceDiscovery: BRIDGE_METHODS.discoveryStop,
   listDiscoveredDevices: BRIDGE_METHODS.discoveryList,
-  openConnectionSession: BRIDGE_METHODS.connectionOpenSession,
-  closeConnectionSession: BRIDGE_METHODS.connectionCloseSession,
-  sendConnectionSessionMessage: BRIDGE_METHODS.connectionSendMessage,
-  getConnectionSessionState: BRIDGE_METHODS.connectionGetSessionState,
+  openConnectionTransport: BRIDGE_METHODS.connectionOpenTransport,
+  closeConnectionTransport: BRIDGE_METHODS.connectionCloseTransport,
+  sendConnectionTransportMessage: BRIDGE_METHODS.connectionSendMessage,
+  getConnectionTransportState: BRIDGE_METHODS.connectionGetTransportState,
   pullConnectionHostEvents: BRIDGE_METHODS.connectionPullHostEvents
 } as const

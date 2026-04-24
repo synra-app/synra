@@ -7,9 +7,9 @@ export function createCapacitorRuntimeAdapter(): ConnectionRuntimeAdapter {
     startDiscovery: (options) => LanDiscovery.startDiscovery(options),
     listDiscoveredDevices: () => LanDiscovery.getDiscoveredDevices(),
     probeSynraPeers: (options) => DeviceConnection.probeSynraPeers(options),
-    openSession: (options) => DeviceConnection.openSession(options),
-    closeSession: async (deviceId) => {
-      await DeviceConnection.closeSession({ targetDeviceId: deviceId })
+    openTransport: (options) => DeviceConnection.openTransport(options),
+    closeTransport: async (deviceId) => {
+      await DeviceConnection.closeTransport({ targetDeviceId: deviceId })
     },
     sendMessage: async (options) => {
       await DeviceConnection.sendMessage(options)
@@ -17,8 +17,8 @@ export function createCapacitorRuntimeAdapter(): ConnectionRuntimeAdapter {
     sendLanEvent: async (options) => {
       await DeviceConnection.sendLanEvent(options)
     },
-    getSessionState: async (deviceId) =>
-      DeviceConnection.getSessionState({ targetDeviceId: deviceId }),
+    getTransportState: async (deviceId) =>
+      DeviceConnection.getTransportState({ targetDeviceId: deviceId }),
     addDeviceConnectableUpdatedListener: async (listener) => {
       const forward = (event: { device: Parameters<typeof listener>[0]['device'] }) => {
         listener({ device: event.device })
@@ -42,8 +42,8 @@ export function createCapacitorRuntimeAdapter(): ConnectionRuntimeAdapter {
           ipAddress: typeof lostPayload.ipAddress === 'string' ? lostPayload.ipAddress : undefined
         })
       }),
-    addSessionOpenedListener: async (listener) =>
-      DeviceConnection.addListener('sessionOpened', (event) => {
+    addTransportOpenedListener: async (listener) =>
+      DeviceConnection.addListener('transportOpened', (event) => {
         const normalizedDirection: 'inbound' | 'outbound' =
           event.direction === 'inbound' ? 'inbound' : 'outbound'
         if (normalizedDirection === 'inbound' && (!event.deviceId || event.deviceId.length === 0)) {
@@ -71,8 +71,8 @@ export function createCapacitorRuntimeAdapter(): ConnectionRuntimeAdapter {
               : undefined
         })
       }),
-    addSessionClosedListener: async (listener) =>
-      DeviceConnection.addListener('sessionClosed', listener),
+    addTransportClosedListener: async (listener) =>
+      DeviceConnection.addListener('transportClosed', listener),
     addMessageReceivedListener: async (listener) =>
       DeviceConnection.addListener('messageReceived', listener),
     addMessageAckListener: (listener) => DeviceConnection.addListener('messageAck', listener),

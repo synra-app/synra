@@ -30,10 +30,10 @@ describe('host-event-device mapper', () => {
     })
   })
 
-  test('maps transport.session.opened with remote host fallback', () => {
+  test('maps transport.opened with remote host fallback', () => {
     const mapped = discoveredDeviceFromHostEvent(
       {
-        type: 'transport.session.opened',
+        type: 'transport.opened',
         remote: '10.0.0.12:32100',
         payload: {
           deviceId: 'device-peer',

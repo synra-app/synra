@@ -11,6 +11,7 @@ function createLegacyMessage(messageId: string) {
   return {
     protocolVersion: '1.0' as const,
     messageId,
+    requestId: `req-${messageId}`,
     sessionId: 's1',
     traceId: 't1',
     type: 'action.selected' as const,

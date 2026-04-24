@@ -28,7 +28,7 @@ public final class DeviceConnectionPluginCore: NSObject {
     internal var tcpListener: NWListener?
     internal var inboundConnections: [String: SynraInboundConnectionContext] = [:]
 
-    public func openSession(
+    public func openTransport(
         deviceId: String,
         host: String,
         port: NSNumber,
@@ -50,7 +50,7 @@ public final class DeviceConnectionPluginCore: NSObject {
             ])
         }
 
-        closeSession(targetDeviceId: nil)
+        closeTransport(targetDeviceId: nil)
 
         sessionState.state = "connecting"
         sessionState.deviceId = deviceId
@@ -168,7 +168,7 @@ public final class DeviceConnectionPluginCore: NSObject {
         return nil
     }
 
-    public func closeSession(targetDeviceId: String?) -> [String: Any] {
+    public func closeTransport(targetDeviceId: String?) -> [String: Any] {
         if let targetDeviceId,
            let inboundEntry = inboundConnections.first(where: { $0.value.canonicalDeviceId == targetDeviceId })
         {
@@ -307,7 +307,7 @@ public final class DeviceConnectionPluginCore: NSObject {
         ]
     }
 
-    public func getSessionState(targetDeviceId: String?) -> [String: Any] {
+    public func getTransportState(targetDeviceId: String?) -> [String: Any] {
         if let targetDeviceId, let currentDeviceId = sessionState.deviceId, targetDeviceId != currentDeviceId {
             return [
                 "deviceId": targetDeviceId,

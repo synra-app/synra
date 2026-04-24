@@ -1,4 +1,4 @@
-import type { OpenSessionOptions } from '@synra/capacitor-device-connection'
+import type { OpenTransportOptions } from '@synra/capacitor-device-connection'
 import type { ConnectionRuntimeAdapter } from '../adapter'
 
 function unsupportedError(): Error {
@@ -15,10 +15,10 @@ export function createUnsupportedMainAdapter(): ConnectionRuntimeAdapter {
     async listDiscoveredDevices() {
       throw unsupportedError()
     },
-    async openSession(_options: OpenSessionOptions) {
+    async openTransport(_options: OpenTransportOptions) {
       throw unsupportedError()
     },
-    async closeSession() {
+    async closeTransport() {
       throw unsupportedError()
     },
     async sendMessage() {
@@ -27,7 +27,7 @@ export function createUnsupportedMainAdapter(): ConnectionRuntimeAdapter {
     async sendLanEvent() {
       throw unsupportedError()
     },
-    async getSessionState() {
+    async getTransportState() {
       throw unsupportedError()
     },
     async addDeviceConnectableUpdatedListener() {
@@ -36,10 +36,10 @@ export function createUnsupportedMainAdapter(): ConnectionRuntimeAdapter {
     async addDeviceLostListener() {
       throw unsupportedError()
     },
-    async addSessionOpenedListener() {
+    async addTransportOpenedListener() {
       throw unsupportedError()
     },
-    async addSessionClosedListener() {
+    async addTransportClosedListener() {
       throw unsupportedError()
     },
     async addMessageReceivedListener() {

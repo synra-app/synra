@@ -16,8 +16,8 @@ export type LegacySynraMessageType =
   | 'action.failed'
 
 export type TransportMessageType =
-  | 'transport.session.opened'
-  | 'transport.session.closed'
+  | 'transport.opened'
+  | 'transport.closed'
   | 'transport.message.received'
   | 'transport.message.ack'
   | 'transport.error'
@@ -94,14 +94,14 @@ export type ActionFailedPayload = {
   details?: unknown
 }
 
-export type TransportSessionOpenedPayload = {
+export type TransportOpenedPayload = {
   deviceId: DeviceId
   host?: string
   port?: number
   openedAt: number
 }
 
-export type TransportSessionClosedPayload = {
+export type TransportClosedPayload = {
   deviceId: DeviceId
   closedAt: number
   reason?: string
@@ -209,8 +209,8 @@ export type SynraCrossDevicePayloadByType = {
   'action.executing': ActionExecutingPayload
   'action.completed': ActionCompletedPayload
   'action.failed': ActionFailedPayload
-  'transport.session.opened': TransportSessionOpenedPayload
-  'transport.session.closed': TransportSessionClosedPayload
+  'transport.opened': TransportOpenedPayload
+  'transport.closed': TransportClosedPayload
   'transport.message.received': TransportMessageReceivedPayload
   'transport.message.ack': TransportMessageAckPayload
   'transport.error': TransportErrorPayload

@@ -1,18 +1,18 @@
 import { expect, test } from 'vite-plus/test'
 import type { DiscoveredDevice } from '@synra/capacitor-lan-discovery'
 import type {
-  GetSessionStateResult,
-  OpenSessionOptions,
-  SessionOpenedEvent
+  GetTransportStateResult,
+  OpenTransportOptions,
+  TransportOpenedEvent
 } from '@synra/capacitor-device-connection'
 import { configureHooksRuntime, resetConnectionRuntime, useTransport } from '../src/index'
 import type { ConnectionRuntimeAdapter } from '../src/runtime/adapter'
 
 function createScanOnlyAdapter(
   scanRounds: DiscoveredDevice[][]
-): ConnectionRuntimeAdapter & { emitInboundSessionOpened: (event: SessionOpenedEvent) => void } {
+): ConnectionRuntimeAdapter & { emitInboundSessionOpened: (event: TransportOpenedEvent) => void } {
   let round = 0
-  let sessionOpenedListener: ((event: SessionOpenedEvent) => void) | undefined
+  let sessionOpenedListener: ((event: TransportOpenedEvent) => void) | undefined
   let lastListedDevices: DiscoveredDevice[] = []
 
   return {
@@ -25,13 +25,13 @@ function createScanOnlyAdapter(
     async listDiscoveredDevices() {
       return { state: 'scanning' as const, devices: [...lastListedDevices] }
     },
-    async openSession(_options: OpenSessionOptions) {
+    async openTransport(_options: OpenTransportOptions) {
       return { deviceId: _options.deviceId, state: 'open' as const, transport: 'tcp' as const }
     },
-    async closeSession() {},
+    async closeTransport() {},
     async sendMessage() {},
     async sendLanEvent() {},
-    async getSessionState(): Promise<GetSessionStateResult> {
+    async getTransportState(): Promise<GetTransportStateResult> {
       return { state: 'idle', transport: 'tcp' }
     },
     async addDeviceConnectableUpdatedListener() {
@@ -40,11 +40,11 @@ function createScanOnlyAdapter(
     async addDeviceLostListener() {
       return { remove: async () => {} }
     },
-    async addSessionOpenedListener(listener: (event: SessionOpenedEvent) => void) {
+    async addTransportOpenedListener(listener: (event: TransportOpenedEvent) => void) {
       sessionOpenedListener = listener
       return { remove: async () => {} }
     },
-    async addSessionClosedListener() {
+    async addTransportClosedListener() {
       return { remove: async () => {} }
     },
     async addMessageReceivedListener() {
@@ -59,7 +59,7 @@ function createScanOnlyAdapter(
     async addLanWireEventReceivedListener() {
       return { remove: async () => {} }
     },
-    emitInboundSessionOpened(event: SessionOpenedEvent) {
+    emitInboundSessionOpened(event: TransportOpenedEvent) {
       sessionOpenedListener?.(event)
     }
   }

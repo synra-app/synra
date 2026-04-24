@@ -4,7 +4,7 @@ import XCTest
 final class DeviceConnectionPluginTests: XCTestCase {
     func testGetSessionStateWhenIdle() {
         let core = DeviceConnectionPluginCore()
-        let state = core.getSessionState(targetDeviceId: nil)
+        let state = core.getTransportState(targetDeviceId: nil)
         XCTAssertEqual(state["state"] as? String, "idle")
         XCTAssertEqual(state["transport"] as? String, "tcp")
     }

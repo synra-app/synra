@@ -56,16 +56,16 @@ export function createBridgeHandlers(deps: BridgeHandlerDependencies): BridgeHan
       deps.deviceDiscoveryService.startDiscovery(request.payload),
     [BRIDGE_METHODS.discoveryStop]: async () => deps.deviceDiscoveryService.stopDiscovery(),
     [BRIDGE_METHODS.discoveryList]: async () => deps.deviceDiscoveryService.listDevices(),
-    [BRIDGE_METHODS.connectionOpenSession]: async (request) =>
-      deps.connectionService.openSession(request.payload),
-    [BRIDGE_METHODS.connectionCloseSession]: async (request) =>
-      deps.connectionService.closeSession(request.payload),
+    [BRIDGE_METHODS.connectionOpenTransport]: async (request) =>
+      deps.connectionService.openTransport(request.payload),
+    [BRIDGE_METHODS.connectionCloseTransport]: async (request) =>
+      deps.connectionService.closeTransport(request.payload),
     [BRIDGE_METHODS.connectionSendMessage]: async (request) =>
       deps.connectionService.sendMessage(request.payload),
     [BRIDGE_METHODS.connectionSendLanEvent]: async (request) =>
       deps.connectionService.sendLanEvent(request.payload),
-    [BRIDGE_METHODS.connectionGetSessionState]: async (request) =>
-      deps.connectionService.getSessionState(request.payload),
+    [BRIDGE_METHODS.connectionGetTransportState]: async (request) =>
+      deps.connectionService.getTransportState(request.payload),
     [BRIDGE_METHODS.connectionPullHostEvents]: async () => deps.connectionService.pullHostEvents(),
     [BRIDGE_METHODS.preferencesGet]: async (request) => ({
       value: deps.preferencesService.get(request.payload.key)

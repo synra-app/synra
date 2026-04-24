@@ -1,11 +1,11 @@
 import { WebPlugin } from '@capacitor/core'
 import type {
-  CloseSessionOptions,
-  CloseSessionResult,
-  GetSessionStateOptions,
-  GetSessionStateResult,
-  OpenSessionOptions,
-  OpenSessionResult,
+  CloseTransportOptions,
+  CloseTransportResult,
+  GetTransportStateOptions,
+  GetTransportStateResult,
+  OpenTransportOptions,
+  OpenTransportResult,
   ProbeSynraPeersOptions,
   ProbeSynraPeersResult,
   PullHostEventsResult,
@@ -13,29 +13,29 @@ import type {
   SendLanEventResult,
   SendMessageOptions,
   SendMessageResult,
-  SessionSnapshot,
+  TransportSnapshot,
   DeviceConnectionPlugin
 } from './definitions'
 
 export class DeviceConnectionWeb extends WebPlugin implements DeviceConnectionPlugin {
-  private sessionState: SessionSnapshot = {
+  private transportState: TransportSnapshot = {
     state: 'idle',
     transport: 'tcp'
   }
 
-  async openSession(_options: OpenSessionOptions): Promise<OpenSessionResult> {
-    throw this.unavailable('openSession is not supported on web fallback.')
+  async openTransport(_options: OpenTransportOptions): Promise<OpenTransportResult> {
+    throw this.unavailable('openTransport is not supported on web fallback.')
   }
 
-  async closeSession(_options: CloseSessionOptions = {}): Promise<CloseSessionResult> {
-    this.sessionState = {
-      ...this.sessionState,
+  async closeTransport(_options: CloseTransportOptions = {}): Promise<CloseTransportResult> {
+    this.transportState = {
+      ...this.transportState,
       state: 'closed',
       closedAt: Date.now()
     }
     return {
       success: true,
-      targetDeviceId: this.sessionState.deviceId,
+      targetDeviceId: this.transportState.deviceId,
       transport: 'tcp'
     }
   }
@@ -48,8 +48,10 @@ export class DeviceConnectionWeb extends WebPlugin implements DeviceConnectionPl
     throw this.unavailable('sendLanEvent is not supported on web fallback.')
   }
 
-  async getSessionState(_options: GetSessionStateOptions = {}): Promise<GetSessionStateResult> {
-    return this.sessionState
+  async getTransportState(
+    _options: GetTransportStateOptions = {}
+  ): Promise<GetTransportStateResult> {
+    return this.transportState
   }
 
   async pullHostEvents(): Promise<PullHostEventsResult> {

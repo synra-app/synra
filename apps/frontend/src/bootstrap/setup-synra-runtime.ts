@@ -1,5 +1,6 @@
 import type { Pinia } from 'pinia'
 import { Capacitor } from '@capacitor/core'
+import { initSynraRuntimePlatform } from '@synra/transport-events'
 import { configureHooksRuntime } from '@synra/hooks'
 import { installElectronCapacitor } from '@synra/capacitor-electron/capacitor'
 import { ensureDeviceInstanceUuid } from '../lib/device-instance-uuid'
@@ -27,6 +28,7 @@ function initialDiscoveryLooksIncomplete(peers: ReadonlyArray<{ connectable?: bo
 
 export function setupSynraRuntime(pinia: Pinia): void {
   installElectronCapacitor({ capacitor: Capacitor })
+  initSynraRuntimePlatform()
 
   void repairPairedDevicesPersistenceIfNeeded()
     .then(async () => {

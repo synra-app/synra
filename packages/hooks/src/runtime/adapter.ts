@@ -6,18 +6,18 @@ import type {
   StartDiscoveryOptions
 } from '@synra/capacitor-lan-discovery'
 import type {
-  GetSessionStateResult,
+  GetTransportStateResult,
   LanWireEventReceivedEvent,
   MessageAckEvent,
   MessageReceivedEvent,
-  OpenSessionOptions,
+  OpenTransportOptions,
   ProbeSynraPeersOptions,
   ProbeSynraPeersResult,
-  SessionState,
+  TransportState,
   SendLanEventOptions,
   SendMessageOptions,
-  SessionClosedEvent,
-  SessionOpenedEvent,
+  TransportClosedEvent,
+  TransportOpenedEvent,
   TransportErrorEvent
 } from '@synra/capacitor-device-connection'
 
@@ -38,21 +38,25 @@ export interface ConnectionRuntimeAdapter {
   listDiscoveredDevices(): Promise<ListDiscoveredDevicesResult>
   /** Native Synra TCP probe (e.g. Capacitor). Optional on hosts that fold probe into `startDiscovery`. */
   probeSynraPeers?(options: ProbeSynraPeersOptions): Promise<ProbeSynraPeersResult>
-  openSession(options: OpenSessionOptions): Promise<{
+  openTransport(options: OpenTransportOptions): Promise<{
     deviceId: string
-    state: SessionState
+    state: TransportState
     transport: 'tcp'
   }>
-  closeSession(deviceId?: string): Promise<void>
+  closeTransport(deviceId?: string): Promise<void>
   sendMessage(options: SendMessageOptions): Promise<void>
   sendLanEvent(options: SendLanEventOptions): Promise<void>
-  getSessionState(deviceId?: string): Promise<GetSessionStateResult>
+  getTransportState(deviceId?: string): Promise<GetTransportStateResult>
   addDeviceConnectableUpdatedListener(
     listener: (event: DeviceConnectableUpdatedEvent) => void
   ): Promise<ListenerHandle>
   addDeviceLostListener(listener: (event: DeviceLostEvent) => void): Promise<ListenerHandle>
-  addSessionOpenedListener(listener: (event: SessionOpenedEvent) => void): Promise<ListenerHandle>
-  addSessionClosedListener(listener: (event: SessionClosedEvent) => void): Promise<ListenerHandle>
+  addTransportOpenedListener(
+    listener: (event: TransportOpenedEvent) => void
+  ): Promise<ListenerHandle>
+  addTransportClosedListener(
+    listener: (event: TransportClosedEvent) => void
+  ): Promise<ListenerHandle>
   addMessageReceivedListener(
     listener: (event: MessageReceivedEvent) => void
   ): Promise<ListenerHandle>

@@ -3,17 +3,17 @@ import type { HostEvent } from '@synra/capacitor-device-connection'
 import {
   mapLanWireEventReceivedHostEvent,
   mapMessageTypeFromHostEvent,
-  mapSessionClosedHostEvent,
-  mapSessionOpenedHostEvent,
+  mapTransportClosedHostEvent,
+  mapTransportOpenedHostEvent,
   mapTransportErrorHostEvent
 } from '../src/runtime/adapters/electron-host-event-mappers'
 
 describe('electron host event mappers', () => {
-  test('maps transport.session.opened payload and fallback remote', () => {
+  test('maps transport.opened payload and fallback remote', () => {
     const event: HostEvent = {
       id: 1,
       timestamp: Date.now(),
-      type: 'transport.session.opened',
+      type: 'transport.opened',
       remote: '10.0.0.102:32100',
       deviceId: 'device-a',
       payload: {
@@ -26,7 +26,7 @@ describe('electron host event mappers', () => {
       transport: 'tcp'
     }
 
-    expect(mapSessionOpenedHostEvent(event)).toEqual({
+    expect(mapTransportOpenedHostEvent(event)).toEqual({
       deviceId: 'device-a',
       direction: 'inbound',
       host: '10.0.0.102',
@@ -67,7 +67,7 @@ describe('electron host event mappers', () => {
     const closed: HostEvent = {
       id: 2,
       timestamp: Date.now(),
-      type: 'transport.session.closed',
+      type: 'transport.closed',
       remote: '10.0.0.102:32100',
       deviceId: 'device-a',
       payload: { reason: 'peer-closed' },
@@ -83,8 +83,8 @@ describe('electron host event mappers', () => {
       transport: 'tcp'
     }
 
-    expect(mapSessionClosedHostEvent(closed)?.reason).toBe('peer-closed')
-    expect(mapSessionClosedHostEvent(timeout)).toEqual({
+    expect(mapTransportClosedHostEvent(closed)?.reason).toBe('peer-closed')
+    expect(mapTransportClosedHostEvent(timeout)).toEqual({
       deviceId: 'device-a',
       reason: 'INBOUND_HEARTBEAT_TIMEOUT',
       transport: 'tcp'

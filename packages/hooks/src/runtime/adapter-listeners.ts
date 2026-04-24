@@ -1,3 +1,4 @@
+import { dispatchSynraWireEvent } from '@synra/transport-events'
 import type { DiscoveredDevice } from '@synra/capacitor-lan-discovery'
 import type { Ref } from 'vue'
 import type { RuntimeConnectedSession, RuntimeSessionState } from '../types'
@@ -99,7 +100,7 @@ export async function registerAdapterListeners(options: {
     removeDeviceByIdentity(devices, event)
   })
 
-  await adapter.addSessionOpenedListener((event) => {
+  await adapter.addTransportOpenedListener((event) => {
     const rawDirection = (event as { direction?: unknown }).direction
     const explicitDirection =
       rawDirection === 'inbound' || rawDirection === 'outbound' ? rawDirection : undefined
@@ -159,7 +160,7 @@ export async function registerAdapterListeners(options: {
     )
   })
 
-  await adapter.addSessionClosedListener((event) => {
+  await adapter.addTransportClosedListener((event) => {
     const currentDeviceId = sessionState.value.deviceId
     const shouldAffectPrimarySession =
       !currentDeviceId || !event.deviceId || currentDeviceId === event.deviceId
@@ -195,6 +196,15 @@ export async function registerAdapterListeners(options: {
   await adapter.addLanWireEventReceivedListener((event) => {
     sessionsBook.touchSessionActivity(event.sourceDeviceId, Date.now(), 'inbound')
     lanWireRegistry.emitLanWireEvent(event, event.sourceDeviceId)
+    void dispatchSynraWireEvent({
+      eventName: event.eventName,
+      requestId: event.requestId,
+      sourceDeviceId: event.sourceDeviceId,
+      targetDeviceId: event.targetDeviceId,
+      replyToRequestId: event.replyToRequestId,
+      payload: event.eventPayload,
+      transport: event.transport
+    }).catch(() => undefined)
     if (event.eventName === 'device.displayName.changed' && event.eventPayload !== undefined) {
       const pl =
         event.eventPayload && typeof event.eventPayload === 'object'
@@ -269,7 +279,7 @@ export async function registerAdapterListeners(options: {
     error.value = event.message
   })
 
-  const snapshot = await adapter.getSessionState()
+  const snapshot = await adapter.getTransportState()
   setSessionStateWithTransitionLog(sessionState, snapshot, { reason: 'adapter_snapshot' })
   if (snapshot.state === 'open' && snapshot.deviceId) {
     sessionsBook.upsertConnectedSession(

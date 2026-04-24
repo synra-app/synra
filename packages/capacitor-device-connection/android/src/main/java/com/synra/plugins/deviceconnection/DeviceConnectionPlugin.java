@@ -92,7 +92,7 @@ public class DeviceConnectionPlugin extends Plugin {
     }
 
     @PluginMethod
-    public void openSession(PluginCall call) {
+    public void openTransport(PluginCall call) {
         String deviceId = call.getString("deviceId");
         String host = call.getString("host");
         Integer port = call.getInt("port");
@@ -188,12 +188,12 @@ public class DeviceConnectionPlugin extends Plugin {
                         // Omit connectAckPayload when JSObject.fromJSONObject fails.
                     }
                 }
-                notifyListeners("sessionOpened", result);
+                notifyListeners("transportOpened", result);
                 call.resolve(result);
             } catch (Exception error) {
                 this.lastSessionError = error.getMessage();
                 this.sessionOpen.set(false);
-                call.reject("openSession failed: " + error.getMessage());
+                call.reject("openTransport failed: " + error.getMessage());
             }
         });
     }
@@ -345,7 +345,7 @@ public class DeviceConnectionPlugin extends Plugin {
     }
 
     @PluginMethod
-    public void closeSession(PluginCall call) {
+    public void closeTransport(PluginCall call) {
         String targetDeviceId = call.getString("targetDeviceId", this.currentDeviceId);
         ioExecutor.submit(() -> {
             InboundConnectionContext inbound = findInboundByDeviceId(targetDeviceId);
@@ -364,7 +364,7 @@ public class DeviceConnectionPlugin extends Plugin {
             if (targetDeviceId != null) {
                 result.put("targetDeviceId", targetDeviceId);
             }
-            notifyListeners("sessionClosed", result);
+            notifyListeners("transportClosed", result);
             call.resolve(result);
         });
     }
@@ -528,7 +528,7 @@ public class DeviceConnectionPlugin extends Plugin {
     }
 
     @PluginMethod
-    public void getSessionState(PluginCall call) {
+    public void getTransportState(PluginCall call) {
         String targetDeviceId = call.getString("targetDeviceId");
         InboundConnectionContext inboundRequested = findInboundByDeviceId(targetDeviceId);
         if (targetDeviceId != null && inboundRequested != null) {
@@ -678,7 +678,7 @@ public class DeviceConnectionPlugin extends Plugin {
                         event.put("deviceId", currentDeviceId);
                         event.put("reason", "peer-closed");
                         event.put("transport", "tcp");
-                        notifyListeners("sessionClosed", event);
+                        notifyListeners("transportClosed", event);
                         closeSessionSocket();
                     }
                 } catch (Exception error) {
@@ -698,7 +698,7 @@ public class DeviceConnectionPlugin extends Plugin {
                         closed.put("deviceId", currentDeviceId);
                         closed.put("reason", "socket-closed");
                         closed.put("transport", "tcp");
-                        notifyListeners("sessionClosed", closed);
+                        notifyListeners("transportClosed", closed);
                     }
                     closeSessionSocket();
                 }
@@ -860,7 +860,7 @@ public class DeviceConnectionPlugin extends Plugin {
                             // ignore payload conversion failure
                         }
                     }
-                    notifyListeners("sessionOpened", opened);
+                    notifyListeners("transportOpened", opened);
                     continue;
                 }
                 if (activeContext == null) {
@@ -1011,7 +1011,7 @@ public class DeviceConnectionPlugin extends Plugin {
             event.put("deviceId", context.canonicalDeviceId);
             event.put("reason", reason);
             event.put("transport", "tcp");
-            notifyListeners("sessionClosed", event);
+            notifyListeners("transportClosed", event);
         }
         return true;
     }

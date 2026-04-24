@@ -1,6 +1,9 @@
 import { expect, test } from 'vite-plus/test'
 import type { DiscoveredDevice } from '@synra/capacitor-lan-discovery'
-import type { GetSessionStateResult, OpenSessionOptions } from '@synra/capacitor-device-connection'
+import type {
+  GetTransportStateResult,
+  OpenTransportOptions
+} from '@synra/capacitor-device-connection'
 import {
   configureHooksRuntime,
   resetConnectionRuntime,
@@ -17,13 +20,13 @@ function createStaticScanAdapter(devices: DiscoveredDevice[]): ConnectionRuntime
     async listDiscoveredDevices() {
       return { state: 'scanning' as const, devices: [...devices] }
     },
-    async openSession(_options: OpenSessionOptions) {
+    async openTransport(_options: OpenTransportOptions) {
       return { deviceId: _options.deviceId, state: 'open' as const, transport: 'tcp' as const }
     },
-    async closeSession() {},
+    async closeTransport() {},
     async sendMessage() {},
     async sendLanEvent() {},
-    async getSessionState(): Promise<GetSessionStateResult> {
+    async getTransportState(): Promise<GetTransportStateResult> {
       return { state: 'idle', transport: 'tcp' }
     },
     async addDeviceConnectableUpdatedListener() {
@@ -32,10 +35,10 @@ function createStaticScanAdapter(devices: DiscoveredDevice[]): ConnectionRuntime
     async addDeviceLostListener() {
       return { remove: async () => {} }
     },
-    async addSessionOpenedListener() {
+    async addTransportOpenedListener() {
       return { remove: async () => {} }
     },
-    async addSessionClosedListener() {
+    async addTransportClosedListener() {
       return { remove: async () => {} }
     },
     async addMessageReceivedListener() {

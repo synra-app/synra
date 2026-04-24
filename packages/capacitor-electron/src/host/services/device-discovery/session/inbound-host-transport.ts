@@ -5,9 +5,9 @@ import { networkInterfaces } from 'node:os'
 import { Bonjour, type Service as BonjourService } from 'bonjour-service'
 import type {
   DeviceDiscoveryHostEvent,
-  DeviceSessionSendLanEventOptions,
-  DeviceSessionSnapshot,
-  DeviceSessionSendMessageOptions
+  DeviceTransportSendLanEventOptions,
+  DeviceTransportSnapshot,
+  DeviceTransportSendMessageOptions
 } from '../../../../shared/protocol/types'
 import {
   DEFAULT_HEARTBEAT_TIMEOUT_MS,
@@ -26,7 +26,8 @@ import {
   type LanFrame
 } from '../protocol/lan-frame.codec'
 
-type InboundSession = {
+/** One accepted inbound TCP connection; LAN frames on this socket carry their own `requestId`. */
+type InboundTcpLink = {
   socket: Socket
   remote: string
   remoteDeviceId: string
@@ -46,10 +47,10 @@ const UDP_OFFLINE_ANNOUNCEMENT_TYPE = 'offline'
 export interface InboundHostTransport {
   start(): Promise<void>
   stop(): Promise<void>
-  closeSession(deviceId?: string): Promise<void>
-  sendMessage(options: DeviceSessionSendMessageOptions): Promise<boolean>
-  sendLanEvent(options: DeviceSessionSendLanEventOptions): Promise<boolean>
-  getSessionState(deviceId?: string): DeviceSessionSnapshot | undefined
+  closeTransport(deviceId?: string): Promise<void>
+  sendMessage(options: DeviceTransportSendMessageOptions): Promise<boolean>
+  sendLanEvent(options: DeviceTransportSendLanEventOptions): Promise<boolean>
+  getTransportState(deviceId?: string): DeviceTransportSnapshot | undefined
   heartbeatTick(): Promise<void>
 }
 
@@ -70,10 +71,39 @@ function parseMdnsServiceType(serviceType?: string): { type: string; protocol: '
   return { type: 'synra', protocol: 'tcp' }
 }
 
+/** Stable wire `device-*` key for indexing this peer (connect `sourceDeviceId` may be UUID or wire id). */
+function canonicalPeerWireId(connectSourceDeviceId: string): string {
+  const trimmed = connectSourceDeviceId.trim()
+  if (!trimmed) {
+    return hashDeviceId('unknown')
+  }
+  if (trimmed.startsWith('device-')) {
+    return trimmed
+  }
+  return hashDeviceId(trimmed)
+}
+
+/** Resolve API / frame peer id to an open inbound link key (UUID → hash, or wire id as stored). */
+function resolvePeerWireIdKey(links: Map<string, InboundTcpLink>, id: string): string | undefined {
+  const trimmed = id.trim()
+  if (!trimmed) {
+    return undefined
+  }
+  if (links.has(trimmed)) {
+    return trimmed
+  }
+  const hashed = hashDeviceId(trimmed)
+  if (links.has(hashed)) {
+    return hashed
+  }
+  return undefined
+}
+
 export function createInboundHostTransport(
   options: InboundHostTransportOptions
 ): InboundHostTransport {
-  const sessions = new Map<string, InboundSession>()
+  const inboundLinksByPeerWireId = new Map<string, InboundTcpLink>()
+  const inboundLinkBySocket = new WeakMap<Socket, InboundTcpLink>()
   const decoders = new WeakMap<Socket, LengthPrefixedJsonCodec>()
   let server: Server | undefined
   let responder: UdpSocket | undefined
@@ -156,18 +186,33 @@ export function createInboundHostTransport(
   }
 
   const removeBySocket = (socket: Socket, reason: string) => {
-    for (const [deviceId, session] of sessions.entries()) {
-      if (session.socket !== socket) {
-        continue
-      }
-      sessions.delete(deviceId)
+    const fromWeak = inboundLinkBySocket.get(socket)
+    if (fromWeak) {
+      inboundLinkBySocket.delete(socket)
+      inboundLinksByPeerWireId.delete(fromWeak.remoteDeviceId)
       options.eventBus.publish({
-        type: 'transport.session.closed',
-        remote: session.remote,
-        deviceId,
+        type: 'transport.closed',
+        remote: fromWeak.remote,
+        deviceId: fromWeak.remoteDeviceId,
         payload: { reason },
         transport: 'tcp'
       })
+      return
+    }
+    for (const [peerWireId, link] of inboundLinksByPeerWireId.entries()) {
+      if (link.socket !== socket) {
+        continue
+      }
+      inboundLinksByPeerWireId.delete(peerWireId)
+      inboundLinkBySocket.delete(socket)
+      options.eventBus.publish({
+        type: 'transport.closed',
+        remote: link.remote,
+        deviceId: peerWireId,
+        payload: { reason },
+        transport: 'tcp'
+      })
+      return
     }
   }
 
@@ -195,7 +240,7 @@ export function createInboundHostTransport(
           type: 'error',
           requestId: frame.requestId ?? randomUUID(),
           sourceDeviceId: options.resolveLocalDeviceUuid(),
-          targetDeviceId: hashDeviceId(remoteDeviceId || 'unknown'),
+          targetDeviceId: canonicalPeerWireId(remoteDeviceId || 'unknown'),
           timestamp: Date.now(),
           appId: LAN_APP_ID,
           error: 'CONNECT_INVALID'
@@ -203,11 +248,12 @@ export function createInboundHostTransport(
         socket.end()
         return
       }
+      const peerWireId = canonicalPeerWireId(remoteDeviceId)
       options.eventBus.publish({
         type: 'host.member.online',
         remote,
         payload: {
-          deviceId: hashDeviceId(remoteDeviceId),
+          deviceId: peerWireId,
           host: peerHost,
           port: options.port ?? DEFAULT_TCP_PORT,
           displayName: peerDisplayName,
@@ -221,7 +267,7 @@ export function createInboundHostTransport(
         type: 'connectAck',
         requestId: frame.requestId ?? randomUUID(),
         sourceDeviceId: options.resolveLocalDeviceUuid(),
-        targetDeviceId: hashDeviceId(remoteDeviceId),
+        targetDeviceId: peerWireId,
         timestamp: Date.now(),
         appId: LAN_APP_ID,
         protocolVersion: LAN_PROTOCOL_VERSION,
@@ -232,22 +278,28 @@ export function createInboundHostTransport(
           displayName: localDisplayName()
         }
       })
-      const hashedRemoteDeviceId = hashDeviceId(remoteDeviceId)
-      sessions.set(hashedRemoteDeviceId, {
+      const existing = inboundLinksByPeerWireId.get(peerWireId)
+      if (existing && existing.socket !== socket) {
+        inboundLinkBySocket.delete(existing.socket)
+        existing.socket.destroy()
+      }
+      const link: InboundTcpLink = {
         socket,
         remote,
-        remoteDeviceId: hashedRemoteDeviceId,
+        remoteDeviceId: peerWireId,
         displayName: peerDisplayName,
         openedAt: Date.now(),
         lastActiveAt: Date.now()
-      })
+      }
+      inboundLinksByPeerWireId.set(peerWireId, link)
+      inboundLinkBySocket.set(socket, link)
       options.eventBus.publish({
-        type: 'transport.session.opened',
+        type: 'transport.opened',
         remote,
-        deviceId: hashedRemoteDeviceId,
+        deviceId: peerWireId,
         payload: {
           direction: 'inbound',
-          deviceId: hashedRemoteDeviceId,
+          deviceId: peerWireId,
           displayName: peerDisplayName,
           incomingSynraConnectPayload,
           ...(peerHost
@@ -262,33 +314,33 @@ export function createInboundHostTransport(
       return
     }
 
-    if (!frame.sourceDeviceId) {
+    const link = inboundLinkBySocket.get(socket)
+    if (!link || link.socket.destroyed) {
       return
     }
-    const session = sessions.get(hashDeviceId(frame.sourceDeviceId))
-    if (!session) {
+    if (!frame.sourceDeviceId && frame.type !== 'heartbeat') {
       return
     }
-    session.lastActiveAt = Date.now()
+    link.lastActiveAt = Date.now()
 
     if (frame.type === 'heartbeat') {
-      await writeFrame(session.socket, {
+      await writeFrame(link.socket, {
         version: LAN_PROTOCOL_VERSION,
         type: 'heartbeat',
         requestId: randomUUID(),
         sourceDeviceId: options.resolveLocalDeviceUuid(),
-        targetDeviceId: session.remoteDeviceId,
+        targetDeviceId: link.remoteDeviceId,
         timestamp: Date.now()
       }).catch(() => undefined)
       return
     }
     if (frame.type === 'message') {
-      await writeFrame(session.socket, {
+      await writeFrame(link.socket, {
         version: LAN_PROTOCOL_VERSION,
         type: 'ack',
         requestId: frame.requestId,
         sourceDeviceId: options.resolveLocalDeviceUuid(),
-        targetDeviceId: session.remoteDeviceId,
+        targetDeviceId: link.remoteDeviceId,
         messageId: frame.messageId,
         timestamp: Date.now()
       }).catch(() => undefined)
@@ -300,8 +352,8 @@ export function createInboundHostTransport(
           : undefined
       options.eventBus.publish({
         type: 'transport.message.received',
-        remote: session.remote,
-        deviceId: session.remoteDeviceId,
+        remote: link.remote,
+        deviceId: link.remoteDeviceId,
         messageId: frame.messageId,
         messageType,
         payload: frame.payload,
@@ -317,8 +369,8 @@ export function createInboundHostTransport(
       const eventName = typeof pl.eventName === 'string' ? pl.eventName : ''
       options.eventBus.publish({
         type: 'transport.lan.event.received',
-        remote: session.remote,
-        deviceId: session.remoteDeviceId,
+        remote: link.remote,
+        deviceId: link.remoteDeviceId,
         payload: {
           requestId: frame.requestId,
           sourceDeviceId: frame.sourceDeviceId,
@@ -326,19 +378,20 @@ export function createInboundHostTransport(
           replyToRequestId: frame.replyToRequestId,
           eventName,
           eventPayload: pl.payload,
-          fromDeviceId: session.remoteDeviceId
+          fromDeviceId: link.remoteDeviceId
         },
         transport: 'tcp'
       })
       return
     }
     if (frame.type === 'close') {
-      sessions.delete(session.remoteDeviceId)
-      session.socket.destroy()
+      inboundLinksByPeerWireId.delete(link.remoteDeviceId)
+      inboundLinkBySocket.delete(socket)
+      link.socket.destroy()
       options.eventBus.publish({
-        type: 'transport.session.closed',
-        remote: session.remote,
-        deviceId: session.remoteDeviceId,
+        type: 'transport.closed',
+        remote: link.remote,
+        deviceId: link.remoteDeviceId,
         payload: { reason: 'REMOTE_CLOSED' },
         transport: 'tcp'
       })
@@ -347,8 +400,8 @@ export function createInboundHostTransport(
     if (frame.type === 'ack' && frame.messageId) {
       options.eventBus.publish({
         type: 'transport.message.ack',
-        remote: session.remote,
-        deviceId: session.remoteDeviceId,
+        remote: link.remote,
+        deviceId: link.remoteDeviceId,
         messageId: frame.messageId,
         payload: {
           requestId: frame.requestId,
@@ -483,29 +536,35 @@ export function createInboundHostTransport(
   }
 
   const closeSessions = async (deviceId?: string): Promise<void> => {
-    const targetIds = deviceId ? [deviceId] : [...sessions.keys()]
+    const targetIds = deviceId
+      ? (() => {
+          const key = resolvePeerWireIdKey(inboundLinksByPeerWireId, deviceId)
+          return key ? [key] : [deviceId]
+        })()
+      : [...inboundLinksByPeerWireId.keys()]
     for (const targetId of targetIds) {
-      const session = sessions.get(targetId)
-      if (!session) {
+      const link = inboundLinksByPeerWireId.get(targetId)
+      if (!link) {
         continue
       }
-      await writeFrame(session.socket, {
+      await writeFrame(link.socket, {
         version: LAN_PROTOCOL_VERSION,
         type: 'close',
         requestId: randomUUID(),
         sourceDeviceId: options.resolveLocalDeviceUuid(),
-        targetDeviceId: targetId,
+        targetDeviceId: link.remoteDeviceId,
         timestamp: Date.now()
       }).catch(() => undefined)
       options.eventBus.publish({
-        type: 'transport.session.closed',
-        remote: session.remote,
+        type: 'transport.closed',
+        remote: link.remote,
         deviceId: targetId,
         payload: { reason: 'LOCAL_CLOSED' },
         transport: 'tcp'
       })
-      session.socket.destroy()
-      sessions.delete(targetId)
+      inboundLinkBySocket.delete(link.socket)
+      link.socket.destroy()
+      inboundLinksByPeerWireId.delete(targetId)
     }
   }
 
@@ -517,10 +576,11 @@ export function createInboundHostTransport(
     },
     async stop() {
       await broadcastOfflineAnnouncement().catch(() => undefined)
-      for (const session of sessions.values()) {
-        session.socket.destroy()
+      for (const link of inboundLinksByPeerWireId.values()) {
+        inboundLinkBySocket.delete(link.socket)
+        link.socket.destroy()
       }
-      sessions.clear()
+      inboundLinksByPeerWireId.clear()
       published?.stop?.()
       bonjour?.destroy()
       bonjour = undefined
@@ -536,20 +596,21 @@ export function createInboundHostTransport(
         server = undefined
       }
     },
-    async closeSession(deviceId) {
+    async closeTransport(deviceId) {
       await closeSessions(deviceId)
     },
     async sendMessage(sendOptions) {
-      const session = sessions.get(sendOptions.targetDeviceId)
-      if (!session || session.socket.destroyed) {
+      const targetKey = resolvePeerWireIdKey(inboundLinksByPeerWireId, sendOptions.targetDeviceId)
+      const link = targetKey ? inboundLinksByPeerWireId.get(targetKey) : undefined
+      if (!link || link.socket.destroyed) {
         return false
       }
-      await writeFrame(session.socket, {
+      await writeFrame(link.socket, {
         version: LAN_PROTOCOL_VERSION,
         type: 'message',
         requestId: sendOptions.requestId,
         sourceDeviceId: sendOptions.sourceDeviceId,
-        targetDeviceId: sendOptions.targetDeviceId,
+        targetDeviceId: link.remoteDeviceId,
         replyToRequestId: sendOptions.replyToRequestId,
         messageId: sendOptions.messageId ?? randomUUID(),
         timestamp: Date.now(),
@@ -561,8 +622,9 @@ export function createInboundHostTransport(
       return true
     },
     async sendLanEvent(sendOptions) {
-      const session = sessions.get(sendOptions.targetDeviceId)
-      if (!session || session.socket.destroyed) {
+      const targetKey = resolvePeerWireIdKey(inboundLinksByPeerWireId, sendOptions.targetDeviceId)
+      const link = targetKey ? inboundLinksByPeerWireId.get(targetKey) : undefined
+      if (!link || link.socket.destroyed) {
         return false
       }
       const envelope: Record<string, unknown> = {
@@ -575,21 +637,22 @@ export function createInboundHostTransport(
       if (sendOptions.schemaVersion !== undefined) {
         envelope.schemaVersion = sendOptions.schemaVersion
       }
-      await writeFrame(session.socket, {
+      await writeFrame(link.socket, {
         version: LAN_PROTOCOL_VERSION,
         type: 'event',
         requestId: sendOptions.requestId,
         sourceDeviceId: sendOptions.sourceDeviceId,
-        targetDeviceId: sendOptions.targetDeviceId,
+        targetDeviceId: link.remoteDeviceId,
         replyToRequestId: sendOptions.replyToRequestId,
         timestamp: Date.now(),
         payload: envelope
       })
       return true
     },
-    getSessionState(deviceId) {
+    getTransportState(deviceId) {
       if (deviceId) {
-        const target = sessions.get(deviceId)
+        const targetKey = resolvePeerWireIdKey(inboundLinksByPeerWireId, deviceId)
+        const target = targetKey ? inboundLinksByPeerWireId.get(targetKey) : undefined
         if (!target) {
           return undefined
         }
@@ -601,7 +664,7 @@ export function createInboundHostTransport(
           transport: 'tcp'
         }
       }
-      const first = sessions.values().next().value as InboundSession | undefined
+      const first = inboundLinksByPeerWireId.values().next().value as InboundTcpLink | undefined
       if (!first) {
         return undefined
       }
@@ -615,13 +678,13 @@ export function createInboundHostTransport(
     },
     async heartbeatTick() {
       const now = Date.now()
-      for (const [deviceId, session] of sessions.entries()) {
-        if (now - session.lastActiveAt <= DEFAULT_HEARTBEAT_TIMEOUT_MS) {
+      for (const [deviceId, link] of inboundLinksByPeerWireId.entries()) {
+        if (now - link.lastActiveAt <= DEFAULT_HEARTBEAT_TIMEOUT_MS) {
           continue
         }
         options.eventBus.publish({
           type: 'host.heartbeat.timeout',
-          remote: session.remote,
+          remote: link.remote,
           deviceId,
           code: 'INBOUND_HEARTBEAT_TIMEOUT',
           transport: 'tcp'
