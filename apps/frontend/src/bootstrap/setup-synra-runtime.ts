@@ -67,7 +67,6 @@ export function setupSynraRuntime(pinia: Pinia): void {
       const localDiscoveryDeviceId = await hashDeviceIdFromInstanceUuid(deviceInstanceUuid)
       configureHooksRuntime({
         localDiscoveryDeviceId,
-        enableDiscoveryPairHandshakeDebug: import.meta.env.DEV,
         onRemoteDeviceProfile: (deviceId, displayName) => {
           void patchPairedDeviceDisplayName(deviceId, displayName).then((ok) => {
             if (ok) {
