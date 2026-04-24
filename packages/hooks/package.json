@@ -28,11 +28,11 @@
   },
   "dependencies": {
     "@capacitor/app": "catalog:capacitor",
-    "@synra/transport-events": "workspace:*",
     "@synra/capacitor-device-connection": "workspace:*",
     "@synra/capacitor-lan-discovery": "workspace:*",
     "@synra/capacitor-preferences": "workspace:*",
     "@synra/protocol": "workspace:*",
+    "@synra/transport-events": "workspace:*",
     "vue": "catalog:vue"
   },
   "devDependencies": {

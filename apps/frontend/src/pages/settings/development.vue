@@ -26,11 +26,11 @@ async function clearPairedDevicesList(): Promise<void> {
   try {
     await savePairedDevicesPayload(createEmptyPairedDevicesPayload())
     pairingStore.bumpPairedList()
-    const opened = lanStore.connectedSessions.filter((session) => session.transport === 'ready')
+    const opened = lanStore.openTransportLinks.filter((link) => link.transport === 'ready')
     await Promise.all(
-      opened.map((session) =>
-        typeof session.deviceId === 'string' && session.deviceId.length > 0
-          ? lanStore.disconnectDevice(session.deviceId).catch(() => undefined)
+      opened.map((link) =>
+        typeof link.deviceId === 'string' && link.deviceId.length > 0
+          ? lanStore.disconnectDevice(link.deviceId).catch(() => undefined)
           : Promise.resolve()
       )
     )

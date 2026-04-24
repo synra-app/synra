@@ -50,18 +50,18 @@ public class DeviceConnectionPlugin extends Plugin {
     private final ExecutorService readerExecutor = Executors.newSingleThreadExecutor();
     private final ExecutorService inboundExecutor = Executors.newCachedThreadPool();
     private final ScheduledExecutorService heartbeatExecutor = Executors.newSingleThreadScheduledExecutor();
-    private final AtomicBoolean sessionOpen = new AtomicBoolean(false);
+    private final AtomicBoolean primaryOutboundOpen = new AtomicBoolean(false);
     private final AtomicBoolean inboundServerRunning = new AtomicBoolean(false);
     private final Map<String, InboundConnectionContext> inboundConnections = new ConcurrentHashMap<>();
     private ScheduledFuture<?> heartbeatTask;
     private ServerSocket inboundServerSocket;
-    private Socket sessionSocket;
-    private DataInputStream sessionInput;
-    private DataOutputStream sessionOutput;
+    private Socket primaryOutboundSocket;
+    private DataInputStream primaryOutboundInput;
+    private DataOutputStream primaryOutboundOutput;
     private String currentDeviceId;
     private String currentHost;
     private Integer currentPort;
-    private String lastSessionError;
+    private String lastOutboundTransportError;
 
     private static final class InboundConnectionContext {
         final String connectionId;
@@ -107,7 +107,7 @@ public class DeviceConnectionPlugin extends Plugin {
         }
 
         ioExecutor.submit(() -> {
-            closeSessionSocket();
+            closePrimaryOutboundSocket();
             try {
                 Socket socket = new Socket();
                 socket.connect(new InetSocketAddress(host, port), SESSION_ACK_TIMEOUT_MS);
@@ -156,17 +156,18 @@ public class DeviceConnectionPlugin extends Plugin {
                 }
                 socket.setSoTimeout(0);
 
-                this.sessionSocket = socket;
-                this.sessionInput = input;
-                this.sessionOutput = output;
-                this.currentDeviceId = remoteDeviceId;
+                this.primaryOutboundSocket = socket;
+                this.primaryOutboundInput = input;
+                this.primaryOutboundOutput = output;
+                // Match discovery / JS target: canonical dial id, not raw ack sourceDeviceId (may be instance UUID).
+                this.currentDeviceId = canonicalSynraDeviceId(deviceId.trim());
                 this.currentHost = host;
                 this.currentPort = port;
-                this.lastSessionError = null;
-                this.sessionOpen.set(true);
+                this.lastOutboundTransportError = null;
+                this.primaryOutboundOpen.set(true);
 
                 startHeartbeatLoop();
-                startSessionReader();
+                startPrimaryOutboundReader();
 
                 JSObject result = new JSObject();
                 result.put("success", true);
@@ -191,8 +192,8 @@ public class DeviceConnectionPlugin extends Plugin {
                 notifyListeners("transportOpened", result);
                 call.resolve(result);
             } catch (Exception error) {
-                this.lastSessionError = error.getMessage();
-                this.sessionOpen.set(false);
+                this.lastOutboundTransportError = error.getMessage();
+                this.primaryOutboundOpen.set(false);
                 call.reject("openTransport failed: " + error.getMessage());
             }
         });
@@ -357,7 +358,7 @@ public class DeviceConnectionPlugin extends Plugin {
                 call.resolve(result);
                 return;
             }
-            closeSessionSocket();
+            closePrimaryOutboundSocket();
             JSObject result = new JSObject();
             result.put("success", true);
             result.put("transport", "tcp");
@@ -390,7 +391,26 @@ public class DeviceConnectionPlugin extends Plugin {
                 JSObject envelope = new JSObject();
                 envelope.put("messageType", messageType);
                 envelope.put("payload", payload);
-                if (inbound != null) {
+                boolean outboundTargetsPeer =
+                    primaryOutboundOpen.get()
+                        && primaryOutboundOutput != null
+                        && currentDeviceId != null
+                        && currentDeviceId.equals(targetDeviceId);
+                if (outboundTargetsPeer) {
+                    writeFrame(
+                        primaryOutboundOutput,
+                        synraLanFrame(
+                            "message",
+                            requestId,
+                            messageId,
+                            sourceDeviceId,
+                            targetDeviceId,
+                            replyToRequestId,
+                            envelope,
+                            null
+                        )
+                    );
+                } else if (inbound != null) {
                     writeFrame(
                         inbound.output,
                         synraLanFrame(
@@ -405,12 +425,12 @@ public class DeviceConnectionPlugin extends Plugin {
                         )
                     );
                 } else {
-                    if (!sessionOpen.get() || sessionOutput == null || sessionInput == null) {
-                        call.reject("Session is not open.");
+                    if (!primaryOutboundOpen.get() || primaryOutboundOutput == null || primaryOutboundInput == null) {
+                        call.reject("Transport is not open.");
                         return;
                     }
                     writeFrame(
-                        sessionOutput,
+                        primaryOutboundOutput,
                         synraLanFrame(
                             "message",
                             requestId,
@@ -431,8 +451,8 @@ public class DeviceConnectionPlugin extends Plugin {
                 result.put("transport", "tcp");
                 call.resolve(result);
             } catch (Exception error) {
-                this.lastSessionError = error.getMessage();
-                if (sessionOpen.get()) {
+                this.lastOutboundTransportError = error.getMessage();
+                if (primaryOutboundOpen.get()) {
                     JSObject event = new JSObject();
                     event.put("deviceId", targetDeviceId);
                     event.put("message", error.getMessage());
@@ -474,7 +494,26 @@ public class DeviceConnectionPlugin extends Plugin {
                 if (schemaVersion != null) {
                     envelope.put("schemaVersion", schemaVersion);
                 }
-                if (inbound != null) {
+                boolean outboundTargetsPeer =
+                    primaryOutboundOpen.get()
+                        && primaryOutboundOutput != null
+                        && currentDeviceId != null
+                        && currentDeviceId.equals(targetDeviceId);
+                if (outboundTargetsPeer) {
+                    writeFrame(
+                        primaryOutboundOutput,
+                        synraLanFrame(
+                            "event",
+                            requestId,
+                            null,
+                            sourceDeviceId,
+                            targetDeviceId,
+                            replyToRequestId,
+                            envelope,
+                            null
+                        )
+                    );
+                } else if (inbound != null) {
                     writeFrame(
                         inbound.output,
                         synraLanFrame(
@@ -489,12 +528,12 @@ public class DeviceConnectionPlugin extends Plugin {
                         )
                     );
                 } else {
-                    if (!sessionOpen.get() || sessionOutput == null || sessionInput == null) {
-                        call.reject("Session is not open.");
+                    if (!primaryOutboundOpen.get() || primaryOutboundOutput == null || primaryOutboundInput == null) {
+                        call.reject("Transport is not open.");
                         return;
                     }
                     writeFrame(
-                        sessionOutput,
+                        primaryOutboundOutput,
                         synraLanFrame(
                             "event",
                             requestId,
@@ -514,8 +553,8 @@ public class DeviceConnectionPlugin extends Plugin {
                 result.put("transport", "tcp");
                 call.resolve(result);
             } catch (Exception error) {
-                this.lastSessionError = error.getMessage();
-                if (sessionOpen.get()) {
+                this.lastOutboundTransportError = error.getMessage();
+                if (primaryOutboundOpen.get()) {
                     JSObject event = new JSObject();
                     event.put("deviceId", targetDeviceId);
                     event.put("message", error.getMessage());
@@ -553,7 +592,7 @@ public class DeviceConnectionPlugin extends Plugin {
             return;
         }
 
-        if (targetDeviceId == null && !sessionOpen.get()) {
+        if (targetDeviceId == null && !primaryOutboundOpen.get()) {
             InboundConnectionContext fallbackInbound = firstInboundConnection();
             if (fallbackInbound != null && fallbackInbound.canonicalDeviceId != null) {
                 JSObject inboundResult = new JSObject();
@@ -578,10 +617,10 @@ public class DeviceConnectionPlugin extends Plugin {
         if (currentPort != null) {
             result.put("port", currentPort);
         }
-        result.put("state", sessionOpen.get() ? "open" : "closed");
+        result.put("state", primaryOutboundOpen.get() ? "open" : "closed");
         result.put("transport", "tcp");
-        if (lastSessionError != null) {
-            result.put("lastError", lastSessionError);
+        if (lastOutboundTransportError != null) {
+            result.put("lastError", lastOutboundTransportError);
         }
         call.resolve(result);
     }
@@ -596,18 +635,18 @@ public class DeviceConnectionPlugin extends Plugin {
     @Override
     protected void handleOnDestroy() {
         stopInboundTcpServer();
-        closeSessionSocket();
+        closePrimaryOutboundSocket();
         ioExecutor.shutdownNow();
         readerExecutor.shutdownNow();
         inboundExecutor.shutdownNow();
         heartbeatExecutor.shutdownNow();
     }
 
-    private void startSessionReader() {
+    private void startPrimaryOutboundReader() {
         readerExecutor.submit(() -> {
-            while (sessionOpen.get() && sessionInput != null) {
+            while (primaryOutboundOpen.get() && primaryOutboundInput != null) {
                 try {
-                    JSONObject frame = readFrame(sessionInput);
+                    JSONObject frame = readFrame(primaryOutboundInput);
                     String type = frame.optString("type");
                     if ("message".equals(type)) {
                         JSONObject payload = frame.optJSONObject("payload");
@@ -679,28 +718,28 @@ public class DeviceConnectionPlugin extends Plugin {
                         event.put("reason", "peer-closed");
                         event.put("transport", "tcp");
                         notifyListeners("transportClosed", event);
-                        closeSessionSocket();
+                        closePrimaryOutboundSocket();
                     }
                 } catch (Exception error) {
                     if (error instanceof SocketTimeoutException) {
                         continue;
                     }
-                    this.lastSessionError = error.getMessage();
-                    if (sessionOpen.get()) {
+                    this.lastOutboundTransportError = error.getMessage();
+                    if (primaryOutboundOpen.get()) {
                         JSObject event = new JSObject();
                         event.put("deviceId", currentDeviceId);
                         event.put("message", error.getMessage());
                         event.put("transport", "tcp");
                         notifyListeners("transportError", event);
                     }
-                    if (sessionOpen.get()) {
+                    if (primaryOutboundOpen.get()) {
                         JSObject closed = new JSObject();
                         closed.put("deviceId", currentDeviceId);
                         closed.put("reason", "socket-closed");
                         closed.put("transport", "tcp");
                         notifyListeners("transportClosed", closed);
                     }
-                    closeSessionSocket();
+                    closePrimaryOutboundSocket();
                 }
             }
         });
@@ -1135,15 +1174,15 @@ public class DeviceConnectionPlugin extends Plugin {
         }
     }
 
-    private void closeSessionSocket() {
+    private void closePrimaryOutboundSocket() {
         stopHeartbeatLoop();
-        this.sessionOpen.set(false);
-        if (this.sessionSocket != null) {
-            closeQuietly(this.sessionSocket);
-            this.sessionSocket = null;
+        this.primaryOutboundOpen.set(false);
+        if (this.primaryOutboundSocket != null) {
+            closeQuietly(this.primaryOutboundSocket);
+            this.primaryOutboundSocket = null;
         }
-        this.sessionInput = null;
-        this.sessionOutput = null;
+        this.primaryOutboundInput = null;
+        this.primaryOutboundOutput = null;
     }
 
     private synchronized void startHeartbeatLoop() {
@@ -1151,10 +1190,10 @@ public class DeviceConnectionPlugin extends Plugin {
         heartbeatTask =
             heartbeatExecutor.scheduleAtFixedRate(
                 () -> {
-                    if (!sessionOpen.get()) {
+                    if (!primaryOutboundOpen.get()) {
                         return;
                     }
-                    DataOutputStream output = sessionOutput;
+                    DataOutputStream output = primaryOutboundOutput;
                     if (output == null || currentDeviceId == null || currentDeviceId.isBlank()) {
                         return;
                     }
@@ -1173,8 +1212,8 @@ public class DeviceConnectionPlugin extends Plugin {
                             )
                         );
                     } catch (Exception error) {
-                        lastSessionError = error.getMessage();
-                        if (sessionOpen.get()) {
+                        lastOutboundTransportError = error.getMessage();
+                        if (primaryOutboundOpen.get()) {
                             JSObject event = new JSObject();
                             event.put("deviceId", currentDeviceId);
                             event.put("message", error.getMessage());
@@ -1182,7 +1221,7 @@ public class DeviceConnectionPlugin extends Plugin {
                             event.put("code", "HEARTBEAT_SEND_FAILED");
                             notifyListeners("transportError", event);
                         }
-                        closeSessionSocket();
+                        closePrimaryOutboundSocket();
                     }
                 },
                 HEARTBEAT_INTERVAL_MS,

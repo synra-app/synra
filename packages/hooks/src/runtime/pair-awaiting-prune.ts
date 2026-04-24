@@ -1,40 +1,40 @@
 import type { DiscoveredDevice } from '@synra/capacitor-lan-discovery'
 import type { Ref } from 'vue'
-import type { RuntimeConnectedSession } from '../types'
+import type { RuntimeOpenTransportLink } from '../types'
 import { normalizeHost } from './host-normalization'
 import { getPairAwaitingAcceptDeviceIds, setPairAwaitingAccept } from './pair-awaiting-accept'
 import { setPairedDeviceConnecting } from './paired-link-phases'
 
-function hasTransportReadySessionForPeer(
+function hasReadyTransportLinkForPeer(
   deviceId: string,
   devices: DiscoveredDevice[],
-  sessions: RuntimeConnectedSession[]
+  links: RuntimeOpenTransportLink[]
 ): boolean {
   const target = devices.find((peer) => peer.deviceId === deviceId)
   const targetHost = target ? normalizeHost(target.ipAddress ?? '') : ''
-  return sessions.some((session) => {
-    if (session.transport !== 'ready') {
+  return links.some((link) => {
+    if (link.transport !== 'ready') {
       return false
     }
-    if (session.deviceId === deviceId) {
+    if (link.deviceId === deviceId) {
       return true
     }
     if (!targetHost) {
       return false
     }
-    return normalizeHost(session.host ?? '') === targetHost
+    return normalizeHost(link.host ?? '') === targetHost
   })
 }
 
-/** Clears pair-awaiting when no transport-ready session remains for that peer (scan / stale UI recovery). */
-export function pruneStalePairAwaitingForOpenSessions(
+/** Clears pair-awaiting when no transport-ready link remains for that peer (scan / stale UI recovery). */
+export function pruneStalePairAwaitingForOpenTransportLinks(
   devices: Ref<DiscoveredDevice[]>,
-  connectedSessions: Ref<RuntimeConnectedSession[]>
+  openTransportLinks: Ref<RuntimeOpenTransportLink[]>
 ): void {
-  const liveSessions = connectedSessions.value.filter((session) => session.transport === 'ready')
+  const readyLinks = openTransportLinks.value.filter((link) => link.transport === 'ready')
   const awaiting = getPairAwaitingAcceptDeviceIds().value
   for (const deviceId of awaiting) {
-    if (hasTransportReadySessionForPeer(deviceId, devices.value, liveSessions)) {
+    if (hasReadyTransportLinkForPeer(deviceId, devices.value, readyLinks)) {
       continue
     }
     setPairAwaitingAccept(deviceId, false)

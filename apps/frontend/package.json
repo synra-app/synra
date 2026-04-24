@@ -17,9 +17,9 @@
     "@synra/capacitor-lan-discovery": "workspace:*",
     "@synra/capacitor-preferences": "workspace:*",
     "@synra/hooks": "workspace:*",
-    "@synra/transport-events": "workspace:*",
     "@synra/plugin-sdk": "workspace:*",
     "@synra/protocol": "workspace:*",
+    "@synra/transport-events": "workspace:*",
     "pinia": "^3.0.4",
     "vue": "catalog:vue",
     "vue-router": "catalog:vue"

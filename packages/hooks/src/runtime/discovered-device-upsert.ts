@@ -4,7 +4,7 @@ import { isLocalDiscoveryDeviceId } from './config'
 import { normalizeHost } from './host-normalization'
 import { sortDevices } from './device-sort'
 
-type SessionOpenedLike = {
+type TransportOpenedLike = {
   deviceId?: string
   host?: string
   displayName?: string
@@ -77,9 +77,9 @@ function resolveValidPort(
   return fallbackPort
 }
 
-export function upsertDiscoveredPeerFromSession(
+export function upsertDiscoveredPeerFromTransportOpened(
   devices: Ref<DiscoveredDevice[]>,
-  event: SessionOpenedLike
+  event: TransportOpenedLike
 ): void {
   if (typeof event.deviceId !== 'string' || event.deviceId.length === 0) {
     return
@@ -110,7 +110,7 @@ export function upsertDiscoveredPeerFromSession(
         name: displayName,
         ipAddress: host,
         port,
-        source: 'session',
+        source: 'transport',
         connectable: true,
         connectCheckAt: now,
         lastSeenAt: now
@@ -120,7 +120,7 @@ export function upsertDiscoveredPeerFromSession(
         name: displayName,
         ipAddress: host,
         port,
-        source: 'session',
+        source: 'transport',
         connectable: true,
         connectCheckAt: now,
         discoveredAt: now,

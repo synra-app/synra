@@ -1,12 +1,12 @@
 import type { DiscoveredDevice, DiscoveryState } from '@synra/capacitor-lan-discovery'
 import type { Ref } from 'vue'
-import type { RuntimeConnectedSession } from '../types'
+import type { RuntimeOpenTransportLink } from '../types'
 import type { ConnectionRuntimeAdapter } from './adapter'
 import { getHooksRuntimeOptions, isLocalDiscoveryDeviceId } from './config'
 import { filterExposedDiscoveredDevices } from './discovery-exposure'
 import { sortDevices } from './device-sort'
 import { normalizeHost } from './host-normalization'
-import { pruneStalePairAwaitingForOpenSessions } from './pair-awaiting-prune'
+import { pruneStalePairAwaitingForOpenTransportLinks } from './pair-awaiting-prune'
 
 export type LanAppLifecycleHandle = {
   remove: () => Promise<void>
@@ -20,7 +20,7 @@ export async function registerLanTransportAppLifecycle(options: {
   adapter: ConnectionRuntimeAdapter
   scanState: Ref<DiscoveryState>
   devices: Ref<DiscoveredDevice[]>
-  connectedSessions: Ref<RuntimeConnectedSession[]>
+  openTransportLinks: Ref<RuntimeOpenTransportLink[]>
 }): Promise<LanAppLifecycleHandle> {
   const { App } = await import('@capacitor/app')
   const handle = await App.addListener('appStateChange', async ({ isActive }) => {
@@ -41,7 +41,7 @@ export async function registerLanTransportAppLifecycle(options: {
         }))
     )
     options.devices.value = sortDevices(rows)
-    pruneStalePairAwaitingForOpenSessions(options.devices, options.connectedSessions)
+    pruneStalePairAwaitingForOpenTransportLinks(options.devices, options.openTransportLinks)
   })
   return {
     remove: () => handle.remove()

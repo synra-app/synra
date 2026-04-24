@@ -5,6 +5,7 @@ import {
   mergePairedAndDiscoveredDevices,
   pairedDevicesStorageEpoch,
   setPairAwaitingAccept,
+  setPairedDeviceConnecting,
   type DisplayDevice
 } from '@synra/hooks'
 import { storeToRefs } from 'pinia'
@@ -22,6 +23,7 @@ import {
 } from '../lib/paired-devices-storage'
 import { useLanDiscoveryStore } from '../stores/lan-discovery'
 import { usePairingStore } from '../stores/pairing'
+import { usePairingProtocolContext } from './use-pairing-protocol-context'
 
 function isIpv4Address(value: string | undefined): boolean {
   if (typeof value !== 'string') {
@@ -39,7 +41,8 @@ function isIpv4Address(value: string | undefined): boolean {
 export function useConnectPage() {
   const store = useLanDiscoveryStore()
   const pairingStore = usePairingStore()
-  const { scanState, peers, appReadyDeviceIds, connectedSessions, loading, error } =
+  const pairingProtocol = usePairingProtocolContext()
+  const { scanState, peers, appReadyDeviceIds, openTransportLinks, loading, error } =
     storeToRefs(store)
   const { pairedListEpoch, feedbackMessage } = storeToRefs(pairingStore)
 
@@ -108,6 +111,7 @@ export function useConnectPage() {
   })
 
   async function onScanDiscovery(): Promise<void> {
+    await store.ensureReady()
     await store.startScan()
   }
 
@@ -192,10 +196,10 @@ export function useConnectPage() {
     addPendingDeviceAction(device.deviceId)
     setPairAwaitingAccept(device.deviceId, false)
     try {
-      const openedSession = connectedSessions.value.find(
-        (session) => session.transport === 'ready' && session.deviceId === device.deviceId
+      const openedLink = openTransportLinks.value.find(
+        (link) => link.transport === 'ready' && link.deviceId === device.deviceId
       )
-      if (openedSession?.deviceId) {
+      if (openedLink?.deviceId) {
         const requestId = crypto.randomUUID()
         await store
           .sendLanEvent({
@@ -210,9 +214,23 @@ export function useConnectPage() {
           })
           .catch(() => undefined)
       }
-      await removePairedDeviceRecord(device.deviceId)
-      await refreshPairedRecords()
-      pairingStore.bumpPairedList()
+      const localUnpairReason = 'Peer manually removed this pairing.'
+      if (pairingProtocol.value) {
+        await pairingProtocol.value.unpairLocalOnly(device.deviceId, localUnpairReason)
+      } else {
+        pairingStore.clearIncomingIfRelated(device.deviceId)
+        await removePairedDeviceRecord(device.deviceId)
+        const next = await listPairedDeviceRecords()
+        syncPairedDiscoveryExclusionFromRecords(next)
+        pairingStore.bumpPairedList()
+        setPairedDeviceConnecting(device.deviceId, false)
+        getConnectionRuntime().setAppLinkForDevice(
+          device.deviceId,
+          'disconnected',
+          localUnpairReason
+        )
+        pairingStore.pushFeedback(localUnpairReason)
+      }
       await store.disconnectDevice(device.deviceId)
     } finally {
       removePendingDeviceAction(device.deviceId)

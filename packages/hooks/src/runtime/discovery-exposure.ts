@@ -4,7 +4,7 @@ function hasSynraHandshakeProof(device: DiscoveredDevice): boolean {
   if (!device.connectable) {
     return false
   }
-  if (device.source !== 'probe' && device.source !== 'session') {
+  if (device.source !== 'probe' && device.source !== 'transport') {
     return false
   }
   if (typeof device.connectCheckAt !== 'number' || device.connectCheckAt <= 0) {

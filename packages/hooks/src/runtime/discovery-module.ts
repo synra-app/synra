@@ -7,14 +7,14 @@ import type { SynraProbeResult } from '@synra/capacitor-device-connection'
 import { SYNRA_PROBE_EMBEDDED_IN_DISCOVERY } from '@synra/capacitor-device-connection'
 import { unknownToErrorMessage } from '@synra/protocol'
 import type { Ref } from 'vue'
-import type { RuntimeConnectedSession, SynraDiscoveryStartOptions } from '../types'
+import type { RuntimeOpenTransportLink, SynraDiscoveryStartOptions } from '../types'
 import type { ConnectionRuntimeAdapter } from './adapter'
 import { applyHostPairingHintsFromDiscovery } from './apply-host-pairing-hints-from-discovery'
 import { getHooksRuntimeOptions, isLocalDiscoveryDeviceId } from './config'
 import { filterExposedDiscoveredDevices, shouldExposeDiscoveredDevice } from './discovery-exposure'
 import { sortDevices } from './device-sort'
 import { normalizeHost } from './host-normalization'
-import { pruneStalePairAwaitingForOpenSessions } from './pair-awaiting-prune'
+import { pruneStalePairAwaitingForOpenTransportLinks } from './pair-awaiting-prune'
 
 function defaultSynraPort(options: SynraDiscoveryStartOptions): number {
   return typeof options.port === 'number' && options.port > 0 ? options.port : 32100
@@ -71,12 +71,12 @@ export function createDiscoveryModule(options: {
   devices: Ref<DiscoveredDevice[]>
   loading: Ref<boolean>
   error: Ref<string | null>
-  connectedSessions: Ref<RuntimeConnectedSession[]>
+  openTransportLinks: Ref<RuntimeOpenTransportLink[]>
 }): {
   startDiscovery(options?: SynraDiscoveryStartOptions): Promise<void>
   refreshDiscoveredDevicesFromNative(): Promise<ListDiscoveredDevicesResult>
 } {
-  const { adapter, scanState, devices, loading, error, connectedSessions } = options
+  const { adapter, scanState, devices, loading, error, openTransportLinks } = options
 
   async function refreshDiscoveredDevicesFromNative(): Promise<ListDiscoveredDevicesResult> {
     return adapter.listDiscoveredDevices()
@@ -133,7 +133,7 @@ export function createDiscoveryModule(options: {
       scanRows = filterExposedDiscoveredDevices(scanRows)
 
       devices.value = sortDevices(scanRows)
-      pruneStalePairAwaitingForOpenSessions(devices, connectedSessions)
+      pruneStalePairAwaitingForOpenTransportLinks(devices, openTransportLinks)
       error.value = null
     } catch (unknownError) {
       error.value = unknownToErrorMessage(unknownError, 'Failed to start discovery.')

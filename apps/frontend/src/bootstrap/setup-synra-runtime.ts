@@ -1,4 +1,5 @@
 import type { Pinia } from 'pinia'
+import type { ShallowRef } from 'vue'
 import { Capacitor } from '@capacitor/core'
 import { initSynraRuntimePlatform } from '@synra/transport-events'
 import { configureHooksRuntime } from '@synra/hooks'
@@ -15,6 +16,7 @@ import {
 } from '../lib/paired-devices-storage'
 import { registerPairedAutoConnect } from '../composables/use-paired-auto-connect'
 import { registerPairingProtocol } from './register-pairing-protocol'
+import type { PairingProtocolContext } from '../composables/use-pairing-protocol-context'
 import { useLanDiscoveryStore } from '../stores/lan-discovery'
 import { usePairingStore } from '../stores/pairing'
 
@@ -26,7 +28,10 @@ function initialDiscoveryLooksIncomplete(peers: ReadonlyArray<{ connectable?: bo
   return !peers.some((peer) => peer.connectable)
 }
 
-export function setupSynraRuntime(pinia: Pinia): void {
+export function setupSynraRuntime(
+  pinia: Pinia,
+  pairingProtocolHolder: ShallowRef<PairingProtocolContext | null>
+): void {
   installElectronCapacitor({ capacitor: Capacitor })
   initSynraRuntimePlatform()
 
@@ -99,14 +104,14 @@ export function setupSynraRuntime(pinia: Pinia): void {
         }
       })
       await ensureRuntimeListeners()
-      await registerPairingProtocol(pinia)
+      await registerPairingProtocol(pinia, pairingProtocolHolder)
       registerPairedAutoConnect(pinia)
       await startInitialDiscovery()
     })
     .catch(() => {
       void (async () => {
         await ensureRuntimeListeners()
-        await registerPairingProtocol(pinia)
+        await registerPairingProtocol(pinia, pairingProtocolHolder)
         registerPairedAutoConnect(pinia)
         await startInitialDiscovery()
       })()

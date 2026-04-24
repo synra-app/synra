@@ -2,9 +2,9 @@ import type { DiscoveryState, DiscoveredDevice } from '@synra/capacitor-lan-disc
 import { type Ref, ref } from 'vue'
 import type {
   AppLinkState,
-  RuntimeConnectedSession,
   RuntimeOpenTransportInput,
-  RuntimeSessionState,
+  RuntimeOpenTransportLink,
+  RuntimePrimaryTransportState,
   SynraConnectionFilter,
   SynraConnectionMessage,
   SynraConnectionSendInput,
@@ -15,27 +15,27 @@ import type {
 } from '../types'
 import type { ConnectionRuntimeAdapter } from './adapter'
 import { registerAdapterListeners } from './adapter-listeners'
-import { ConnectedSessionsBook } from './connected-sessions-book'
 import { createDiscoveryModule } from './discovery-module'
 import { registerLanTransportAppLifecycle } from './lan-app-lifecycle'
 import { createLanWireListenersRegistry } from './lan-wire-listeners'
 import { createMessageListenersRegistry } from './message-listeners'
-import { createSessionOperationsModule } from './session-operations-module'
+import { OpenTransportLinksBook } from './open-transport-links-book'
+import { createTransportOperationsModule } from './transport-operations-module'
 
 export type ConnectionRuntime = {
   scanState: Ref<DiscoveryState>
   devices: Ref<DiscoveredDevice[]>
   loading: Ref<boolean>
   error: Ref<string | null>
-  sessionState: Ref<RuntimeSessionState>
-  connectedSessions: Ref<RuntimeConnectedSession[]>
+  primaryTransportState: Ref<RuntimePrimaryTransportState>
+  openTransportLinks: Ref<RuntimeOpenTransportLink[]>
   ensureListeners(): Promise<void>
   startDiscovery(options?: SynraDiscoveryStartOptions): Promise<void>
   openTransport(options: RuntimeOpenTransportInput): Promise<void>
   closeTransport(deviceId?: string): Promise<void>
   sendMessage(input: SynraConnectionSendInput): Promise<void>
   sendLanEvent(input: SynraLanWireSendInput): Promise<void>
-  setSessionAppLink(deviceId: string, app: AppLinkState, lastAppError?: string): void
+  setLinkAppState(deviceId: string, app: AppLinkState, lastAppError?: string): void
   setAppLinkForDevice(deviceId: string, app: AppLinkState, lastAppError?: string): void
   onMessage(
     handler: (message: SynraConnectionMessage) => void | Promise<void>,
@@ -60,14 +60,14 @@ export function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): Conn
   const devices = ref<DiscoveredDevice[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
-  const sessionState = ref<RuntimeSessionState>({
+  const primaryTransportState = ref<RuntimePrimaryTransportState>({
     state: 'idle'
   })
-  const connectedSessions = ref<RuntimeConnectedSession[]>([])
+  const openTransportLinks = ref<RuntimeOpenTransportLink[]>([])
   let listenersRegistered = false
   let lanAppLifecycle: { remove: () => Promise<void> } | undefined
 
-  const sessionsBook = new ConnectedSessionsBook(connectedSessions)
+  const openLinksBook = new OpenTransportLinksBook(openTransportLinks)
   const messageRegistry = createMessageListenersRegistry()
   const lanWireRegistry = createLanWireListenersRegistry()
 
@@ -77,14 +77,14 @@ export function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): Conn
     devices,
     loading,
     error,
-    connectedSessions
+    openTransportLinks
   })
 
-  const sessionModule = createSessionOperationsModule({
+  const transportModule = createTransportOperationsModule({
     adapter,
     error,
-    sessionState,
-    sessionsBook
+    primaryTransportState,
+    openLinksBook
   })
 
   async function startDiscovery(discoveryOptions?: SynraDiscoveryStartOptions): Promise<void> {
@@ -100,10 +100,10 @@ export function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): Conn
       adapter,
       isMobileRuntime,
       devices,
-      sessionState,
+      primaryTransportState,
       error,
-      sessionsBook,
-      connectedSessions,
+      openLinksBook,
+      openTransportLinks,
       messageRegistry,
       lanWireRegistry
     })
@@ -113,19 +113,19 @@ export function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): Conn
         adapter,
         scanState,
         devices,
-        connectedSessions
+        openTransportLinks
       })
     }
 
     listenersRegistered = true
   }
 
-  function setSessionAppLink(deviceId: string, app: AppLinkState, lastAppError?: string): void {
-    sessionsBook.setSessionAppLink(deviceId, app, { lastAppError, immediate: true })
+  function setLinkAppState(deviceId: string, app: AppLinkState, lastAppError?: string): void {
+    openLinksBook.setLinkAppState(deviceId, app, { lastAppError, immediate: true })
   }
 
   function setAppLinkForDevice(deviceId: string, app: AppLinkState, lastAppError?: string): void {
-    sessionsBook.setAppLinkForDevice(deviceId, app, { lastAppError })
+    openLinksBook.setAppLinkForDevice(deviceId, app, { lastAppError })
   }
 
   return {
@@ -133,15 +133,15 @@ export function createConnectionRuntime(adapter: ConnectionRuntimeAdapter): Conn
     devices,
     loading,
     error,
-    sessionState,
-    connectedSessions,
+    primaryTransportState,
+    openTransportLinks,
     ensureListeners,
     startDiscovery,
-    openTransport: sessionModule.openTransport.bind(sessionModule),
-    closeTransport: sessionModule.closeTransport.bind(sessionModule),
-    sendMessage: sessionModule.sendMessage.bind(sessionModule),
-    sendLanEvent: sessionModule.sendLanEvent.bind(sessionModule),
-    setSessionAppLink,
+    openTransport: transportModule.openTransport.bind(transportModule),
+    closeTransport: transportModule.closeTransport.bind(transportModule),
+    sendMessage: transportModule.sendMessage.bind(transportModule),
+    sendLanEvent: transportModule.sendLanEvent.bind(transportModule),
+    setLinkAppState,
     setAppLinkForDevice,
     onMessage: messageRegistry.onMessage.bind(messageRegistry),
     onLanWireEvent: lanWireRegistry.onLanWireEvent.bind(lanWireRegistry)

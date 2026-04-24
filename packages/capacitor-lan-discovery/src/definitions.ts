@@ -1,7 +1,7 @@
 /** LanDiscovery is discovery-only (mDNS/UDP/list). No Synra TCP transport or pairing semantics in this API surface. */
 import type { PluginListenerHandle } from '@capacitor/core'
 
-export type DiscoverySource = 'mdns' | 'probe' | 'manual' | 'session'
+export type DiscoverySource = 'mdns' | 'probe' | 'manual' | 'transport'
 export type DiscoveryMode = 'hybrid' | 'mdns' | 'subnet' | 'manual'
 
 export type DiscoveryState = 'idle' | 'scanning'

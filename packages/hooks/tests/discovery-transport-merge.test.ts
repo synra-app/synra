@@ -8,11 +8,11 @@ import type {
 import { configureHooksRuntime, resetConnectionRuntime, useTransport } from '../src/index'
 import type { ConnectionRuntimeAdapter } from '../src/runtime/adapter'
 
-function createScanOnlyAdapter(
-  scanRounds: DiscoveredDevice[][]
-): ConnectionRuntimeAdapter & { emitInboundSessionOpened: (event: TransportOpenedEvent) => void } {
+function createScanOnlyAdapter(scanRounds: DiscoveredDevice[][]): ConnectionRuntimeAdapter & {
+  emitInboundTransportOpened: (event: TransportOpenedEvent) => void
+} {
   let round = 0
-  let sessionOpenedListener: ((event: TransportOpenedEvent) => void) | undefined
+  let transportOpenedListener: ((event: TransportOpenedEvent) => void) | undefined
   let lastListedDevices: DiscoveredDevice[] = []
 
   return {
@@ -41,7 +41,7 @@ function createScanOnlyAdapter(
       return { remove: async () => {} }
     },
     async addTransportOpenedListener(listener: (event: TransportOpenedEvent) => void) {
-      sessionOpenedListener = listener
+      transportOpenedListener = listener
       return { remove: async () => {} }
     },
     async addTransportClosedListener() {
@@ -59,19 +59,19 @@ function createScanOnlyAdapter(
     async addLanWireEventReceivedListener() {
       return { remove: async () => {} }
     },
-    emitInboundSessionOpened(event: TransportOpenedEvent) {
-      sessionOpenedListener?.(event)
+    emitInboundTransportOpened(event: TransportOpenedEvent) {
+      transportOpenedListener?.(event)
     }
   }
 }
 
-test('startDiscovery drops session-sourced peers when scan does not include them', async () => {
-  const sessionPeer: DiscoveredDevice = {
+test('startDiscovery drops transport-sourced peers when scan does not include them', async () => {
+  const transportPeer: DiscoveredDevice = {
     deviceId: 'device-ios',
     name: 'iOS',
     ipAddress: '192.168.1.77',
     port: 32100,
-    source: 'session',
+    source: 'transport',
     connectable: true,
     discoveredAt: Date.now(),
     lastSeenAt: Date.now()
@@ -99,12 +99,12 @@ test('startDiscovery drops session-sourced peers when scan does not include them
   await transport.startScan()
   expect(transport.peers.value.map((p) => p.deviceId)).toEqual([])
 
-  adapter.emitInboundSessionOpened({
-    deviceId: sessionPeer.deviceId,
-    host: sessionPeer.ipAddress,
+  adapter.emitInboundTransportOpened({
+    deviceId: transportPeer.deviceId,
+    host: transportPeer.ipAddress,
     port: 32100,
     direction: 'inbound',
-    displayName: sessionPeer.name,
+    displayName: transportPeer.name,
     transport: 'tcp'
   })
   expect(transport.peers.value.map((p) => p.deviceId)).toContain('device-ios')
@@ -114,7 +114,7 @@ test('startDiscovery drops session-sourced peers when scan does not include them
   expect(ids).toEqual(['device-other'])
 })
 
-test('session open can promote source, but rescan still uses fresh discovery snapshot', async () => {
+test('transport open can promote source, but rescan still uses fresh discovery snapshot', async () => {
   const adapter = createScanOnlyAdapter([
     [
       {
@@ -139,7 +139,7 @@ test('session open can promote source, but rescan still uses fresh discovery sna
   expect(transport.peers.value.map((p) => p.deviceId)).toEqual(['device-android'])
   expect(transport.peers.value[0]?.source).toBe('probe')
 
-  adapter.emitInboundSessionOpened({
+  adapter.emitInboundTransportOpened({
     deviceId: 'device-android',
     host: '192.168.1.30',
     port: 32100,
@@ -147,7 +147,7 @@ test('session open can promote source, but rescan still uses fresh discovery sna
     displayName: 'Android',
     transport: 'tcp'
   })
-  expect(transport.peers.value[0]?.source).toBe('session')
+  expect(transport.peers.value[0]?.source).toBe('transport')
 
   await transport.startScan()
   expect(transport.peers.value.map((p) => p.deviceId)).toEqual([])

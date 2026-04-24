@@ -37,7 +37,7 @@ describe('electron host event mappers', () => {
     })
   })
 
-  test('maps transport.lan.event.received', () => {
+  test('maps transport.lan.event.received (host uses eventPayload)', () => {
     const event: HostEvent = {
       id: 6,
       timestamp: Date.now(),
@@ -48,7 +48,7 @@ describe('electron host event mappers', () => {
         sourceDeviceId: 'peer-1',
         targetDeviceId: 'device-self',
         eventName: 'pairing.request',
-        payload: { requestId: 'r1' }
+        eventPayload: { requestId: 'r1' }
       },
       transport: 'tcp'
     }
@@ -59,6 +59,32 @@ describe('electron host event mappers', () => {
       replyToRequestId: undefined,
       eventName: 'pairing.request',
       eventPayload: { requestId: 'r1' },
+      transport: 'tcp'
+    })
+  })
+
+  test('maps transport.lan.event.received (legacy payload key)', () => {
+    const event: HostEvent = {
+      id: 7,
+      timestamp: Date.now(),
+      type: 'transport.lan.event.received',
+      remote: '10.0.0.2:32100',
+      payload: {
+        requestId: 'r2',
+        sourceDeviceId: 'peer-2',
+        targetDeviceId: 'device-self',
+        eventName: 'pairing.request',
+        payload: { requestId: 'r2' }
+      },
+      transport: 'tcp'
+    }
+    expect(mapLanWireEventReceivedHostEvent(event)).toEqual({
+      requestId: 'r2',
+      sourceDeviceId: 'peer-2',
+      targetDeviceId: 'device-self',
+      replyToRequestId: undefined,
+      eventName: 'pairing.request',
+      eventPayload: { requestId: 'r2' },
       transport: 'tcp'
     })
   })

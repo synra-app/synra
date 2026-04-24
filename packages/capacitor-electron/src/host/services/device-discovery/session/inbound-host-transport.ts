@@ -257,7 +257,7 @@ export function createInboundHostTransport(
           host: peerHost,
           port: options.port ?? DEFAULT_TCP_PORT,
           displayName: peerDisplayName,
-          source: 'session',
+          source: 'transport',
           connectable: true
         },
         transport: 'tcp'

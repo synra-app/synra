@@ -26,8 +26,8 @@ type SynraTransportIncoming = {
 
 export type ConnectToDeviceOptions = Pick<RuntimeOpenTransportInput, 'suppressGlobalError'>
 
-function isTransportLive(session: { transport: string }): boolean {
-  return session.transport === 'ready' || session.transport === 'handshaking'
+function isTransportLive(link: { transport: string }): boolean {
+  return link.transport === 'ready' || link.transport === 'handshaking'
 }
 
 /**
@@ -59,16 +59,16 @@ export function useTransport() {
   /** Peers with physical TCP up (Synra transport usable). */
   const transportReadyDeviceIds = computed(() =>
     Array.from(
-      runtime.connectedSessions.value
-        .filter((session) => session.transport === 'ready')
-        .reduce((set, session) => {
-          if (typeof session.deviceId === 'string' && session.deviceId.length > 0) {
-            set.add(session.deviceId)
+      runtime.openTransportLinks.value
+        .filter((link) => link.transport === 'ready')
+        .reduce((set, link) => {
+          if (typeof link.deviceId === 'string' && link.deviceId.length > 0) {
+            set.add(link.deviceId)
           }
-          const sessionHost = normalizeHost(session.host)
-          if (sessionHost.length > 0) {
+          const linkHost = normalizeHost(link.host)
+          if (linkHost.length > 0) {
             for (const peer of peers.value) {
-              if (normalizeHost(peer.ipAddress) === sessionHost) {
+              if (normalizeHost(peer.ipAddress) === linkHost) {
                 set.add(peer.deviceId)
               }
             }
@@ -81,16 +81,16 @@ export function useTransport() {
   /** Peers with application-level link ready (UI green / chat gating). */
   const appReadyDeviceIds = computed(() =>
     Array.from(
-      runtime.connectedSessions.value
-        .filter((session) => session.transport === 'ready' && session.app === 'connected')
-        .reduce((set, session) => {
-          if (typeof session.deviceId === 'string' && session.deviceId.length > 0) {
-            set.add(session.deviceId)
+      runtime.openTransportLinks.value
+        .filter((link) => link.transport === 'ready' && link.app === 'connected')
+        .reduce((set, link) => {
+          if (typeof link.deviceId === 'string' && link.deviceId.length > 0) {
+            set.add(link.deviceId)
           }
-          const sessionHost = normalizeHost(session.host)
-          if (sessionHost.length > 0) {
+          const linkHost = normalizeHost(link.host)
+          if (linkHost.length > 0) {
             for (const peer of peers.value) {
-              if (normalizeHost(peer.ipAddress) === sessionHost) {
+              if (normalizeHost(peer.ipAddress) === linkHost) {
                 set.add(peer.deviceId)
               }
             }
@@ -100,22 +100,22 @@ export function useTransport() {
     )
   )
 
-  const connectedSessions = computed(() => [...runtime.connectedSessions.value])
+  const openTransportLinks = computed(() => [...runtime.openTransportLinks.value])
 
-  function findTransportReadySessionByPeer(deviceId: string) {
+  function findTransportReadyLinkByPeer(deviceId: string) {
     const target = peers.value.find((peer) => peer.deviceId === deviceId)
     const targetHost = target ? normalizeHost(target.ipAddress) : ''
-    return runtime.connectedSessions.value.find((session) => {
-      if (session.transport !== 'ready') {
+    return runtime.openTransportLinks.value.find((link) => {
+      if (link.transport !== 'ready') {
         return false
       }
-      if (session.deviceId === deviceId) {
+      if (link.deviceId === deviceId) {
         return true
       }
       if (targetHost.length === 0) {
         return false
       }
-      return normalizeHost(session.host) === targetHost
+      return normalizeHost(link.host) === targetHost
     })
   }
 
@@ -124,6 +124,10 @@ export function useTransport() {
   }
 
   async function startScan(): Promise<void> {
+    // Manual scan can run before connect-page onMounted finishes ensureReady(); without this,
+    // discovery.start may run while DeviceConnection has not yet subscribed to onHostEvent
+    // (inbound pairing events are then dropped on Electron).
+    await runtime.ensureListeners()
     await runtime.startDiscovery()
   }
 
@@ -135,25 +139,26 @@ export function useTransport() {
     if (!target || !target.ipAddress) {
       return undefined
     }
-    const openedSession = findTransportReadySessionByPeer(deviceId)
-    if (openedSession?.deviceId) {
-      return openedSession.deviceId
+    const openedLink = findTransportReadyLinkByPeer(deviceId)
+    if (openedLink?.deviceId) {
+      return openedLink.deviceId
     }
+    await runtime.ensureListeners()
     await runtime.openTransport({
       deviceId: target.deviceId,
       host: target.ipAddress,
       port: target.port ?? 32100,
       suppressGlobalError: connectOptions?.suppressGlobalError
     })
-    const byPeer = findTransportReadySessionByPeer(deviceId)
+    const byPeer = findTransportReadyLinkByPeer(deviceId)
     if (byPeer?.deviceId) {
       return byPeer.deviceId
     }
-    const snapshot = runtime.sessionState.value
+    const snapshot = runtime.primaryTransportState.value
     if (snapshot.deviceId === deviceId && snapshot.state === 'open') {
       return snapshot.deviceId
     }
-    return findTransportReadySessionByPeer(deviceId)?.deviceId
+    return findTransportReadyLinkByPeer(deviceId)?.deviceId
   }
 
   async function connectToDeviceAt(
@@ -167,52 +172,53 @@ export function useTransport() {
       return undefined
     }
     const resolvedPort = port > 0 ? port : 32100
-    const openedSession = findTransportReadySessionByPeer(deviceId)
-    if (openedSession?.deviceId) {
-      return openedSession.deviceId
+    const openedLink = findTransportReadyLinkByPeer(deviceId)
+    if (openedLink?.deviceId) {
+      return openedLink.deviceId
     }
+    await runtime.ensureListeners()
     await runtime.openTransport({
       deviceId,
       host: hostTrimmed,
       port: resolvedPort,
       suppressGlobalError: connectOptions?.suppressGlobalError
     })
-    const byPeer = findTransportReadySessionByPeer(deviceId)
+    const byPeer = findTransportReadyLinkByPeer(deviceId)
     if (byPeer?.deviceId) {
       return byPeer.deviceId
     }
-    const snapshot = runtime.sessionState.value
+    const snapshot = runtime.primaryTransportState.value
     if (snapshot.deviceId === deviceId && snapshot.state === 'open') {
       return snapshot.deviceId
     }
-    return findTransportReadySessionByPeer(deviceId)?.deviceId
+    return findTransportReadyLinkByPeer(deviceId)?.deviceId
   }
 
   async function disconnectDevice(deviceId: string): Promise<void> {
     const target = peers.value.find((peer) => peer.deviceId === deviceId)
     const targetHost = target ? normalizeHost(target.ipAddress) : ''
-    const liveSessions = runtime.connectedSessions.value.filter((session) => {
-      if (!isTransportLive(session)) {
+    const liveLinks = runtime.openTransportLinks.value.filter((link) => {
+      if (!isTransportLive(link)) {
         return false
       }
-      if (session.deviceId === deviceId) {
+      if (link.deviceId === deviceId) {
         return true
       }
       if (targetHost.length === 0) {
         return false
       }
-      return normalizeHost(session.host) === targetHost
+      return normalizeHost(link.host) === targetHost
     })
-    if (liveSessions.length === 0) {
+    if (liveLinks.length === 0) {
       return
     }
-    for (const session of liveSessions) {
-      await runtime.closeTransport(session.deviceId)
+    for (const link of liveLinks) {
+      await runtime.closeTransport(link.deviceId)
     }
   }
 
   async function resolveTargetDeviceId(deviceId: string): Promise<string | undefined> {
-    const opened = findTransportReadySessionByPeer(deviceId)
+    const opened = findTransportReadyLinkByPeer(deviceId)
     if (opened?.deviceId) {
       return opened.deviceId
     }
@@ -220,7 +226,7 @@ export function useTransport() {
     if (openedDeviceId) {
       return openedDeviceId
     }
-    const connected = findTransportReadySessionByPeer(deviceId)
+    const connected = findTransportReadyLinkByPeer(deviceId)
     return connected?.deviceId
   }
 
@@ -242,19 +248,20 @@ export function useTransport() {
     })
   }
 
-  async function broadcastDeviceProfileToOpenSessions(
+  async function broadcastDeviceProfileToOpenTransportLinks(
     profile: DeviceProfileUpdatedPayload
   ): Promise<void> {
-    const sessions = runtime.connectedSessions.value.filter(
-      (s) => s.transport === 'ready' && typeof s.deviceId === 'string' && s.deviceId.length > 0
+    const links = runtime.openTransportLinks.value.filter(
+      (link) =>
+        link.transport === 'ready' && typeof link.deviceId === 'string' && link.deviceId.length > 0
     )
     await Promise.all(
-      sessions.map((s) =>
+      links.map((link) =>
         runtime
           .sendLanEvent({
             requestId: crypto.randomUUID(),
             sourceDeviceId: 'local-device',
-            targetDeviceId: s.deviceId,
+            targetDeviceId: link.deviceId,
             eventName: 'device.displayName.changed',
             payload: { deviceId: profile.deviceId, displayName: profile.displayName }
           })
@@ -346,7 +353,7 @@ export function useTransport() {
     peers,
     transportReadyDeviceIds,
     appReadyDeviceIds,
-    connectedSessions,
+    openTransportLinks,
     scanState: runtime.scanState,
     loading: runtime.loading,
     error: runtime.error,
@@ -356,7 +363,7 @@ export function useTransport() {
     connectToDeviceAt,
     disconnectDevice,
     sendToDevice,
-    broadcastDeviceProfileToOpenSessions,
+    broadcastDeviceProfileToOpenTransportLinks,
     broadcast,
     sendConnectionMessage,
     sendLanEvent,

@@ -25,7 +25,7 @@ function validateDeviceName(input: string): string {
 }
 
 export function useDeviceBasicInfo() {
-  const { broadcastDeviceProfileToOpenSessions } = useTransport()
+  const { broadcastDeviceProfileToOpenTransportLinks } = useTransport()
 
   const deviceName = ref('')
   const loadStatus = ref<BasicInfoLoadStatus>('idle')
@@ -71,7 +71,7 @@ export function useDeviceBasicInfo() {
       }
     }
     try {
-      await broadcastDeviceProfileToOpenSessions({
+      await broadcastDeviceProfileToOpenTransportLinks({
         deviceId: deviceLanId,
         displayName: nextDeviceName,
         updatedAt: Date.now()

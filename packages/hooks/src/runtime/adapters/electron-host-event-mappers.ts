@@ -89,13 +89,15 @@ export function mapLanWireEventReceivedHostEvent(
   if (!requestId || !sourceDeviceId || !targetDeviceId) {
     return undefined
   }
+  const inner =
+    pl.eventPayload !== undefined ? pl.eventPayload : 'payload' in pl ? pl.payload : undefined
   return {
     requestId,
     sourceDeviceId,
     targetDeviceId,
     replyToRequestId: typeof pl.replyToRequestId === 'string' ? pl.replyToRequestId : undefined,
     eventName,
-    eventPayload: pl.payload,
+    eventPayload: inner,
     transport: event.transport ?? 'tcp'
   }
 }

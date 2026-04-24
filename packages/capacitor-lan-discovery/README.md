@@ -29,7 +29,7 @@ npx cap sync
 | `startDiscovery` / `stopDiscovery` / `getDiscoveredDevices`                | Yes                      | Yes                        | Mocked  | Yes                           |
 | `ensureOutboundSession` (hello → keep-alive TCP; same socket as discovery) | Yes                      | Yes                        | No      | Yes (`discovery.openSession`) |
 | `sendMessage` / `closeSession`                                             | Yes (inbound + outbound) | Yes (inbound + outbound)   | No      | Yes                           |
-| `scanStateChanged` / `sessionOpened` / `sessionClosed` / `messageReceived` | Yes                      | Yes                        | Partial | Partial                       |
+| `scanStateChanged` / `transport.opened` / `transport.closed` / `messageReceived` | Yes                      | Yes                        | Partial | Partial                       |
 | `transportError`                                                           | Yes                      | Yes                        | No      | No                            |
 | `deviceFound` / `deviceUpdated` / `deviceLost`                             | No                       | Yes (compatibility events) | Partial | Partial                       |
 | Foreground service (LAN TCP stack keep-alive on Android)                   | No                       | Yes                        | No      | No                            |

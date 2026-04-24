@@ -21,7 +21,8 @@ export type {
   SynraConnectionFilter,
   SynraConnectionMessage,
   SynraConnectionSendInput,
-  RuntimeConnectedSession,
+  RuntimeOpenTransportLink,
+  RuntimePrimaryTransportState,
   TransportLinkState
 } from './types'
 export type { ConnectionRuntime } from './runtime/core'

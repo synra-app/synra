@@ -1,11 +1,11 @@
 import { expect, test } from 'vite-plus/test'
 import type { DiscoveredDevice } from '@synra/capacitor-lan-discovery'
 import { ref } from 'vue'
-import { upsertDiscoveredPeerFromSession } from '../src/runtime/discovered-device-upsert'
+import { upsertDiscoveredPeerFromTransportOpened } from '../src/runtime/discovered-device-upsert'
 
-test('upsertDiscoveredPeerFromSession uses fallback name when displayName missing', () => {
+test('upsertDiscoveredPeerFromTransportOpened uses fallback name when displayName missing', () => {
   const devices = ref<DiscoveredDevice[]>([])
-  upsertDiscoveredPeerFromSession(devices, {
+  upsertDiscoveredPeerFromTransportOpened(devices, {
     deviceId: 'device-abcabcdef',
     host: '10.0.0.5',
     port: 32100

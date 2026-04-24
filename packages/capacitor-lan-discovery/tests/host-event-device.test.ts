@@ -48,12 +48,28 @@ describe('host-event-device mapper', () => {
       name: 'Peer',
       ipAddress: '10.0.0.12',
       port: undefined,
-      source: 'session',
+      source: 'transport',
       connectable: true,
       connectCheckAt: 999,
       discoveredAt: 999,
       lastSeenAt: 999
     })
+  })
+
+  test('normalizes legacy payload source session to transport', () => {
+    const mapped = discoveredDeviceFromHostEvent(
+      {
+        type: 'transport.opened',
+        remote: '10.0.0.12:32100',
+        payload: {
+          deviceId: 'device-legacy',
+          displayName: 'Legacy',
+          source: 'session'
+        }
+      },
+      1000
+    )
+    expect(mapped?.source).toBe('transport')
   })
 
   test('maps host.member.offline to lost device payload', () => {

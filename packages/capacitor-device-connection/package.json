@@ -1,7 +1,7 @@
 {
   "name": "@synra/capacitor-device-connection",
   "version": "0.0.1",
-  "description": "Capacitor plugin for device session connections.",
+  "description": "Capacitor plugin for LAN device transport and messaging.",
   "keywords": [
     "capacitor",
     "native",

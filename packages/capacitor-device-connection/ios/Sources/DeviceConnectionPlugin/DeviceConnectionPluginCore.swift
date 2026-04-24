@@ -3,24 +3,24 @@ import Darwin
 import Foundation
 import Network
 
-/// TCP session + framed JSON protocol (matches Android `DeviceConnectionPlugin`).
+/// TCP transport + framed JSON protocol (matches Android `DeviceConnectionPlugin`).
 public final class DeviceConnectionPluginCore: NSObject {
     internal let appId = "synra"
     internal let protocolVersion = "1.0"
-    private let sessionAckTimeoutMs = 6000
+    private let connectAckTimeoutMs = 6000
     private let unifiedDeviceUuidDefaultsKey = "synra.preferences.synra.device.instance-uuid"
     private let deviceBasicInfoDefaultsKey = "synra.preferences.synra.device.basic-info"
     private let legacyDeviceDisplayNameDefaultsKey = "synra.preferences.synra.device.display-name"
     private let legacyDeviceUuidStorageKey = "synra.device-connection.device-uuid"
 
-    private var sessionState = SessionState()
+    private var outboundTransportState = OutboundTransportState()
     private var connection: NWConnection?
 
     public var onMessageReceived: (([String: Any]) -> Void)?
     public var onMessageAck: (([String: Any]) -> Void)?
     public var onLanWireEventReceived: (([String: Any]) -> Void)?
-    public var onSessionOpened: (([String: Any]) -> Void)?
-    public var onSessionClosed: (([String: Any]) -> Void)?
+    public var onOutboundTransportOpened: (([String: Any]) -> Void)?
+    public var onOutboundTransportClosed: (([String: Any]) -> Void)?
     public var onTransportError: (([String: Any]) -> Void)?
 
     internal let synraDefaultTcpPort: UInt16 = 32100
@@ -37,14 +37,14 @@ public final class DeviceConnectionPluginCore: NSObject {
     ) -> [String: Any]? {
         let tcpPort = NWEndpoint.Port(rawValue: port.uint16Value)
         guard let endpointPort = tcpPort else {
-            sessionState.state = "error"
-            sessionState.lastError = "INVALID_PORT"
+            outboundTransportState.state = "error"
+            outboundTransportState.lastError = "INVALID_PORT"
             return nil
         }
 
-        if sessionState.state == "open" {
-            onSessionClosed?([
-                "deviceId": sessionState.deviceId as Any,
+        if outboundTransportState.state == "open" {
+            onOutboundTransportClosed?([
+                "deviceId": outboundTransportState.deviceId as Any,
                 "reason": "replaced",
                 "transport": "tcp",
             ])
@@ -52,11 +52,13 @@ public final class DeviceConnectionPluginCore: NSObject {
 
         closeTransport(targetDeviceId: nil)
 
-        sessionState.state = "connecting"
-        sessionState.deviceId = deviceId
-        sessionState.host = host
-        sessionState.port = Int(port.uint16Value)
-        sessionState.lastError = nil
+        let dialCanonicalDeviceId = canonicalSynraDeviceId(fromWireSourceDeviceId: deviceId.trimmingCharacters(in: .whitespacesAndNewlines))
+
+        outboundTransportState.state = "connecting"
+        outboundTransportState.deviceId = dialCanonicalDeviceId
+        outboundTransportState.host = host
+        outboundTransportState.port = Int(port.uint16Value)
+        outboundTransportState.lastError = nil
 
         let nwConnection = NWConnection(host: NWEndpoint.Host(host), port: endpointPort, using: .tcp)
         connection = nwConnection
@@ -90,7 +92,7 @@ public final class DeviceConnectionPluginCore: NSObject {
                     requestId: connectRequestId,
                     messageId: nil,
                     sourceDeviceId: self.localDeviceUuid(),
-                    targetDeviceId: deviceId.trimmingCharacters(in: .whitespacesAndNewlines),
+                    targetDeviceId: dialCanonicalDeviceId,
                     replyToRequestId: nil,
                     payload: connectPayload,
                     error: nil
@@ -122,11 +124,12 @@ public final class DeviceConnectionPluginCore: NSObject {
                     }
                     let ackDisplay = (ackPayload?["displayName"] as? String)?
                         .trimmingCharacters(in: .whitespacesAndNewlines)
-                    self.sessionState.peerDisplayName =
+                    self.outboundTransportState.peerDisplayName =
                         (ackDisplay?.isEmpty == false) ? ackDisplay : nil
-                    self.sessionState.state = "open"
-                    self.sessionState.deviceId = remoteDeviceId
-                    self.sessionState.openedAt = self.now()
+                    self.outboundTransportState.state = "open"
+                    // Keep dial-side canonical id (matches discovery / JS `targetDeviceId`), not ack `sourceDeviceId`
+                    // which may be a raw instance UUID on the peer (e.g. Electron).
+                    self.outboundTransportState.openedAt = self.now()
                     opened = true
                     self.startReceiveLoop(on: nwConnection)
                     semaphore.signal()
@@ -140,19 +143,19 @@ public final class DeviceConnectionPluginCore: NSObject {
         }
 
         nwConnection.start(queue: .global(qos: .userInitiated))
-        let timeout = DispatchTime.now() + .milliseconds(sessionAckTimeoutMs)
+        let timeout = DispatchTime.now() + .milliseconds(connectAckTimeoutMs)
         if semaphore.wait(timeout: timeout) == .timedOut {
-            openError = "SESSION_OPEN_TIMEOUT"
+            openError = "TRANSPORT_OPEN_TIMEOUT"
         }
 
         if opened {
             var payload: [String: Any] = [
                 "success": true,
-                "deviceId": sessionState.deviceId as Any,
-                "state": sessionState.state,
+                "deviceId": outboundTransportState.deviceId as Any,
+                "state": outboundTransportState.state,
                 "transport": "tcp",
             ]
-            if let name = sessionState.peerDisplayName, !name.isEmpty {
+            if let name = outboundTransportState.peerDisplayName, !name.isEmpty {
                 payload["displayName"] = name
             }
             if let lastConnectAckPayload {
@@ -161,8 +164,8 @@ public final class DeviceConnectionPluginCore: NSObject {
             return payload
         }
 
-        sessionState.state = "error"
-        sessionState.lastError = openError ?? "SESSION_OPEN_FAILED"
+        outboundTransportState.state = "error"
+        outboundTransportState.lastError = openError ?? "TRANSPORT_OPEN_FAILED"
         nwConnection.cancel()
         connection = nil
         return nil
@@ -175,7 +178,7 @@ public final class DeviceConnectionPluginCore: NSObject {
             closeSynraInboundConnection(
                 connectionId: inboundEntry.key,
                 reason: "closed-by-client",
-                emitSessionClosed: true
+                emitTransportClosed: true
             )
             return [
                 "success": true,
@@ -183,7 +186,7 @@ public final class DeviceConnectionPluginCore: NSObject {
                 "transport": "tcp",
             ]
         }
-        if sessionState.state == "open", let remoteId = sessionState.deviceId, let conn = connection {
+        if outboundTransportState.state == "open", let remoteId = outboundTransportState.deviceId, let conn = connection {
             let closeFrame = synraLanFrame(
                 type: "close",
                 requestId: UUID().uuidString,
@@ -198,8 +201,8 @@ public final class DeviceConnectionPluginCore: NSObject {
         }
         connection?.cancel()
         connection = nil
-        sessionState.state = "closed"
-        sessionState.closedAt = now()
+        outboundTransportState.state = "closed"
+        outboundTransportState.closedAt = now()
         return [
             "success": true,
             "targetDeviceId": targetDeviceId as Any,
@@ -231,6 +234,21 @@ public final class DeviceConnectionPluginCore: NSObject {
             payload: innerPayload,
             error: nil
         )
+        // Prefer the primary outbound transport when it targets this peer. Otherwise a LAN probe
+        // from the peer (inbound) can share the same canonical id and would steal sends.
+        if outboundTransportState.state == "open",
+           let conn = connection,
+           let outboundPeer = outboundTransportState.deviceId,
+           outboundPeer == targetDeviceId
+        {
+            sendFrame(messageFrame, through: conn)
+            return [
+                "success": true,
+                "messageId": targetMessageId,
+                "targetDeviceId": targetDeviceId,
+                "transport": "tcp",
+            ]
+        }
         if let inbound = inboundConnections.first(where: { $0.value.canonicalDeviceId == targetDeviceId })?.value {
             sendFrame(messageFrame, through: inbound.connection)
             return [
@@ -240,8 +258,8 @@ public final class DeviceConnectionPluginCore: NSObject {
                 "transport": "tcp",
             ]
         }
-        guard sessionState.state == "open", let conn = connection else {
-            sessionState.lastError = "SESSION_NOT_OPEN"
+        guard outboundTransportState.state == "open", let conn = connection else {
+            outboundTransportState.lastError = "TRANSPORT_NOT_OPEN"
             return nil
         }
 
@@ -286,6 +304,18 @@ public final class DeviceConnectionPluginCore: NSObject {
             payload: innerPayload,
             error: nil
         )
+        if outboundTransportState.state == "open",
+           let conn = connection,
+           let outboundPeer = outboundTransportState.deviceId,
+           outboundPeer == targetDeviceId
+        {
+            sendFrame(eventFrame, through: conn)
+            return [
+                "success": true,
+                "targetDeviceId": targetDeviceId,
+                "transport": "tcp",
+            ]
+        }
         if let inbound = inboundConnections.first(where: { $0.value.canonicalDeviceId == targetDeviceId })?.value {
             sendFrame(eventFrame, through: inbound.connection)
             return [
@@ -294,8 +324,8 @@ public final class DeviceConnectionPluginCore: NSObject {
                 "transport": "tcp",
             ]
         }
-        guard sessionState.state == "open", let conn = connection else {
-            sessionState.lastError = "SESSION_NOT_OPEN"
+        guard outboundTransportState.state == "open", let conn = connection else {
+            outboundTransportState.lastError = "TRANSPORT_NOT_OPEN"
             return nil
         }
 
@@ -308,17 +338,17 @@ public final class DeviceConnectionPluginCore: NSObject {
     }
 
     public func getTransportState(targetDeviceId: String?) -> [String: Any] {
-        if let targetDeviceId, let currentDeviceId = sessionState.deviceId, targetDeviceId != currentDeviceId {
+        if let targetDeviceId, let currentDeviceId = outboundTransportState.deviceId, targetDeviceId != currentDeviceId {
             return [
                 "deviceId": targetDeviceId,
                 "state": "closed",
                 "transport": "tcp",
                 "closedAt": now(),
-                "lastError": "SESSION_NOT_FOUND",
+                "lastError": "TRANSPORT_PEER_NOT_FOUND",
             ]
         }
 
-        var dict = sessionState.toDictionary()
+        var dict = outboundTransportState.toDictionary()
         dict["transport"] = "tcp"
         return dict
     }
@@ -539,14 +569,14 @@ public final class DeviceConnectionPluginCore: NSObject {
                 return
             }
             guard let frame else {
-                let shouldNotifyClosed = self.sessionState.state == "open"
-                self.sessionState.state = "closed"
-                self.sessionState.closedAt = self.now()
+                let shouldNotifyClosed = self.outboundTransportState.state == "open"
+                self.outboundTransportState.state = "closed"
+                self.outboundTransportState.closedAt = self.now()
                 self.connection?.cancel()
                 self.connection = nil
                 if shouldNotifyClosed {
-                    self.onSessionClosed?([
-                        "deviceId": self.sessionState.deviceId as Any,
+                    self.onOutboundTransportClosed?([
+                        "deviceId": self.outboundTransportState.deviceId as Any,
                         "reason": "socket-closed",
                         "transport": "tcp",
                     ])
@@ -555,12 +585,12 @@ public final class DeviceConnectionPluginCore: NSObject {
             }
 
             if frame["type"] as? String == "close" {
-                self.sessionState.state = "closed"
-                self.sessionState.closedAt = self.now()
+                self.outboundTransportState.state = "closed"
+                self.outboundTransportState.closedAt = self.now()
                 self.connection?.cancel()
                 self.connection = nil
-                self.onSessionClosed?([
-                    "deviceId": self.sessionState.deviceId as Any,
+                self.onOutboundTransportClosed?([
+                    "deviceId": self.outboundTransportState.deviceId as Any,
                     "reason": "peer-closed",
                     "transport": "tcp",
                 ])
@@ -582,7 +612,7 @@ public final class DeviceConnectionPluginCore: NSObject {
                 ])
             } else if frame["type"] as? String == "ack" {
                 self.onMessageAck?([
-                    "targetDeviceId": frame["targetDeviceId"] as Any ?? self.sessionState.deviceId as Any,
+                    "targetDeviceId": frame["targetDeviceId"] as Any ?? self.outboundTransportState.deviceId as Any,
                     "requestId": frame["requestId"] as Any,
                     "messageId": frame["messageId"] as Any,
                     "timestamp": frame["timestamp"] as? Int ?? self.now(),
@@ -603,7 +633,7 @@ public final class DeviceConnectionPluginCore: NSObject {
                 ])
             } else if frame["type"] as? String == "error" {
                 self.onTransportError?([
-                    "deviceId": self.sessionState.deviceId as Any,
+                    "deviceId": self.outboundTransportState.deviceId as Any,
                     "code": "TRANSPORT_IO_ERROR",
                     "message": frame["error"] as? String ?? "Unknown transport error",
                     "transport": "tcp",
@@ -614,7 +644,7 @@ public final class DeviceConnectionPluginCore: NSObject {
     }
 }
 
-private struct SessionState {
+private struct OutboundTransportState {
     var deviceId: String?
     var host: String?
     var port: Int?

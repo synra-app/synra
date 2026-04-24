@@ -1,10 +1,14 @@
-import { WebPlugin } from '@capacitor/core'
+import { WebPlugin, type ListenerCallback, type PluginListenerHandle } from '@capacitor/core'
 import type {
   CloseTransportOptions,
   CloseTransportResult,
+  DeviceConnectionPlugin,
   GetTransportStateOptions,
   GetTransportStateResult,
   HostEvent,
+  LanWireEventReceivedEvent,
+  MessageAckEvent,
+  MessageReceivedEvent,
   OpenTransportOptions,
   OpenTransportResult,
   ProbeSynraPeersOptions,
@@ -14,7 +18,9 @@ import type {
   SendLanEventResult,
   SendMessageOptions,
   SendMessageResult,
-  DeviceConnectionPlugin
+  TransportClosedEvent,
+  TransportErrorEvent,
+  TransportOpenedEvent
 } from './definitions'
 import { SYNRA_PROBE_EMBEDDED_IN_DISCOVERY } from './definitions'
 
@@ -288,5 +294,43 @@ export class DeviceConnectionElectron extends WebPlugin implements DeviceConnect
         error: SYNRA_PROBE_EMBEDDED_IN_DISCOVERY
       }))
     }
+  }
+
+  /**
+   * Subscribe to main-process host events as soon as any listener is registered.
+   * Otherwise inbound-only peers (no local openTransport/sendLanEvent yet) never receive
+   * `transport.lan.event.received` in the renderer — e.g. iOS-initiated pairing.
+   */
+  addListener(
+    eventName: 'transportOpened',
+    listenerFunc: (event: TransportOpenedEvent) => void
+  ): Promise<PluginListenerHandle>
+  addListener(
+    eventName: 'transportClosed',
+    listenerFunc: (event: TransportClosedEvent) => void
+  ): Promise<PluginListenerHandle>
+  addListener(
+    eventName: 'messageReceived',
+    listenerFunc: (event: MessageReceivedEvent) => void
+  ): Promise<PluginListenerHandle>
+  addListener(
+    eventName: 'messageAck',
+    listenerFunc: (event: MessageAckEvent) => void
+  ): Promise<PluginListenerHandle>
+  addListener(
+    eventName: 'transportError',
+    listenerFunc: (event: TransportErrorEvent) => void
+  ): Promise<PluginListenerHandle>
+  addListener(
+    eventName: 'lanWireEventReceived',
+    listenerFunc: (event: LanWireEventReceivedEvent) => void
+  ): Promise<PluginListenerHandle>
+  addListener(
+    eventName: 'hostEvent',
+    listenerFunc: (event: HostEvent) => void
+  ): Promise<PluginListenerHandle>
+  addListener(eventName: string, listenerFunc: ListenerCallback): Promise<PluginListenerHandle> {
+    this.ensureHostEventSubscription()
+    return super.addListener(eventName, listenerFunc)
   }
 }

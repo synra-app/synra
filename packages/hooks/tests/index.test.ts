@@ -132,7 +132,7 @@ test('cleanup runtime options', () => {
   resetConnectionRuntime()
 })
 
-test('transport error closes connected session state', async () => {
+test('transport error closes primary transport and marks link dead', async () => {
   let sessionOpenedListener: ((event: TransportOpenedEvent) => void) | undefined
   let transportErrorListener: ((event: TransportErrorEvent) => void) | undefined
 
@@ -234,7 +234,7 @@ test('transport error closes connected session state', async () => {
 
   expect(transport.transportReadyDeviceIds.value).not.toContain('device-a')
   expect(
-    transport.connectedSessions.value.find((session) => session.deviceId === 'device-a')
+    transport.openTransportLinks.value.find((link) => link.deviceId === 'device-a')
   ).toMatchObject({ transport: 'dead' })
 })
 
@@ -315,7 +315,7 @@ test('startScan clears peer list when discovery returns empty', async () => {
   expect(transport.peers.value).toEqual([])
 })
 
-test('session is not open error marks transport dead and reconnects', async () => {
+test('transport is not open error marks transport dead and reconnects', async () => {
   let openCounter = 0
   let sessionOpenedListener: ((event: TransportOpenedEvent) => void) | undefined
   configureHooksRuntime({
@@ -373,7 +373,7 @@ test('session is not open error marks transport dead and reconnects', async () =
       async closeTransport() {},
       async sendMessage() {},
       async sendLanEvent() {
-        throw new Error('Session is not open.')
+        throw new Error('Transport is not open.')
       },
       async getTransportState(): Promise<GetTransportStateResult> {
         return { state: 'idle', transport: 'tcp' }
@@ -420,7 +420,7 @@ test('session is not open error marks transport dead and reconnects', async () =
       eventName: 'pairing.request',
       payload: { requestId: 'r1' }
     })
-  ).rejects.toThrow('Session is not open.')
+  ).rejects.toThrow('Transport is not open.')
 
   const secondDeviceId = await transport.connectToDevice('device-a')
   expect(secondDeviceId).toBe('device-a')

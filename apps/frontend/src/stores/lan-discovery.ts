@@ -8,7 +8,7 @@ export const useLanDiscoveryStore = defineStore('lan-discovery', () => {
     peers: transport.peers,
     transportReadyDeviceIds: transport.transportReadyDeviceIds,
     appReadyDeviceIds: transport.appReadyDeviceIds,
-    connectedSessions: transport.connectedSessions,
+    openTransportLinks: transport.openTransportLinks,
     scanState: transport.scanState,
     loading: transport.loading,
     error: transport.error,
@@ -16,7 +16,8 @@ export const useLanDiscoveryStore = defineStore('lan-discovery', () => {
     startScan: transport.startScan,
     connectToDevice: transport.connectToDevice,
     connectToDeviceAt: transport.connectToDeviceAt,
-    broadcastDeviceProfileToOpenSessions: transport.broadcastDeviceProfileToOpenSessions,
+    broadcastDeviceProfileToOpenTransportLinks:
+      transport.broadcastDeviceProfileToOpenTransportLinks,
     disconnectDevice: transport.disconnectDevice,
     sendConnectionMessage: transport.sendConnectionMessage,
     sendLanEvent: transport.sendLanEvent,

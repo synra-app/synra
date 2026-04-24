@@ -27,6 +27,21 @@ export const usePairingStore = defineStore('pairing', () => {
     return incoming.value !== null
   }
 
+  /** Drop pending incoming UI if it involves this device (e.g. after local unpair). */
+  function clearIncomingIfRelated(deviceId: string): void {
+    const cur = incoming.value
+    if (!cur) {
+      return
+    }
+    if (
+      cur.initiator.deviceId === deviceId ||
+      cur.sourceDeviceId === deviceId ||
+      cur.targetDeviceId === deviceId
+    ) {
+      incoming.value = null
+    }
+  }
+
   function bumpPairedList(): void {
     pairedListEpoch.value += 1
     bumpPairedDevicesStorageEpoch()
@@ -47,6 +62,7 @@ export const usePairingStore = defineStore('pairing', () => {
     pairedListEpoch,
     setIncoming,
     clearIncoming,
+    clearIncomingIfRelated,
     hasOpenIncoming,
     bumpPairedList,
     pushFeedback

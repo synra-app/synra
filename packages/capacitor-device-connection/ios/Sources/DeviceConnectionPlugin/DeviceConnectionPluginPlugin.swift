@@ -16,11 +16,11 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
     ]
 
     private let implementation = DeviceConnectionPluginCore()
-    private let sessionQueue = DispatchQueue(label: "com.synra.device-connection.plugin")
+    private let deviceConnectionSerialQueue = DispatchQueue(label: "com.synra.device-connection.plugin")
 
     public override func load() {
         implementation.startSynraTcpServerIfNeeded()
-        implementation.onSessionOpened = { [weak self] payload in
+        implementation.onOutboundTransportOpened = { [weak self] payload in
             self?.notifyListeners("transportOpened", data: payload)
         }
         implementation.onMessageReceived = { [weak self] payload in
@@ -29,7 +29,7 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
         implementation.onMessageAck = { [weak self] payload in
             self?.notifyListeners("messageAck", data: payload)
         }
-        implementation.onSessionClosed = { [weak self] payload in
+        implementation.onOutboundTransportClosed = { [weak self] payload in
             self?.notifyListeners("transportClosed", data: payload)
         }
         implementation.onTransportError = { [weak self] payload in
@@ -55,7 +55,7 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
         }
 
         let token = call.getString("token")
-        let openResult: [String: Any]? = sessionQueue.sync {
+        let openResult: [String: Any]? = deviceConnectionSerialQueue.sync {
             implementation.openTransport(
                 deviceId: deviceId,
                 host: host,
@@ -76,7 +76,6 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
         if let state = result["state"] as? String {
             opened["state"] = state
         }
-        opened["deviceId"] = deviceId
         opened["host"] = host
         opened["port"] = port
         if let display = result["displayName"] as? String, !display.isEmpty {
@@ -91,7 +90,7 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func closeTransport(_ call: CAPPluginCall) {
         let targetDeviceId = call.getString("targetDeviceId")
-        let result = sessionQueue.sync {
+        let result = deviceConnectionSerialQueue.sync {
             implementation.closeTransport(targetDeviceId: targetDeviceId)
         }
         notifyListeners("transportClosed", data: [
@@ -115,7 +114,7 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
 
         let payload = call.options["payload"] ?? NSNull()
         let messageId = call.getString("messageId")
-        let sendResult: [String: Any]? = sessionQueue.sync {
+        let sendResult: [String: Any]? = deviceConnectionSerialQueue.sync {
             implementation.sendMessage(
                 requestId: requestId,
                 sourceDeviceId: sourceDeviceId,
@@ -148,7 +147,7 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
         let payload = call.options["payload"] ?? NSNull()
         let eventId = call.getString("eventId")
         let schemaVersion = call.getInt("schemaVersion")
-        let sendResult: [String: Any]? = sessionQueue.sync {
+        let sendResult: [String: Any]? = deviceConnectionSerialQueue.sync {
             implementation.sendLanEvent(
                 requestId: requestId,
                 sourceDeviceId: sourceDeviceId,
@@ -170,7 +169,7 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func getTransportState(_ call: CAPPluginCall) {
         let targetDeviceId = call.getString("targetDeviceId")
-        let snapshot = sessionQueue.sync {
+        let snapshot = deviceConnectionSerialQueue.sync {
             implementation.getTransportState(targetDeviceId: targetDeviceId)
         }
         call.resolve(snapshot)
@@ -209,7 +208,7 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
             call.resolve(["results": []])
             return
         }
-        let rows = sessionQueue.sync {
+        let rows = deviceConnectionSerialQueue.sync {
             implementation.probeSynraPeersJson(targets: targets, timeoutMs: timeoutMs)
         }
         call.resolve(["results": rows])

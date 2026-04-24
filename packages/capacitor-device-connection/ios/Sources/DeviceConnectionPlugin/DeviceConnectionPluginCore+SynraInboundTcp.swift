@@ -36,7 +36,7 @@ extension DeviceConnectionPluginCore {
         tcpListener = nil
         let connectionIds = Array(inboundConnections.keys)
         for connectionId in connectionIds {
-            closeSynraInboundConnection(connectionId: connectionId, reason: "server-stopped", emitSessionClosed: true)
+            closeSynraInboundConnection(connectionId: connectionId, reason: "server-stopped", emitTransportClosed: true)
         }
     }
 
@@ -57,13 +57,13 @@ extension DeviceConnectionPluginCore {
                 self.closeSynraInboundConnection(
                     connectionId: connectionId,
                     reason: "socket-failed",
-                    emitSessionClosed: true
+                    emitTransportClosed: true
                 )
             case .cancelled:
                 self.closeSynraInboundConnection(
                     connectionId: connectionId,
                     reason: "socket-cancelled",
-                    emitSessionClosed: true
+                    emitTransportClosed: true
                 )
             default:
                 break
@@ -90,7 +90,7 @@ extension DeviceConnectionPluginCore {
                 self.closeSynraInboundConnection(
                     connectionId: connectionId,
                     reason: "peer-closed",
-                    emitSessionClosed: true
+                    emitTransportClosed: true
                 )
                 return
             }
@@ -122,7 +122,7 @@ extension DeviceConnectionPluginCore {
                     self.closeSynraInboundConnection(
                         connectionId: connectionId,
                         reason: "connect-invalid",
-                        emitSessionClosed: false
+                        emitTransportClosed: false
                     )
                     return
                 }
@@ -179,7 +179,7 @@ extension DeviceConnectionPluginCore {
                     "connectAckPayload": connectAckPayload,
                     "incomingSynraConnectPayload": incomingSynraConnectPayload,
                 ]
-                self.onSessionOpened?(opened)
+                self.onOutboundTransportOpened?(opened)
             } else if type == "message" {
                 guard current.canonicalDeviceId != nil else {
                     let errRid = (frame["requestId"] as? String) ?? UUID().uuidString
@@ -250,7 +250,7 @@ extension DeviceConnectionPluginCore {
                 self.closeSynraInboundConnection(
                     connectionId: connectionId,
                     reason: "peer-closed",
-                    emitSessionClosed: current.canonicalDeviceId != nil
+                    emitTransportClosed: current.canonicalDeviceId != nil
                 )
                 return
             }
@@ -262,13 +262,13 @@ extension DeviceConnectionPluginCore {
     func closeSynraInboundConnection(
         connectionId: String,
         reason: String,
-        emitSessionClosed: Bool
+        emitTransportClosed: Bool
     ) {
         guard let context = inboundConnections.removeValue(forKey: connectionId) else {
             return
         }
-        if emitSessionClosed, context.canonicalDeviceId != nil {
-            onSessionClosed?([
+        if emitTransportClosed, context.canonicalDeviceId != nil {
+            onOutboundTransportClosed?([
                 "deviceId": context.canonicalDeviceId as Any,
                 "reason": reason,
                 "transport": "tcp",

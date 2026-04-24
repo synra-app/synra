@@ -13,9 +13,13 @@ export type LostDeviceFromHostEvent = {
 }
 
 function toDiscoverySource(value: unknown): DiscoveredDevice['source'] {
-  return value === 'mdns' || value === 'probe' || value === 'manual' || value === 'session'
+  /** Legacy host payloads used `session`; normalize to `transport`. */
+  if (value === 'session') {
+    return 'transport'
+  }
+  return value === 'mdns' || value === 'probe' || value === 'manual' || value === 'transport'
     ? value
-    : 'session'
+    : 'transport'
 }
 
 function toPayloadRecord(payload: unknown): Record<string, unknown> {

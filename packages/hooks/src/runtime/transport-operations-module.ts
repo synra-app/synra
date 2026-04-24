@@ -2,21 +2,21 @@ import { unknownToErrorMessage } from '@synra/protocol'
 import type { Ref } from 'vue'
 import type {
   RuntimeOpenTransportInput,
-  RuntimeSessionState,
+  RuntimePrimaryTransportState,
   SynraConnectionSendInput,
   SynraLanWireSendInput
 } from '../types'
 import type { ConnectionRuntimeAdapter } from './adapter'
-import type { ConnectedSessionsBook } from './connected-sessions-book'
+import type { OpenTransportLinksBook } from './open-transport-links-book'
 import { getHooksRuntimeOptions } from './config'
-import { setSessionStateWithTransitionLog } from './session-state-transition-log'
+import { setPrimaryTransportStateWithTransitionLog } from './primary-transport-state-transition-log'
 
 const OPEN_TRANSPORT_ERROR_MESSAGE = 'Failed to open transport.'
 const CLOSE_TRANSPORT_ERROR_MESSAGE = 'Failed to close transport.'
 const SEND_MESSAGE_ERROR_MESSAGE = 'Failed to send message.'
 const SEND_LAN_EVENT_ERROR_MESSAGE = 'Failed to send LAN event.'
 
-function isSessionNotOpenFailure(unknownError: unknown): boolean {
+function isTransportNotOpenFailure(unknownError: unknown): boolean {
   const message = unknownToErrorMessage(unknownError, '')
   if (message.length === 0) {
     return false
@@ -27,18 +27,18 @@ function isSessionNotOpenFailure(unknownError: unknown): boolean {
   )
 }
 
-export function createSessionOperationsModule(options: {
+export function createTransportOperationsModule(options: {
   adapter: ConnectionRuntimeAdapter
   error: Ref<string | null>
-  sessionState: Ref<RuntimeSessionState>
-  sessionsBook: ConnectedSessionsBook
+  primaryTransportState: Ref<RuntimePrimaryTransportState>
+  openLinksBook: OpenTransportLinksBook
 }): {
   openTransport(options: RuntimeOpenTransportInput): Promise<void>
   closeTransport(deviceId?: string): Promise<void>
   sendMessage(input: SynraConnectionSendInput): Promise<void>
   sendLanEvent(input: SynraLanWireSendInput): Promise<void>
 } {
-  const { adapter, error, sessionState, sessionsBook } = options
+  const { adapter, error, primaryTransportState, openLinksBook } = options
 
   const openTransportInflightKeys = new Set<string>()
 
@@ -84,21 +84,23 @@ export function createSessionOperationsModule(options: {
   async function closeTransport(deviceId?: string): Promise<void> {
     try {
       await adapter.closeTransport(deviceId)
-      const shouldClearCurrentSession =
-        !sessionState.value.deviceId || !deviceId || sessionState.value.deviceId === deviceId
-      setSessionStateWithTransitionLog(
-        sessionState,
+      const shouldClearPrimary =
+        !primaryTransportState.value.deviceId ||
+        !deviceId ||
+        primaryTransportState.value.deviceId === deviceId
+      setPrimaryTransportStateWithTransitionLog(
+        primaryTransportState,
         {
-          ...sessionState.value,
-          deviceId: shouldClearCurrentSession ? undefined : sessionState.value.deviceId,
-          host: shouldClearCurrentSession ? undefined : sessionState.value.host,
-          port: shouldClearCurrentSession ? undefined : sessionState.value.port,
+          ...primaryTransportState.value,
+          deviceId: shouldClearPrimary ? undefined : primaryTransportState.value.deviceId,
+          host: shouldClearPrimary ? undefined : primaryTransportState.value.host,
+          port: shouldClearPrimary ? undefined : primaryTransportState.value.port,
           state: 'closed',
           closedAt: Date.now()
         },
         { reason: 'manual_close_transport' }
       )
-      sessionsBook.markTransportDead(deviceId, Date.now())
+      openLinksBook.markTransportDead(deviceId, Date.now())
       error.value = null
     } catch (unknownError) {
       error.value = unknownToErrorMessage(unknownError, CLOSE_TRANSPORT_ERROR_MESSAGE)
@@ -107,7 +109,7 @@ export function createSessionOperationsModule(options: {
 
   async function sendMessage(input: SynraConnectionSendInput): Promise<void> {
     try {
-      sessionsBook.touchSessionActivity(input.targetDeviceId, Date.now(), 'outbound')
+      openLinksBook.touchLinkActivity(input.targetDeviceId, Date.now(), 'outbound')
       await adapter.sendMessage({
         requestId: input.requestId,
         sourceDeviceId: input.sourceDeviceId,
@@ -119,14 +121,17 @@ export function createSessionOperationsModule(options: {
       })
       error.value = null
     } catch (unknownError) {
-      if (isSessionNotOpenFailure(unknownError)) {
+      if (isTransportNotOpenFailure(unknownError)) {
         const now = Date.now()
-        sessionsBook.markTransportDead(input.targetDeviceId, now)
-        if (!sessionState.value.deviceId || sessionState.value.deviceId === input.targetDeviceId) {
-          setSessionStateWithTransitionLog(
-            sessionState,
+        openLinksBook.markTransportDead(input.targetDeviceId, now)
+        if (
+          !primaryTransportState.value.deviceId ||
+          primaryTransportState.value.deviceId === input.targetDeviceId
+        ) {
+          setPrimaryTransportStateWithTransitionLog(
+            primaryTransportState,
             {
-              ...sessionState.value,
+              ...primaryTransportState.value,
               deviceId: undefined,
               host: undefined,
               port: undefined,
@@ -144,7 +149,7 @@ export function createSessionOperationsModule(options: {
 
   async function sendLanEvent(input: SynraLanWireSendInput): Promise<void> {
     try {
-      sessionsBook.touchSessionActivity(input.targetDeviceId, Date.now(), 'outbound')
+      openLinksBook.touchLinkActivity(input.targetDeviceId, Date.now(), 'outbound')
       await adapter.sendLanEvent({
         requestId: input.requestId,
         sourceDeviceId: input.sourceDeviceId,
@@ -157,14 +162,17 @@ export function createSessionOperationsModule(options: {
       })
       error.value = null
     } catch (unknownError) {
-      if (isSessionNotOpenFailure(unknownError)) {
+      if (isTransportNotOpenFailure(unknownError)) {
         const now = Date.now()
-        sessionsBook.markTransportDead(input.targetDeviceId, now)
-        if (!sessionState.value.deviceId || sessionState.value.deviceId === input.targetDeviceId) {
-          setSessionStateWithTransitionLog(
-            sessionState,
+        openLinksBook.markTransportDead(input.targetDeviceId, now)
+        if (
+          !primaryTransportState.value.deviceId ||
+          primaryTransportState.value.deviceId === input.targetDeviceId
+        ) {
+          setPrimaryTransportStateWithTransitionLog(
+            primaryTransportState,
             {
-              ...sessionState.value,
+              ...primaryTransportState.value,
               deviceId: undefined,
               host: undefined,
               port: undefined,

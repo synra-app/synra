@@ -1,7 +1,7 @@
 import type { SynraLanConnectType } from '@synra/capacitor-device-connection'
 import type { SynraMessageType } from '@synra/protocol'
 
-export type RuntimeSessionState = {
+export type RuntimePrimaryTransportState = {
   state: 'idle' | 'connecting' | 'open' | 'closed' | 'error'
   deviceId?: string
   host?: string
@@ -18,7 +18,7 @@ export type TransportLinkState = 'idle' | 'handshaking' | 'ready' | 'dead'
 /** Application-level link (pairing, gating, UI). Does not imply TCP is open or any specific color. */
 export type AppLinkState = 'disconnected' | 'pending' | 'connected' | 'failed'
 
-export type RuntimeConnectedSession = {
+export type RuntimeOpenTransportLink = {
   deviceId: string
   transport: TransportLinkState
   app: AppLinkState

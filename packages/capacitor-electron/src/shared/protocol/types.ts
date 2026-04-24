@@ -110,7 +110,7 @@ export type PluginCatalogResult = {
   generatedAt: number
 }
 
-export type DiscoverySource = 'mdns' | 'probe' | 'manual' | 'session'
+export type DiscoverySource = 'mdns' | 'probe' | 'manual' | 'transport'
 export type DiscoveryMode = 'hybrid' | 'mdns' | 'subnet' | 'manual'
 
 export type DiscoveryState = 'idle' | 'scanning'

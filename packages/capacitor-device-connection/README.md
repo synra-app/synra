@@ -1,6 +1,6 @@
 # @synra/capacitor-device-connection
 
-Capacitor plugin for device session connection and messaging.
+Capacitor plugin for LAN device transport connection and messaging.
 
 ## Install
 
