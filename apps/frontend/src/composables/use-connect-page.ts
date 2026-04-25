@@ -151,12 +151,12 @@ export function useConnectPage() {
     try {
       const targetDeviceId = await store.connectToDevice(device.deviceId)
       if (!targetDeviceId) {
-        pairingStore.pushFeedback('Could not open session for pairing.')
+        pairingStore.pushFeedback('Could not open transport for pairing.')
         setPairAwaitingAccept(device.deviceId, false)
         getConnectionRuntime().setAppLinkForDevice(
           device.deviceId,
           'failed',
-          'No session for pairing.'
+          'No transport for pairing.'
         )
         return
       }

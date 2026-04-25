@@ -38,13 +38,13 @@ type OutboundState = {
   lastError?: string
 }
 
-type OutboundClientSessionOptions = {
+type OutboundClientTransportOptions = {
   eventBus: HostEventBus
   resolveLocalDeviceUuid: () => string
   probeSocketRegistry?: ProbeSocketRegistry
 }
 
-export interface OutboundClientSession {
+export interface OutboundClientTransport {
   open(options: DeviceTransportOpenOptions): Promise<DeviceTransportOpenResult>
   close(options?: DeviceTransportCloseOptions): Promise<DeviceTransportCloseResult>
   sendMessage(options: DeviceTransportSendMessageOptions): Promise<DeviceTransportSendMessageResult>
@@ -60,9 +60,9 @@ type ConnectAckResult = {
   remoteDeviceId?: string
 }
 
-export function createOutboundClientSession(
-  options: OutboundClientSessionOptions
-): OutboundClientSession {
+export function createOutboundClientTransport(
+  options: OutboundClientTransportOptions
+): OutboundClientTransport {
   let codec: LengthPrefixedJsonCodec = new LengthPrefixedJsonCodec()
   const pendingAcks = new Map<string, () => void>()
   let socket: Socket | undefined
@@ -99,7 +99,7 @@ export function createOutboundClientSession(
   const writeFrame = async (frame: LanFrame): Promise<void> => {
     const currentSocket = socket
     if (!currentSocket || currentSocket.destroyed) {
-      throw new BridgeError(BRIDGE_ERROR_CODES.unsupportedOperation, 'Session is not open.')
+      throw new BridgeError(BRIDGE_ERROR_CODES.unsupportedOperation, 'Transport is not open.')
     }
     await new Promise<void>((resolve, reject) => {
       currentSocket.write(codec.encode(frame), (error) => {
@@ -265,13 +265,13 @@ export function createOutboundClientSession(
       if (state.state === 'connecting') {
         throw new BridgeError(
           BRIDGE_ERROR_CODES.unsupportedOperation,
-          'Session is already connecting.'
+          'Transport is already connecting.'
         )
       }
       const adoptKey = `${openOptions.host}:${openOptions.port}`
       const lease = options.probeSocketRegistry?.take(adoptKey)
       if (lease) {
-        closeWithError('SESSION_REPLACED')
+        closeWithError('TRANSPORT_REPLACED')
         socket = lease.socket
         codec = lease.codec
         const now = Date.now()
@@ -308,7 +308,7 @@ export function createOutboundClientSession(
         }
       }
 
-      closeWithError('SESSION_REPLACED')
+      closeWithError('TRANSPORT_REPLACED')
 
       socket = new Socket()
       codec = new LengthPrefixedJsonCodec()
@@ -325,7 +325,7 @@ export function createOutboundClientSession(
       const connectAck = await new Promise<ConnectAckResult>((resolve, reject) => {
         resolveConnect = resolve
         rejectConnect = reject
-        const timeout = setTimeout(() => reject('SESSION_OPEN_TIMEOUT'), DEFAULT_ACK_TIMEOUT_MS)
+        const timeout = setTimeout(() => reject('TRANSPORT_OPEN_TIMEOUT'), DEFAULT_ACK_TIMEOUT_MS)
         socket?.connect(openOptions.port, openOptions.host, () => {
           const payload: Record<string, unknown> = {
             token: openOptions.token,
@@ -367,11 +367,11 @@ export function createOutboundClientSession(
             ? reason
             : reason instanceof Error
               ? reason.message
-              : 'SESSION_OPEN_FAILED'
+              : 'TRANSPORT_OPEN_FAILED'
         closeWithError(reasonText)
         throw new BridgeError(
           BRIDGE_ERROR_CODES.timeout,
-          `Failed to open discovery session. reason=${reasonText}`,
+          `Failed to open discovery transport. reason=${reasonText}`,
           {
             reason: reasonText
           }
@@ -418,7 +418,7 @@ export function createOutboundClientSession(
           timestamp: Date.now()
         }).catch(() => undefined)
       }
-      closeWithError('SESSION_CLOSED_BY_CLIENT')
+      closeWithError('TRANSPORT_CLOSED_BY_CLIENT')
       return {
         success: true,
         targetDeviceId,
@@ -427,7 +427,7 @@ export function createOutboundClientSession(
     },
     async sendLanEvent(sendOptions) {
       if (state.state !== 'open' || !state.deviceId) {
-        throw new BridgeError(BRIDGE_ERROR_CODES.unsupportedOperation, 'Session is not open.')
+        throw new BridgeError(BRIDGE_ERROR_CODES.unsupportedOperation, 'Transport is not open.')
       }
       const envelope: Record<string, unknown> = {
         eventName: sendOptions.eventName,
@@ -457,7 +457,7 @@ export function createOutboundClientSession(
     },
     async sendMessage(sendOptions) {
       if (state.state !== 'open' || !state.deviceId) {
-        throw new BridgeError(BRIDGE_ERROR_CODES.unsupportedOperation, 'Session is not open.')
+        throw new BridgeError(BRIDGE_ERROR_CODES.unsupportedOperation, 'Transport is not open.')
       }
       const messageId = sendOptions.messageId ?? randomUUID()
       const key = `${sendOptions.targetDeviceId}:${messageId}`
@@ -506,7 +506,7 @@ export function createOutboundClientSession(
           state: 'closed',
           deviceId: getOptions.targetDeviceId,
           closedAt: Date.now(),
-          lastError: 'SESSION_NOT_FOUND',
+          lastError: 'TRANSPORT_NOT_FOUND',
           direction: 'outbound',
           transport: 'tcp'
         }

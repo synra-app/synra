@@ -23,7 +23,7 @@ export type ProbeOptions = {
   localDeviceId: string
   /** Merged into each Synra `connect` payload (caller-defined wire keys). */
   probeConnectWirePayload?: Record<string, unknown>
-  /** When set, successful probes keep the TCP socket for reuse by outbound sessions (single TCP). */
+  /** When set, successful probes keep the TCP socket for reuse by outbound transport (single TCP). */
   probeSocketRegistry?: ProbeSocketRegistry
 }
 

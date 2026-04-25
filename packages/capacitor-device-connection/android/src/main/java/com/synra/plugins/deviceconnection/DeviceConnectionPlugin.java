@@ -34,7 +34,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 @CapacitorPlugin(name = "DeviceConnection")
 public class DeviceConnectionPlugin extends Plugin {
-    private static final int SESSION_ACK_TIMEOUT_MS = 6000;
+    private static final int CONNECT_ACK_TIMEOUT_MS = 6000;
     private static final int HEARTBEAT_INTERVAL_MS = 10_000;
     private static final int SYNRA_DEFAULT_TCP_PORT = 32100;
     private static final String APP_ID = "synra";
@@ -110,8 +110,8 @@ public class DeviceConnectionPlugin extends Plugin {
             closePrimaryOutboundSocket();
             try {
                 Socket socket = new Socket();
-                socket.connect(new InetSocketAddress(host, port), SESSION_ACK_TIMEOUT_MS);
-                socket.setSoTimeout(SESSION_ACK_TIMEOUT_MS);
+                socket.connect(new InetSocketAddress(host, port), CONNECT_ACK_TIMEOUT_MS);
+                socket.setSoTimeout(CONNECT_ACK_TIMEOUT_MS);
                 DataInputStream input = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
                 DataOutputStream output =
                     new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
@@ -586,7 +586,7 @@ public class DeviceConnectionPlugin extends Plugin {
             result.put("deviceId", targetDeviceId);
             result.put("state", "closed");
             result.put("transport", "tcp");
-            result.put("lastError", "SESSION_NOT_FOUND");
+            result.put("lastError", "TRANSPORT_PEER_NOT_FOUND");
             result.put("closedAt", System.currentTimeMillis());
             call.resolve(result);
             return;

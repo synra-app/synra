@@ -13,7 +13,7 @@ const appTitle = computed(() => {
     return 'Plugin Workspace'
   }
   if (route.path.startsWith('/devices')) {
-    return 'Device Sessions'
+    return 'Device Transport'
   }
   if (route.path.startsWith('/settings')) {
     return 'Runtime Settings'

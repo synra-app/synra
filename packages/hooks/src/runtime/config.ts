@@ -12,18 +12,18 @@ export type HooksRuntimeOptions = {
   onRemoteDeviceProfile?: (deviceId: string, displayName: string) => void
   /**
    * When true, LAN discovery updates for this `deviceId` are not merged into the
-   * runtime discovery list (paired devices are shown from pairing storage + session upserts).
+   * runtime discovery list (paired devices are shown from pairing storage + transport upserts).
    */
   shouldExcludeDiscoveredDevice?: (deviceId: string) => boolean
   /**
    * Classifies outbound Synra `connect` for `deviceId` (`fresh` = opener has no local pairing for this peer).
-   * When omitted, session code defaults to `paired` for legacy compatibility.
+   * When omitted, transport code defaults to `paired` for legacy compatibility.
    */
   resolveSynraConnectType?: (
     deviceId: string
   ) => SynraLanConnectType | undefined | Promise<SynraLanConnectType | undefined>
   /**
-   * Inbound session where the peer sent `connectType: fresh` but this host may still list them as paired.
+   * Inbound transport where the peer sent `connectType: fresh` but this host may still list them as paired.
    * Used to drop stale paired rows and surface the peer in discovery UI.
    */
   repairStalePairingAfterInboundFreshConnect?: (event: TransportOpenedEvent) => void | Promise<void>

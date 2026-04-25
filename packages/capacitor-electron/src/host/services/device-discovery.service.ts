@@ -26,7 +26,7 @@ import { createMdnsDiscoveryStrategy } from './device-discovery/discovery/strate
 import { createUdpDiscoveryStrategy } from './device-discovery/discovery/strategies/udp.strategy'
 import { createHostEventBus } from './device-discovery/events/host-event-bus'
 import { createInboundHostTransport } from './device-discovery/session/inbound-host-transport'
-import { createOutboundClientSession } from './device-discovery/session/outbound-client-session'
+import { createOutboundClientTransport } from './device-discovery/session/outbound-client-session'
 import { createDeviceRegistry } from './device-discovery/state/device-registry'
 
 type DeviceDiscoveryServiceOptions = {
@@ -69,7 +69,7 @@ export function createDeviceDiscoveryService(
     eventBus,
     resolveLocalDeviceUuid
   })
-  const outboundSession = createOutboundClientSession({
+  const outboundTransport = createOutboundClientTransport({
     eventBus,
     resolveLocalDeviceUuid,
     probeSocketRegistry
@@ -85,7 +85,7 @@ export function createDeviceDiscoveryService(
     await inboundTransport.start()
     heartbeatTimer = setInterval(() => {
       void inboundTransport.heartbeatTick()
-      void outboundSession.heartbeatTick()
+      void outboundTransport.heartbeatTick()
     }, DEFAULT_HEARTBEAT_INTERVAL_MS)
     hostStarted = true
   }
@@ -96,7 +96,7 @@ export function createDeviceDiscoveryService(
       heartbeatTimer = undefined
     }
     probeSocketRegistry.closeAll()
-    await outboundSession.close().catch(() => undefined)
+    await outboundTransport.close().catch(() => undefined)
     await inboundTransport.stop()
     hostStarted = false
   }
@@ -109,9 +109,9 @@ export function createDeviceDiscoveryService(
       if (inboundState) {
         return inboundState
       }
-      return outboundSession.getState(queryOptions)
+      return outboundTransport.getState(queryOptions)
     }
-    const outboundState = await outboundSession.getState()
+    const outboundState = await outboundTransport.getState()
     if (outboundState.state === 'open') {
       return outboundState
     }
@@ -137,12 +137,12 @@ export function createDeviceDiscoveryService(
     },
     async openTransport(openOptions) {
       await ensureHostStarted()
-      return outboundSession.open(openOptions)
+      return outboundTransport.open(openOptions)
     },
     async closeTransport(closeOptions = {}) {
       const targetDeviceId = closeOptions.targetDeviceId
       if (!targetDeviceId) {
-        await outboundSession.close(closeOptions)
+        await outboundTransport.close(closeOptions)
         await inboundTransport.closeTransport()
         return {
           success: true,
@@ -150,9 +150,9 @@ export function createDeviceDiscoveryService(
           transport: 'tcp'
         }
       }
-      const outboundState = await outboundSession.getState()
+      const outboundState = await outboundTransport.getState()
       if (outboundState.deviceId === targetDeviceId) {
-        return outboundSession.close(closeOptions)
+        return outboundTransport.close(closeOptions)
       }
       await inboundTransport.closeTransport(targetDeviceId)
       return {
@@ -162,11 +162,11 @@ export function createDeviceDiscoveryService(
       }
     },
     async sendMessage(sendOptions) {
-      const outboundState = await outboundSession.getState({
+      const outboundState = await outboundTransport.getState({
         targetDeviceId: sendOptions.targetDeviceId
       })
       if (outboundState.state === 'open' && outboundState.deviceId === sendOptions.targetDeviceId) {
-        return outboundSession.sendMessage(sendOptions)
+        return outboundTransport.sendMessage(sendOptions)
       }
       const sentViaInbound = await inboundTransport.sendMessage(sendOptions)
       if (!sentViaInbound) {
@@ -180,11 +180,11 @@ export function createDeviceDiscoveryService(
       }
     },
     async sendLanEvent(sendOptions) {
-      const outboundState = await outboundSession.getState({
+      const outboundState = await outboundTransport.getState({
         targetDeviceId: sendOptions.targetDeviceId
       })
       if (outboundState.state === 'open' && outboundState.deviceId === sendOptions.targetDeviceId) {
-        return outboundSession.sendLanEvent(sendOptions)
+        return outboundTransport.sendLanEvent(sendOptions)
       }
       const sentViaInbound = await inboundTransport.sendLanEvent(sendOptions)
       if (!sentViaInbound) {

@@ -24,21 +24,19 @@ npx cap sync
 
 ## Platform support
 
-| Capability                                                                 | iOS                      | Android                    | Web     | Electron                      |
-| -------------------------------------------------------------------------- | ------------------------ | -------------------------- | ------- | ----------------------------- |
-| `startDiscovery` / `stopDiscovery` / `getDiscoveredDevices`                | Yes                      | Yes                        | Mocked  | Yes                           |
-| `ensureOutboundSession` (hello → keep-alive TCP; same socket as discovery) | Yes                      | Yes                        | No      | Yes (`discovery.openSession`) |
-| `sendMessage` / `closeSession`                                             | Yes (inbound + outbound) | Yes (inbound + outbound)   | No      | Yes                           |
-| `scanStateChanged` / `transport.opened` / `transport.closed` / `messageReceived` | Yes                      | Yes                        | Partial | Partial                       |
-| `transportError`                                                           | Yes                      | Yes                        | No      | No                            |
-| `deviceFound` / `deviceUpdated` / `deviceLost`                             | No                       | Yes (compatibility events) | Partial | Partial                       |
-| Foreground service (LAN TCP stack keep-alive on Android)                   | No                       | Yes                        | No      | No                            |
+| Capability | iOS | Android | Web | Electron |
+| --- | --- | --- | --- | --- |
+| `startDiscovery` / `stopDiscovery` / `getDiscoveredDevices` | Yes | Yes | Mocked | Yes |
+| `scanStateChanged` | Yes | Yes | Partial | Partial |
+| `deviceConnectableUpdated` | Yes | Yes | Partial | Partial |
+| `deviceFound` / `deviceUpdated` / `deviceLost` | No | Yes (compatibility events) | Partial | Partial |
 
 ## Notes
 
 - `hybrid` with **`enableProbeFallback` true (default)** unions **mDNS + UDP** discovery candidates before TCP probe. With **`enableProbeFallback` false**, UDP discovery is not run in `hybrid` (mDNS + manual targets only).
 - `deviceFound`, `deviceUpdated`, and `deviceLost` are currently Android-compatible events and should not be treated as cross-platform guarantees.
 - `scanWindowMs` and `startedAt` can be returned by native platforms in discovery result payloads.
+- This package is discovery-only. Transport opening, messaging, and pairing are handled by `@synra/capacitor-device-connection` and upper runtime modules.
 
 ## API
 

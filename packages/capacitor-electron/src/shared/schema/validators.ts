@@ -225,7 +225,7 @@ export function validateDiscoveryStartPayload(payload: unknown): payload is {
   return true
 }
 
-export function validateDiscoveryOpenSessionPayload(payload: unknown): payload is {
+export function validateDiscoveryOpenTransportPayload(payload: unknown): payload is {
   deviceId: string
   host: string
   port: number

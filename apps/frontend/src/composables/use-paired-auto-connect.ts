@@ -21,7 +21,7 @@ function isIpv4Address(value: string | undefined): boolean {
 }
 
 /**
- * Keeps outbound sessions open for persisted paired peers once they appear in discovery
+ * Keeps outbound transport open for persisted paired peers once they appear in discovery
  * or when `lastResolvedHost` is known from pairing storage.
  */
 export function registerPairedAutoConnect(pinia: Pinia): void {

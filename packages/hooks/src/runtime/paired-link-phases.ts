@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 
-/** Per `deviceId`: UI yellow dot while outbound TCP session is opening (connecting). */
+/** Per `deviceId`: UI yellow dot while outbound TCP transport is opening (connecting). */
 const phases = ref(new Map<string, 'connecting'>())
 
 export function getPairedLinkPhases(): typeof phases {

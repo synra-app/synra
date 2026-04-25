@@ -93,7 +93,7 @@ async function onReject(): Promise<void> {
       }
     })
   } catch {
-    // Session may already be half-closed; still tear down UI and TCP below.
+    // Transport may already be half-closed; still tear down UI and TCP below.
   } finally {
     setPairAwaitingAccept(current.initiator.deviceId, false)
     pairingStore.clearIncoming()

@@ -37,7 +37,7 @@ function createMockAdapter(): ConnectionRuntimeAdapter {
     }
   ]
 
-  let sessionOpenedListener: ((event: TransportOpenedEvent) => void) | undefined
+  let transportOpenedListener: ((event: TransportOpenedEvent) => void) | undefined
   let messageListener: ((event: MessageReceivedEvent) => void) | undefined
 
   return {
@@ -55,7 +55,7 @@ function createMockAdapter(): ConnectionRuntimeAdapter {
         transport: 'tcp',
         direction: 'inbound'
       }
-      sessionOpenedListener?.(event)
+      transportOpenedListener?.(event)
       return { deviceId: event.deviceId, state: 'open', transport: 'tcp' }
     },
     async closeTransport() {},
@@ -85,7 +85,7 @@ function createMockAdapter(): ConnectionRuntimeAdapter {
       return { remove: async () => {} }
     },
     async addTransportOpenedListener(listener: (event: TransportOpenedEvent) => void) {
-      sessionOpenedListener = listener
+      transportOpenedListener = listener
       return { remove: async () => {} }
     },
     async addTransportClosedListener(_listener: (event: TransportClosedEvent) => void) {
@@ -133,7 +133,7 @@ test('cleanup runtime options', () => {
 })
 
 test('transport error closes primary transport and marks link dead', async () => {
-  let sessionOpenedListener: ((event: TransportOpenedEvent) => void) | undefined
+  let transportOpenedListener: ((event: TransportOpenedEvent) => void) | undefined
   let transportErrorListener: ((event: TransportErrorEvent) => void) | undefined
 
   configureHooksRuntime({
@@ -181,7 +181,7 @@ test('transport error closes primary transport and marks link dead', async () =>
           transport: 'tcp',
           direction: 'outbound'
         }
-        sessionOpenedListener?.(openedEvent)
+        transportOpenedListener?.(openedEvent)
         return { deviceId: openedEvent.deviceId, state: 'open', transport: 'tcp' as const }
       },
       async closeTransport() {},
@@ -197,7 +197,7 @@ test('transport error closes primary transport and marks link dead', async () =>
         return { remove: async () => {} }
       },
       async addTransportOpenedListener(listener: (event: TransportOpenedEvent) => void) {
-        sessionOpenedListener = listener
+        transportOpenedListener = listener
         return { remove: async () => {} }
       },
       async addTransportClosedListener() {
@@ -317,7 +317,7 @@ test('startScan clears peer list when discovery returns empty', async () => {
 
 test('transport is not open error marks transport dead and reconnects', async () => {
   let openCounter = 0
-  let sessionOpenedListener: ((event: TransportOpenedEvent) => void) | undefined
+  let transportOpenedListener: ((event: TransportOpenedEvent) => void) | undefined
   configureHooksRuntime({
     resolveSynraConnectType: () => 'fresh',
     adapterFactory: () => ({
@@ -357,7 +357,7 @@ test('transport is not open error marks transport dead and reconnects', async ()
       },
       async openTransport(options: OpenTransportOptions) {
         openCounter += 1
-        sessionOpenedListener?.({
+        transportOpenedListener?.({
           deviceId: options.deviceId,
           host: options.host,
           port: options.port,
@@ -385,7 +385,7 @@ test('transport is not open error marks transport dead and reconnects', async ()
         return { remove: async () => {} }
       },
       async addTransportOpenedListener(listener: (event: TransportOpenedEvent) => void) {
-        sessionOpenedListener = listener
+        transportOpenedListener = listener
         return { remove: async () => {} }
       },
       async addTransportClosedListener() {

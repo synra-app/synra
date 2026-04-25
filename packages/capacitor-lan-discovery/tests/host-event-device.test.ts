@@ -56,22 +56,6 @@ describe('host-event-device mapper', () => {
     })
   })
 
-  test('normalizes legacy payload source session to transport', () => {
-    const mapped = discoveredDeviceFromHostEvent(
-      {
-        type: 'transport.opened',
-        remote: '10.0.0.12:32100',
-        payload: {
-          deviceId: 'device-legacy',
-          displayName: 'Legacy',
-          source: 'session'
-        }
-      },
-      1000
-    )
-    expect(mapped?.source).toBe('transport')
-  })
-
   test('maps host.member.offline to lost device payload', () => {
     const mapped = lostDeviceFromHostEvent({
       type: 'host.member.offline',

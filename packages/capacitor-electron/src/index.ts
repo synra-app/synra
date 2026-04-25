@@ -119,7 +119,7 @@ export {
   validateExternalOpenPayload,
   validateReadFilePayload,
   validateDiscoveryStartPayload,
-  validateDiscoveryOpenSessionPayload,
+  validateDiscoveryOpenTransportPayload,
   validateDiscoverySendMessagePayload,
   validateDiscoverySendLanEventPayload
 } from './shared/schema/validators'

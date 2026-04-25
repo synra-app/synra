@@ -22,7 +22,7 @@ function isTransportNotOpenFailure(unknownError: unknown): boolean {
     return false
   }
   return (
-    message.toLowerCase().includes('session is not open') ||
+    message.toLowerCase().includes('connection is not open') ||
     message.toLowerCase().includes('transport is not open')
   )
 }
