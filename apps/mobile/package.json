@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "cap": "esno ./scripts/cap.ts",
+    "clean:android": "esno ./scripts/clean-android.ts",
     "copy-web": "esno ./scripts/copy-web.ts",
-    "sync": "vp run copy-web && vp exec cap sync",
-    "sync:android": "vp run copy-web && vp exec cap sync android",
-    "sync:ios": "vp run copy-web && vp exec cap sync ios",
+    "sync": "vp exec esno ./scripts/copy-web.ts && vp exec cap sync",
+    "sync:android": "vp exec esno ./scripts/copy-web.ts && vp exec cap sync android",
+    "sync:ios": "vp exec esno ./scripts/copy-web.ts && vp exec cap sync ios",
     "open:android": "vp exec cap open android",
     "open:ios": "vp exec cap open ios"
   },

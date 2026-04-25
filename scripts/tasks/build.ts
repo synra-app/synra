@@ -20,6 +20,7 @@ type BuildStep = {
   command: string
   args: string[]
   env?: NodeJS.ProcessEnv
+  cwd?: string
 }
 
 const buildToolsStep: BuildStep = {
@@ -28,6 +29,7 @@ const buildToolsStep: BuildStep = {
   args: ['run', 'build:tools'],
   env: process.platform === 'win32' ? { VP_RUN_CONCURRENCY_LIMIT: '1' } : undefined
 }
+const MOBILE_DIR = resolve(import.meta.dirname, '../../apps/mobile')
 
 const stepsByTarget: Record<BuildTarget, BuildStep[]> = {
   frontend: [
@@ -70,9 +72,16 @@ const stepsByTarget: Record<BuildTarget, BuildStep[]> = {
       args: ['run', 'frontend#build']
     },
     {
+      title: 'Copy frontend dist to mobile/www',
+      command: VP_COMMAND,
+      args: ['exec', 'esno', './scripts/copy-web.ts'],
+      cwd: MOBILE_DIR
+    },
+    {
       title: 'Sync Android project',
       command: VP_COMMAND,
-      args: ['run', 'mobile#sync:android']
+      args: ['exec', 'cap', 'sync', 'android'],
+      cwd: MOBILE_DIR
     }
   ],
   ios: [
@@ -83,9 +92,16 @@ const stepsByTarget: Record<BuildTarget, BuildStep[]> = {
       args: ['run', 'frontend#build']
     },
     {
+      title: 'Copy frontend dist to mobile/www',
+      command: VP_COMMAND,
+      args: ['exec', 'esno', './scripts/copy-web.ts'],
+      cwd: MOBILE_DIR
+    },
+    {
       title: 'Sync iOS project',
       command: VP_COMMAND,
-      args: ['run', 'mobile#sync:ios']
+      args: ['exec', 'cap', 'sync', 'ios'],
+      cwd: MOBILE_DIR
     }
   ],
   all: [
@@ -111,14 +127,28 @@ const stepsByTarget: Record<BuildTarget, BuildStep[]> = {
       args: ['run', 'electron#package:macos']
     },
     {
+      title: 'Copy frontend dist to mobile/www',
+      command: VP_COMMAND,
+      args: ['exec', 'esno', './scripts/copy-web.ts'],
+      cwd: MOBILE_DIR
+    },
+    {
       title: 'Sync Android project',
       command: VP_COMMAND,
-      args: ['run', 'mobile#sync:android']
+      args: ['exec', 'cap', 'sync', 'android'],
+      cwd: MOBILE_DIR
+    },
+    {
+      title: 'Copy frontend dist to mobile/www',
+      command: VP_COMMAND,
+      args: ['exec', 'esno', './scripts/copy-web.ts'],
+      cwd: MOBILE_DIR
     },
     {
       title: 'Sync iOS project',
       command: VP_COMMAND,
-      args: ['run', 'mobile#sync:ios']
+      args: ['exec', 'cap', 'sync', 'ios'],
+      cwd: MOBILE_DIR
     }
   ]
 }
@@ -134,6 +164,7 @@ async function runStep(step: BuildStep): Promise<void> {
         ? spawn(`${step.command} ${step.args.join(' ')}`, {
             stdio: 'inherit',
             shell: true,
+            cwd: step.cwd,
             env: {
               ...process.env,
               ...step.env
@@ -141,6 +172,7 @@ async function runStep(step: BuildStep): Promise<void> {
           })
         : spawn(step.command, step.args, {
             stdio: 'inherit',
+            cwd: step.cwd,
             env: {
               ...process.env,
               ...step.env
