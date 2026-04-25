@@ -13,12 +13,12 @@ import {
   DEVICE_PROFILE_UPDATED_MESSAGE_TYPE,
   isDeviceProfileUpdatedPayload
 } from './device-profile'
-import { shouldExposeDiscoveredDevice } from './discovery-exposure'
+import { shouldKeepDiscoveredDevice, shouldKeepDiscoveredDeviceId } from './discovery-admission'
 import { normalizeHost } from './host-normalization'
 import { sortDevices } from './device-sort'
 import type { MessageListenersRegistry } from './message-listeners'
 import type { LanWireListenersRegistry } from './lan-wire-listeners'
-import { getHooksRuntimeOptions, isLocalDiscoveryDeviceId } from './config'
+import { getHooksRuntimeOptions } from './config'
 import { setPairAwaitingAccept } from './pair-awaiting-accept'
 import { setPairedDeviceConnecting } from './paired-link-phases'
 import { setPrimaryTransportStateWithTransitionLog } from './primary-transport-state-transition-log'
@@ -74,16 +74,7 @@ export async function registerAdapterListeners(options: {
   const { emitIncomingMessage } = messageRegistry
 
   await adapter.addDeviceConnectableUpdatedListener((event) => {
-    if (isLocalDiscoveryDeviceId(event.device.deviceId)) {
-      removeDeviceByIdentity(devices, { deviceId: event.device.deviceId })
-      return
-    }
-    const exclude = getHooksRuntimeOptions().shouldExcludeDiscoveredDevice
-    if (typeof exclude === 'function' && exclude(event.device.deviceId)) {
-      removeDeviceByIdentity(devices, { deviceId: event.device.deviceId })
-      return
-    }
-    if (!shouldExposeDiscoveredDevice(event.device)) {
+    if (!shouldKeepDiscoveredDevice(event.device)) {
       removeDeviceByIdentity(devices, {
         deviceId: event.device.deviceId,
         ipAddress: event.device.ipAddress
@@ -108,7 +99,20 @@ export async function registerAdapterListeners(options: {
       explicitDirection ??
       (typeof event.deviceId === 'string' && event.deviceId.length > 0 ? 'outbound' : 'inbound')
 
+    const beforeLength = devices.value.length
     upsertDiscoveredPeerFromTransportOpened(devices, event)
+    const openedDeviceId = typeof event.deviceId === 'string' ? event.deviceId : ''
+    if (openedDeviceId.length > 0 && !shouldKeepDiscoveredDeviceId(openedDeviceId)) {
+      removeDeviceByIdentity(devices, { deviceId: openedDeviceId, ipAddress: event.host })
+    } else if (devices.value.length !== beforeLength) {
+      const inserted =
+        openedDeviceId.length > 0
+          ? devices.value.find((device) => device.deviceId === openedDeviceId)
+          : undefined
+      if (inserted && !shouldKeepDiscoveredDevice(inserted)) {
+        removeDeviceByIdentity(devices, { deviceId: openedDeviceId, ipAddress: event.host })
+      }
+    }
 
     const inboundWire = event.incomingSynraConnectPayload
     const inboundConnectType =

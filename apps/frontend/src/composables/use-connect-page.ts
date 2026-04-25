@@ -12,6 +12,7 @@ import { storeToRefs } from 'pinia'
 import { computed, onMounted, ref, watch } from 'vue'
 import type { DiscoveredDevice } from '@synra/capacitor-lan-discovery'
 import { buildLocalPairInitiatorProfile } from '../lib/pair-profile'
+import { isIpv4Address } from '../lib/network'
 import { resolveSelfOnLanForPairing } from '../lib/resolve-self-on-lan-for-pairing'
 import { registerPairingOutbound } from '../lib/pairing-outbound-pending'
 import { syncPairedDiscoveryExclusionFromRecords } from '../lib/discovery-paired-exclusion'
@@ -21,21 +22,16 @@ import {
   repairPairedDevicesPersistenceIfNeeded,
   type SynraPairedDeviceRecord
 } from '../lib/paired-devices-storage'
+import { tryOpenTransportForPairedRecord } from '../lib/connect-paired-record'
 import { useLanDiscoveryStore } from '../stores/lan-discovery'
+import { usePairedReconnectStore } from '../stores/paired-reconnect'
 import { usePairingStore } from '../stores/pairing'
 import { usePairingProtocolContext } from './use-pairing-protocol-context'
 
-function isIpv4Address(value: string | undefined): boolean {
-  if (typeof value !== 'string') {
-    return false
-  }
-  const segments = value.trim().split('.')
-  if (segments.length !== 4) {
-    return false
-  }
-  return segments.every(
-    (segment) => /^\d{1,3}$/.test(segment) && Number(segment) >= 0 && Number(segment) <= 255
-  )
+type DeviceViewState = {
+  tone: 'yellow' | 'green' | 'gray'
+  pending: boolean
+  appReady: boolean
 }
 
 function isTransportNotOpenError(error: unknown): boolean {
@@ -50,9 +46,18 @@ export function useConnectPage() {
   const store = useLanDiscoveryStore()
   const pairingStore = usePairingStore()
   const pairingProtocol = usePairingProtocolContext()
-  const { scanState, peers, appReadyDeviceIds, openTransportLinks, loading, error } =
-    storeToRefs(store)
+  const {
+    scanState,
+    peers,
+    appReadyDeviceIds,
+    openTransportLinks,
+    transportReadyDeviceIds,
+    loading,
+    error
+  } = storeToRefs(store)
   const { pairedListEpoch, feedbackMessage } = storeToRefs(pairingStore)
+  const reconStore = usePairedReconnectStore()
+  const { reconnectGaveUpByDeviceId } = storeToRefs(reconStore)
 
   const pendingDeviceActionIds = ref<string[]>([])
   const pairedRecords = ref<SynraPairedDeviceRecord[]>([])
@@ -82,7 +87,12 @@ export function useConnectPage() {
   )
 
   const displayDevices = computed<DisplayDevice[]>(() =>
-    mergePairedAndDiscoveredDevices(pairedRecords.value, discoveredIpv4Peers.value)
+    mergePairedAndDiscoveredDevices(
+      pairedRecords.value,
+      discoveredIpv4Peers.value,
+      new Set(transportReadyDeviceIds.value),
+      openTransportLinks.value
+    )
   )
 
   function deriveDeviceTone(input: {
@@ -99,21 +109,35 @@ export function useConnectPage() {
     return 'gray'
   }
 
-  const linkToneByDeviceId = computed(() => {
+  const deviceViewStateById = computed<Record<string, DeviceViewState>>(() => {
     const transportPending = getPairedLinkPhases().value
     const pairAwaiting = getPairAwaitingAcceptDeviceIds().value
     const pendingActions = new Set(pendingDeviceActionIds.value)
     const pairedReady = new Set(appReadyDeviceIds.value)
-    const tones: Record<string, 'yellow' | 'green' | 'gray'> = {}
+    const tcpReady = new Set(transportReadyDeviceIds.value)
+    const states: Record<string, DeviceViewState> = {}
     for (const device of displayDevices.value) {
       const deviceId = device.deviceId
-      tones[deviceId] = deriveDeviceTone({
-        isPending:
-          pendingActions.has(deviceId) ||
-          transportPending.has(deviceId) ||
-          pairAwaiting.has(deviceId),
-        isPairedReady: pairedReady.has(deviceId)
-      })
+      const pending =
+        pendingActions.has(deviceId) || transportPending.has(deviceId) || pairAwaiting.has(deviceId)
+      const appReady = pairedReady.has(deviceId)
+      const pairedTcpReady = device.isPaired && tcpReady.has(deviceId)
+      states[deviceId] = {
+        pending,
+        appReady,
+        tone: deriveDeviceTone({
+          isPending: pending,
+          isPairedReady: appReady || pairedTcpReady
+        })
+      }
+    }
+    return states
+  })
+
+  const linkToneByDeviceId = computed(() => {
+    const tones: Record<string, 'yellow' | 'green' | 'gray'> = {}
+    for (const [deviceId, state] of Object.entries(deviceViewStateById.value)) {
+      tones[deviceId] = state.tone
     }
     return tones
   })
@@ -130,9 +154,6 @@ export function useConnectPage() {
     addPendingDeviceAction(deviceId)
     try {
       await store.connectToDevice(deviceId)
-      if (pairedRecords.value.some((row) => row.deviceId === deviceId)) {
-        getConnectionRuntime().setAppLinkForDevice(deviceId, 'connected')
-      }
     } finally {
       removePendingDeviceAction(deviceId)
     }
@@ -264,7 +285,38 @@ export function useConnectPage() {
       }
       await store.disconnectDevice(device.deviceId)
     } finally {
+      reconStore.forgetPairedDevice(device.deviceId)
       removePendingDeviceAction(device.deviceId)
+    }
+  }
+
+  async function onManualPairedReconnect(deviceId: string): Promise<void> {
+    if (isDeviceActionPending(deviceId) || loading.value) {
+      return
+    }
+    reconStore.clearGaveUp(deviceId)
+    const sched = reconStore.getScheduler()
+    const records = await listPairedDeviceRecords()
+    const record = records.find((row) => row.deviceId === deviceId)
+    if (!record) {
+      return
+    }
+    addPendingDeviceAction(deviceId)
+    try {
+      const ok = await tryOpenTransportForPairedRecord(
+        {
+          isTransportReady: (id) => transportReadyDeviceIds.value.includes(id),
+          peers: () => peers.value,
+          connectToDevice: store.connectToDevice,
+          connectToDeviceAt: store.connectToDeviceAt
+        },
+        record
+      )
+      if (!ok) {
+        sched?.restartAfterManualIfStillDisconnected(deviceId, false)
+      }
+    } finally {
+      removePendingDeviceAction(deviceId)
     }
   }
 
@@ -289,7 +341,9 @@ export function useConnectPage() {
     loading,
     onConnect,
     onDisconnect,
+    onManualPairedReconnect,
     onPairDevice,
+    reconnectGaveUpByDeviceId,
     onScanDiscovery,
     onUnpairDevice,
     pendingDeviceActionIds,

@@ -7,7 +7,8 @@
     "dev": "vp dev",
     "dev:electron": "vp dev --port 5173 --strictPort",
     "build": "tsc && vp build",
-    "preview": "vp preview"
+    "preview": "vp preview",
+    "test": "vp test"
   },
   "dependencies": {
     "@capacitor/core": "catalog:capacitor",

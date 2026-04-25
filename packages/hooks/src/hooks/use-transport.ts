@@ -10,6 +10,7 @@ import type {
 import { getConnectionRuntime } from '../runtime/core'
 import { type DeviceProfileUpdatedPayload } from '../runtime/device-profile'
 import { normalizeHost } from '../runtime/host-normalization'
+import { findReadyTransportLinkForDevice } from '../runtime/ready-transport-link'
 
 type SynraTransportOutgoing = {
   channel?: string
@@ -103,19 +104,10 @@ export function useTransport() {
   const openTransportLinks = computed(() => [...runtime.openTransportLinks.value])
 
   function findTransportReadyLinkByPeer(deviceId: string) {
-    const target = peers.value.find((peer) => peer.deviceId === deviceId)
-    const targetHost = target ? normalizeHost(target.ipAddress) : ''
-    return runtime.openTransportLinks.value.find((link) => {
-      if (link.transport !== 'ready') {
-        return false
-      }
-      if (link.deviceId === deviceId) {
-        return true
-      }
-      if (targetHost.length === 0) {
-        return false
-      }
-      return normalizeHost(link.host) === targetHost
+    return findReadyTransportLinkForDevice({
+      deviceId,
+      devices: peers.value,
+      links: runtime.openTransportLinks.value
     })
   }
 

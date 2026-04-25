@@ -65,7 +65,7 @@ function createScanOnlyAdapter(scanRounds: DiscoveredDevice[][]): ConnectionRunt
   }
 }
 
-test('startDiscovery drops transport-sourced peers when scan does not include them', async () => {
+test('startDiscovery keeps transport peers when scan omits them by merging open links', async () => {
   const transportPeer: DiscoveredDevice = {
     deviceId: 'device-ios',
     name: 'iOS',
@@ -111,10 +111,10 @@ test('startDiscovery drops transport-sourced peers when scan does not include th
 
   await transport.startScan()
   const ids = transport.peers.value.map((p) => p.deviceId).sort()
-  expect(ids).toEqual(['device-other'])
+  expect(ids).toEqual(['device-ios', 'device-other'])
 })
 
-test('transport open can promote source, but rescan still uses fresh discovery snapshot', async () => {
+test('transport open promotes source, rescan keeps long-lived link row when LAN snapshot is empty', async () => {
   const adapter = createScanOnlyAdapter([
     [
       {
@@ -150,5 +150,6 @@ test('transport open can promote source, but rescan still uses fresh discovery s
   expect(transport.peers.value[0]?.source).toBe('transport')
 
   await transport.startScan()
-  expect(transport.peers.value.map((p) => p.deviceId)).toEqual([])
+  expect(transport.peers.value.map((p) => p.deviceId)).toEqual(['device-android'])
+  expect(transport.peers.value[0]?.source).toBe('transport')
 })

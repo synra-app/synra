@@ -7,7 +7,10 @@ import { installElectronCapacitor } from '@synra/capacitor-electron/capacitor'
 import { ensureDeviceInstanceUuid } from '../lib/device-instance-uuid'
 import { hashDeviceIdFromInstanceUuid } from '../lib/hash-device-id'
 import { ensureDeviceBasicInfo } from '../lib/device-basic-info'
-import { syncPairedDiscoveryExclusionFromRecords } from '../lib/discovery-paired-exclusion'
+import {
+  isPairedDeviceExcludedFromDiscovery,
+  syncPairedDiscoveryExclusionFromRecords
+} from '../lib/discovery-paired-exclusion'
 import {
   listPairedDeviceRecords,
   patchPairedDeviceDisplayName,
@@ -85,6 +88,7 @@ export function setupSynraRuntime(
       } catch {}
       const localDiscoveryDeviceId = await hashDeviceIdFromInstanceUuid(deviceInstanceUuid)
       configureHooksRuntime({
+        shouldExcludeDiscoveredDevice: (deviceId) => isPairedDeviceExcludedFromDiscovery(deviceId),
         localDiscoveryDeviceId,
         onRemoteDeviceProfile: (deviceId, displayName) => {
           void patchPairedDeviceDisplayName(deviceId, displayName).then((ok) => {

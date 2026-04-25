@@ -7,11 +7,13 @@ const props = defineProps<{
   device: DisplayDevice | null
   loading: boolean
   actionPending: boolean
+  showPairedReconnect: boolean
 }>()
 
 const emit = defineEmits<{
   close: []
   unpair: [device: DisplayDevice]
+  connectPaired: [device: DisplayDevice]
 }>()
 
 function formatTimestamp(value: number | undefined): string {
@@ -35,6 +37,12 @@ function readOptionalField(device: DisplayDevice | null, field: 'direction' | 'p
 function emitUnpair(): void {
   if (props.device) {
     emit('unpair', props.device)
+  }
+}
+
+function emitConnectPaired(): void {
+  if (props.device) {
+    emit('connectPaired', props.device)
   }
 }
 </script>
@@ -80,6 +88,14 @@ function emitUnpair(): void {
         v-if="device.isPaired"
         class="mt-5 flex flex-wrap justify-end gap-2 border-t border-white/10 pt-4"
       >
+        <AppButton
+          v-if="showPairedReconnect"
+          variant="solid"
+          :disabled="loading || actionPending"
+          @click="emitConnectPaired"
+        >
+          Connect
+        </AppButton>
         <AppButton :disabled="loading || actionPending" @click="emitUnpair">Unpair</AppButton>
       </div>
     </div>

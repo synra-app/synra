@@ -147,7 +147,7 @@ test('startDiscovery maps successful probe to canonical device id', async () => 
   resetConnectionRuntime()
 })
 
-test('startDiscovery keeps discovery silent when probe call fails', async () => {
+test('startDiscovery keeps discovery rows and stays silent when probe call fails', async () => {
   const adapter = createProbeFilterAdapter({
     results: []
   })
@@ -161,7 +161,7 @@ test('startDiscovery keeps discovery silent when probe call fails', async () => 
   const transport = useTransport()
   await transport.ensureReady()
   await transport.startScan()
-  expect(transport.peers.value).toEqual([])
+  expect(transport.peers.value.map((peer) => peer.deviceId)).toEqual(['device-candidate-ghost'])
   expect(transport.error.value).toBeNull()
   resetHooksRuntimeOptions()
   resetConnectionRuntime()

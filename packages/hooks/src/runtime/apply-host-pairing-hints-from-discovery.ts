@@ -15,7 +15,7 @@ export type SynraDiscoveryPairingHint = {
 export async function applyHostPairingHintsFromDiscovery(
   hints: SynraDiscoveryPairingHint[]
 ): Promise<void> {
-  let changed = false
+  const toDowngrade = new Set<string>()
   for (const hint of hints) {
     const id = hint.canonicalDeviceId.trim()
     if (!id) {
@@ -28,19 +28,20 @@ export async function applyHostPairingHintsFromDiscovery(
     if (payload[SYNRA_CONNECT_ACK_HOST_LISTS_PEER_AS_PAIRED] !== false) {
       continue
     }
-    const raw = await SynraPreferences.get({ key: SYNRA_PAIRED_DEVICES_KEY })
-    const parsed = parsePairedDevicesPayload(raw.value)
-    const nextItems = parsed.items.filter((item) => item.deviceId !== id)
-    if (nextItems.length === parsed.items.length) {
-      continue
-    }
-    await SynraPreferences.set({
-      key: SYNRA_PAIRED_DEVICES_KEY,
-      value: serializePairedDevicesPayload({ ...parsed, items: nextItems })
-    })
-    changed = true
+    toDowngrade.add(id)
   }
-  if (changed) {
-    bumpPairedDevicesStorageEpoch()
+  if (toDowngrade.size === 0) {
+    return
   }
+  const raw = await SynraPreferences.get({ key: SYNRA_PAIRED_DEVICES_KEY })
+  const parsed = parsePairedDevicesPayload(raw.value)
+  const nextItems = parsed.items.filter((item) => !toDowngrade.has(item.deviceId))
+  if (nextItems.length === parsed.items.length) {
+    return
+  }
+  await SynraPreferences.set({
+    key: SYNRA_PAIRED_DEVICES_KEY,
+    value: serializePairedDevicesPayload({ ...parsed, items: nextItems })
+  })
+  bumpPairedDevicesStorageEpoch()
 }

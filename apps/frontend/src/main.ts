@@ -1,6 +1,5 @@
 import 'uno.css'
 import './styles/main.scss'
-import { configureHooksRuntime } from '@synra/hooks'
 import { createPinia } from 'pinia'
 import { createApp, shallowRef } from 'vue'
 import { createRouter, createWebHistory } from 'vue-router'
@@ -11,11 +10,6 @@ import {
   PAIRING_PROTOCOL_KEY,
   type PairingProtocolContext
 } from './composables/use-pairing-protocol-context'
-import { isPairedDeviceExcludedFromDiscovery } from './lib/discovery-paired-exclusion'
-
-configureHooksRuntime({
-  shouldExcludeDiscoveredDevice: (deviceId) => isPairedDeviceExcludedFromDiscovery(deviceId)
-})
 
 const router = createRouter({
   history: createWebHistory(),

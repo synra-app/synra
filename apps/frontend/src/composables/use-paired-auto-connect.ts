@@ -1,86 +1,97 @@
 import type { Pinia } from 'pinia'
-import type { SynraPairedDeviceRecord } from '@synra/capacitor-preferences'
 import { storeToRefs } from 'pinia'
 import { watch } from 'vue'
-import { getConnectionRuntime, setPairedDeviceConnecting } from '@synra/hooks'
+import { pairedDevicesStorageEpoch } from '@synra/hooks'
 import { listPairedDeviceRecords } from '../lib/paired-devices-storage'
+import { tryOpenTransportForPairedRecord } from '../lib/connect-paired-record'
+import { PairedReconnectScheduler } from '../lib/paired-reconnect-scheduler'
 import { useLanDiscoveryStore } from '../stores/lan-discovery'
 import { usePairingStore } from '../stores/pairing'
-
-function isIpv4Address(value: string | undefined): boolean {
-  if (typeof value !== 'string') {
-    return false
-  }
-  const segments = value.trim().split('.')
-  if (segments.length !== 4) {
-    return false
-  }
-  return segments.every(
-    (segment) => /^\d{1,3}$/.test(segment) && Number(segment) >= 0 && Number(segment) <= 255
-  )
-}
+import { usePairedReconnectStore } from '../stores/paired-reconnect'
 
 /**
- * Keeps outbound transport open for persisted paired peers once they appear in discovery
- * or when `lastResolvedHost` is known from pairing storage.
+ * Keeps outbound transport open for persisted paired peers using bounded backoff
+ * (3s / 5s / 10s) and manual reconnect after three failed attempts.
  */
 export function registerPairedAutoConnect(pinia: Pinia): void {
   const store = useLanDiscoveryStore(pinia)
   const pairingStore = usePairingStore(pinia)
   const { peers, transportReadyDeviceIds } = storeToRefs(store)
   const { pairedListEpoch } = storeToRefs(pairingStore)
+  const reconStore = usePairedReconnectStore(pinia)
 
-  const inFlight = new Set<string>()
-
-  async function connectOne(record: SynraPairedDeviceRecord): Promise<void> {
-    if (transportReadyDeviceIds.value.includes(record.deviceId)) {
-      getConnectionRuntime().setAppLinkForDevice(record.deviceId, 'connected')
-      setPairedDeviceConnecting(record.deviceId, false)
-      return
-    }
-    const peer = peers.value.find(
-      (item) =>
-        item.deviceId === record.deviceId && item.connectable && isIpv4Address(item.ipAddress)
-    )
-    const host = record.lastResolvedHost?.trim()
-    const canDialStoredHost = isIpv4Address(host)
-    if (inFlight.has(record.deviceId)) {
-      return
-    }
-    if (!peer && !canDialStoredHost) {
-      return
-    }
-    inFlight.add(record.deviceId)
-    setPairedDeviceConnecting(record.deviceId, true)
-    try {
-      if (peer) {
-        await store.connectToDevice(record.deviceId, { suppressGlobalError: true })
-      } else if (canDialStoredHost && host) {
-        await store.connectToDeviceAt(record.deviceId, host, record.lastResolvedPort ?? 32100, {
-          suppressGlobalError: true
-        })
+  const scheduler = new PairedReconnectScheduler({
+    isTransportReady: (deviceId) => transportReadyDeviceIds.value.includes(deviceId),
+    tryConnect: async (deviceId) => {
+      const records = await listPairedDeviceRecords()
+      const record = records.find((row) => row.deviceId === deviceId)
+      if (!record) {
+        return false
       }
-      getConnectionRuntime().setAppLinkForDevice(record.deviceId, 'connected')
-    } catch {
-      // Best-effort reconnect; discovery will retry on next tick.
-    } finally {
-      inFlight.delete(record.deviceId)
-      setPairedDeviceConnecting(record.deviceId, false)
+      return tryOpenTransportForPairedRecord(
+        {
+          isTransportReady: (id) => transportReadyDeviceIds.value.includes(id),
+          peers: () => peers.value,
+          connectToDevice: store.connectToDevice,
+          connectToDeviceAt: store.connectToDeviceAt
+        },
+        record
+      )
+    },
+    onGaveUp: (id) => {
+      reconStore.setGaveUp(id)
+    },
+    onCleared: (id) => {
+      reconStore.clearGaveUp(id)
     }
-  }
+  })
+  reconStore.assignScheduler(scheduler)
 
-  async function tick(): Promise<void> {
-    const paired = await listPairedDeviceRecords()
-    await Promise.all(paired.map((record) => connectOne(record)))
+  let lastReady: Set<string> | null = null
+  let lastPaired: Set<string> = new Set()
+
+  async function runTransportPairedSync(): Promise<void> {
+    const now = new Set(transportReadyDeviceIds.value)
+    const records = await listPairedDeviceRecords()
+    const paired = new Set(records.map((row) => row.deviceId))
+    const sched = reconStore.getScheduler()
+    if (!sched) {
+      return
+    }
+    if (lastReady === null) {
+      lastReady = new Set(now)
+      lastPaired = paired
+      for (const id of paired) {
+        if (!now.has(id)) {
+          sched.onBecameNotReadyShouldSchedule(id, reconStore.isGaveUp(id))
+        }
+      }
+      return
+    }
+    for (const id of paired) {
+      if (!lastPaired.has(id) && !now.has(id)) {
+        sched.onBecameNotReadyShouldSchedule(id, reconStore.isGaveUp(id))
+      }
+    }
+    for (const id of lastReady) {
+      if (!now.has(id) && paired.has(id)) {
+        sched.onBecameNotReadyShouldSchedule(id, reconStore.isGaveUp(id))
+      }
+    }
+    for (const id of now) {
+      if (!lastReady.has(id)) {
+        sched.onBecameReady(id)
+      }
+    }
+    lastReady = new Set(now)
+    lastPaired = paired
   }
 
   watch(
-    [peers, pairedListEpoch],
+    [transportReadyDeviceIds, pairedListEpoch, pairedDevicesStorageEpoch],
     () => {
-      void tick()
+      void runTransportPairedSync()
     },
-    { deep: true, flush: 'post' }
+    { flush: 'post', immediate: true }
   )
-
-  void tick()
 }

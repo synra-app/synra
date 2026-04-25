@@ -1,24 +1,16 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
 import { ref } from 'vue'
-import { setPairAwaitingAccept } from '@synra/hooks'
+import {
+  getConnectionRuntime,
+  setPairAwaitingAccept,
+  setPairedDeviceConnecting
+} from '@synra/hooks'
 import { upsertPairedDeviceRecord } from '../../lib/paired-devices-storage'
+import { isIpv4Address } from '../../lib/network'
 import { useLanDiscoveryStore } from '../../stores/lan-discovery'
 import { usePairingStore } from '../../stores/pairing'
 import AppButton from '../base/AppButton.vue'
-
-function isIpv4Address(value: string | undefined): boolean {
-  if (typeof value !== 'string') {
-    return false
-  }
-  const segments = value.trim().split('.')
-  if (segments.length !== 4) {
-    return false
-  }
-  return segments.every(
-    (segment) => /^\d{1,3}$/.test(segment) && Number(segment) >= 0 && Number(segment) <= 255
-  )
-}
 
 const pairingStore = usePairingStore()
 const lanStore = useLanDiscoveryStore()
@@ -62,7 +54,10 @@ async function onAccept(): Promise<void> {
         accepted: true
       }
     })
-    setPairAwaitingAccept(current.initiator.deviceId, false)
+    const initiatorId = current.initiator.deviceId
+    getConnectionRuntime().setAppLinkForDevice(initiatorId, 'connected')
+    setPairedDeviceConnecting(initiatorId, false)
+    setPairAwaitingAccept(initiatorId, false)
     pairingStore.bumpPairedList()
     pairingStore.clearIncoming()
   } finally {

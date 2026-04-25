@@ -1,15 +1,23 @@
 <script setup lang="ts">
+import type { DisplayDevice } from '@synra/hooks'
+
 const {
   displayDevices,
   error,
   feedbackMessage,
   linkToneByDeviceId,
   loading,
+  onManualPairedReconnect,
   onPairDevice,
   onScanDiscovery,
   onUnpairDevice,
-  pendingDeviceActionIds
+  pendingDeviceActionIds,
+  reconnectGaveUpByDeviceId
 } = useConnectPage()
+
+function onManualPairedReconnectFromList(device: DisplayDevice): void {
+  void onManualPairedReconnect(device.deviceId)
+}
 </script>
 
 <template>
@@ -27,8 +35,10 @@ const {
       :loading="loading"
       :action-pending-device-ids="pendingDeviceActionIds"
       :link-tone-by-device-id="linkToneByDeviceId"
+      :reconnect-gave-up-by-device-id="reconnectGaveUpByDeviceId"
       @pair="onPairDevice"
       @unpair="onUnpairDevice"
+      @manual-paired-reconnect="onManualPairedReconnectFromList"
     />
 
     <p v-if="error" class="text-sm text-error-4">{{ error }}</p>

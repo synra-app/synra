@@ -4,16 +4,18 @@ import { ref } from 'vue'
 import AppButton from '../base/AppButton.vue'
 import DeviceDetailsDialog from './DeviceDetailsDialog.vue'
 
-defineProps<{
+const props = defineProps<{
   devices: DisplayDevice[]
   loading: boolean
   actionPendingDeviceIds: string[]
   linkToneByDeviceId: Record<string, 'yellow' | 'green' | 'gray'>
+  reconnectGaveUpByDeviceId: Record<string, boolean>
 }>()
 
 const emit = defineEmits<{
   pair: [device: DisplayDevice]
   unpair: [device: DisplayDevice]
+  'manual-paired-reconnect': [device: DisplayDevice]
 }>()
 
 const selectedDevice = ref<DisplayDevice | null>(null)
@@ -32,6 +34,11 @@ function onPairFromRow(device: DisplayDevice): void {
 
 function onUnpair(device: DisplayDevice): void {
   emit('unpair', device)
+  closeDetails()
+}
+
+function onConnectPaired(device: DisplayDevice): void {
+  emit('manual-paired-reconnect', device)
   closeDetails()
 }
 
@@ -102,7 +109,11 @@ function dotClass(tone: 'yellow' | 'green' | 'gray' | undefined): string {
     :action-pending="
       selectedDevice ? actionPendingDeviceIds.includes(selectedDevice.deviceId) : false
     "
+    :show-paired-reconnect="
+      selectedDevice ? Boolean(props.reconnectGaveUpByDeviceId[selectedDevice.deviceId]) : false
+    "
     @close="closeDetails"
     @unpair="onUnpair"
+    @connect-paired="onConnectPaired"
   />
 </template>

@@ -10,10 +10,17 @@ import type { Ref } from 'vue'
 import type { RuntimeOpenTransportLink, SynraDiscoveryStartOptions } from '../types'
 import type { ConnectionRuntimeAdapter } from './adapter'
 import { applyHostPairingHintsFromDiscovery } from './apply-host-pairing-hints-from-discovery'
-import { getHooksRuntimeOptions, isLocalDiscoveryDeviceId } from './config'
-import { filterExposedDiscoveredDevices, shouldExposeDiscoveredDevice } from './discovery-exposure'
+import {
+  filterAdmittedDiscoveredDevices,
+  shouldKeepDiscoveredDeviceId
+} from './discovery-admission'
+import { shouldExposeDiscoveredDevice } from './discovery-exposure'
 import { sortDevices } from './device-sort'
 import { normalizeHost } from './host-normalization'
+import {
+  hasReadyOpenLinkForScanRow,
+  mergeReadyLinksIntoDiscovered
+} from './merge-ready-links-into-discovered'
 import { pruneStalePairAwaitingForOpenTransportLinks } from './pair-awaiting-prune'
 
 function defaultSynraPort(options: SynraDiscoveryStartOptions): number {
@@ -94,43 +101,53 @@ export function createDiscoveryModule(options: {
         probeConnectWirePayload: discoveryOptions.probeConnectWirePayload ?? defaultProbeWire
       })
       scanState.value = result.state
-      const exclude = getHooksRuntimeOptions().shouldExcludeDiscoveredDevice
-      const shouldDrop = (deviceId: string) =>
-        isLocalDiscoveryDeviceId(deviceId) || (typeof exclude === 'function' && exclude(deviceId))
-      const filtered = result.devices.filter((device) => !shouldDrop(device.deviceId))
+      const filtered = result.devices.filter((device) =>
+        shouldKeepDiscoveredDeviceId(device.deviceId)
+      )
       let scanRows = filtered.map((device) => ({
         ...device,
         ipAddress: normalizeHost(device.ipAddress)
       }))
 
       const fallbackPort = defaultSynraPort(discoveryOptions)
+      const liveLinks = openTransportLinks.value
       if (typeof adapter.probeSynraPeers === 'function' && scanRows.length > 0) {
+        const preProbeRows = scanRows
         const probeWire = discoveryOptions.probeConnectWirePayload ?? defaultProbeWire
-        const targets = scanRows.map((row) => ({
-          host: row.ipAddress,
-          port: row.port ?? fallbackPort,
-          connectWirePayload: probeWire
-        }))
-        try {
-          const { results } = await adapter.probeSynraPeers({
-            targets,
-            timeoutMs: discoveryOptions.timeoutMs ?? 1500
-          })
-          scanRows = mergeDiscoveredWithSynraProbes(scanRows, results, fallbackPort)
-          await applyHostPairingHintsFromDiscovery(
-            results
-              .filter((row) => row.ok && row.wireSourceDeviceId)
-              .map((row) => ({
-                canonicalDeviceId: row.wireSourceDeviceId ?? '',
-                connectAckPayload: row.connectAckPayload
-              }))
-          )
-        } catch {
-          // Probe failures are treated as silent "not a Synra peer" for discovery UI.
+        const probeable = preProbeRows.filter(
+          (row) => !hasReadyOpenLinkForScanRow(row, liveLinks, fallbackPort)
+        )
+        if (probeable.length > 0) {
+          const targets = probeable.map((row) => ({
+            host: row.ipAddress,
+            port: row.port ?? fallbackPort,
+            connectWirePayload: probeWire
+          }))
+          try {
+            const { results } = await adapter.probeSynraPeers({
+              targets,
+              timeoutMs: discoveryOptions.timeoutMs ?? 1500
+            })
+            scanRows = mergeDiscoveredWithSynraProbes(probeable, results, fallbackPort)
+            await applyHostPairingHintsFromDiscovery(
+              results
+                .filter((row) => row.ok && row.wireSourceDeviceId)
+                .map((row) => ({
+                  canonicalDeviceId: row.wireSourceDeviceId ?? '',
+                  connectAckPayload: row.connectAckPayload
+                }))
+            )
+          } catch {
+            // Restore LAN candidates when the whole probe call fails; single-target failures
+            // are represented per-result in mergeDiscoveredWithSynraProbes.
+            scanRows = preProbeRows
+          }
+        } else {
           scanRows = []
         }
       }
-      scanRows = filterExposedDiscoveredDevices(scanRows)
+      scanRows = mergeReadyLinksIntoDiscovered(scanRows, liveLinks, fallbackPort)
+      scanRows = filterAdmittedDiscoveredDevices(scanRows)
 
       devices.value = sortDevices(scanRows)
       pruneStalePairAwaitingForOpenTransportLinks(devices, openTransportLinks)
