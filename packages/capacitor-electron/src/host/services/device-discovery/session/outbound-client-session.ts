@@ -124,6 +124,7 @@ export function createOutboundClientTransport(
     })
   }
 
+  // SYNRA-COMM::TCP::SEND::FRAME_WRITE
   const writeFrame = async (frame: LanFrame): Promise<void> => {
     const currentSocket = socket
     if (!currentSocket || currentSocket.destroyed) {
@@ -149,6 +150,7 @@ export function createOutboundClientTransport(
     event === DEVICE_HOST_RETIRE_EVENT ||
     event === DEVICE_MEMBER_OFFLINE_EVENT
 
+  // SYNRA-COMM::TCP::RECEIVE::OUTBOUND_RECV_LOOP
   const handleFrame = (frame: LanFrame) => {
     if (frame.event === DEVICE_TCP_CONNECT_ACK_EVENT && resolveConnect && frame.requestId) {
       const payload =
@@ -188,6 +190,7 @@ export function createOutboundClientTransport(
       })
       return
     }
+    // SYNRA-COMM::TCP::ACK::MESSAGE_ACK_AUTO
     if (!isControlEvent(frame.event) && frame.requestId) {
       const ackTarget =
         typeof frame.target === 'string' && frame.target.length > 0 ? frame.target : state.deviceId
@@ -210,6 +213,7 @@ export function createOutboundClientTransport(
         replyRequestId: frame.replyRequestId,
         payload: frame.payload
       }
+      // SYNRA-COMM::MESSAGE_ENVELOPE::RECEIVE::LAN_EVENT_ROUTE
       options.eventBus.publish({
         type:
           typeof frame.event === 'string' && isLanWireEventName(frame.event)
@@ -249,6 +253,7 @@ export function createOutboundClientTransport(
     }
   }
 
+  // SYNRA-COMM::TCP::RECEIVE::OUTBOUND_SOCKET_BINDINGS
   const attachSocketHandlers = (currentSocket: Socket) => {
     currentSocket.on('data', (chunk) => {
       if (!Buffer.isBuffer(chunk)) {
@@ -348,6 +353,7 @@ export function createOutboundClientTransport(
         lastError: undefined
       }
       attachSocketHandlers(socket)
+      // SYNRA-COMM::DEVICE_HANDSHAKE::CONNECT::OPEN_TRANSPORT
       const connectAck = await new Promise<ConnectAckResult>((resolve, reject) => {
         resolveConnect = resolve
         rejectConnect = reject
@@ -433,6 +439,7 @@ export function createOutboundClientTransport(
       }
     },
     async close(closeOptions = {}) {
+      // SYNRA-COMM::TCP::CLOSE::TRANSPORT_CLOSE
       const target = closeOptions.target ?? state.deviceId
       if (state.state === 'open' && target) {
         await writeFrame({
@@ -451,6 +458,7 @@ export function createOutboundClientTransport(
       }
     },
     async sendLanEvent(sendOptions) {
+      // SYNRA-COMM::TCP::SEND::LAN_EVENT_SEND
       if (state.state !== 'open' || !state.deviceId) {
         throw new BridgeError(BRIDGE_ERROR_CODES.unsupportedOperation, 'Transport is not open.')
       }
@@ -470,6 +478,7 @@ export function createOutboundClientTransport(
       }
     },
     async sendMessage(sendOptions) {
+      // SYNRA-COMM::TCP::SEND::MESSAGE_SEND
       if (state.state !== 'open' || !state.deviceId) {
         throw new BridgeError(BRIDGE_ERROR_CODES.unsupportedOperation, 'Transport is not open.')
       }
@@ -525,6 +534,7 @@ export function createOutboundClientTransport(
       }
     },
     async heartbeatTick() {
+      // SYNRA-COMM::TCP::HEARTBEAT::TRANSPORT_HEARTBEAT
       if (state.state !== 'open' || !state.deviceId) {
         return
       }

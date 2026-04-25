@@ -78,6 +78,7 @@ function validatePayload(method: string, payload: unknown): void {
     method === BRIDGE_METHODS.connectionSendMessage &&
     !validateDiscoverySendMessagePayload(payload)
   ) {
+    // SYNRA-COMM::PLUGIN_BRIDGE::SEND::CONNECTION_SEND_MESSAGE_VALIDATE
     throw new BridgeError(
       BRIDGE_ERROR_CODES.invalidParams,
       'connection.sendMessage expects { requestId, event, target, from, payload, replyRequestId?, timestamp? }.'
@@ -88,6 +89,7 @@ function validatePayload(method: string, payload: unknown): void {
     method === BRIDGE_METHODS.connectionSendLanEvent &&
     !validateDiscoverySendLanEventPayload(payload)
   ) {
+    // SYNRA-COMM::PLUGIN_BRIDGE::SEND::CONNECTION_SEND_LAN_EVENT_VALIDATE
     throw new BridgeError(
       BRIDGE_ERROR_CODES.invalidParams,
       'connection.sendLanEvent expects { requestId, event, target, from, payload?, replyRequestId?, timestamp? }.'
@@ -107,6 +109,7 @@ export function createPreloadInvoker(ipcInvoke: IpcInvoke) {
       throw new BridgeError(BRIDGE_ERROR_CODES.timeout, 'Request aborted before dispatch.')
     }
 
+    // SYNRA-COMM::PLUGIN_BRIDGE::SEND::IPC_INVOKE_REQUEST
     const request: BridgeRequest = {
       protocolVersion: BRIDGE_PROTOCOL_VERSION,
       requestId: createRequestId(),

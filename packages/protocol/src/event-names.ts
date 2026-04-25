@@ -1,3 +1,29 @@
+/**
+ * Cross-platform communication annotation taxonomy (search-only comments).
+ *
+ * Prefix:
+ *   SYNRA-COMM::<Domain>::<Stage>::<NodeId>
+ *
+ * Domains:
+ *   TCP | UDP_DISCOVERY | DEVICE_HANDSHAKE | PLUGIN_BRIDGE | MESSAGE_ENVELOPE
+ *
+ * Stages:
+ *   CONNECT | SEND | RECEIVE | ACK | HEARTBEAT | CLOSE | ERROR
+ *
+ * Shared NodeId vocabulary:
+ *   OPEN_TRANSPORT
+ *   PROBE_SINGLE
+ *   INBOUND_ACCEPT
+ *   OUTBOUND_RECV_LOOP
+ *   LAN_EVENT_ROUTE
+ *   MESSAGE_SEND
+ *   MESSAGE_RECV
+ *   TRANSPORT_CLOSE
+ *   TRANSPORT_HEARTBEAT
+ *   TRANSPORT_ERROR
+ *
+ * Keep the same Domain/Stage/NodeId triplet across Node.js, Android, and iOS.
+ */
 export const DEVICE_TCP_CONNECT_EVENT = 'device.tcp.connect' as const
 export const DEVICE_TCP_CONNECT_ACK_EVENT = 'device.tcp.connect.ack' as const
 export const DEVICE_TCP_ACK_EVENT = 'device.tcp.ack' as const

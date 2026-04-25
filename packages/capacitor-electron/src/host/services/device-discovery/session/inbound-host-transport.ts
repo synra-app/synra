@@ -149,6 +149,7 @@ export function createInboundHostTransport(
     return [...destinations]
   }
 
+  // SYNRA-COMM::UDP_DISCOVERY::SEND::OFFLINE_ANNOUNCEMENT
   const broadcastOfflineAnnouncement = async (): Promise<void> => {
     const socket = createSocket('udp4')
     socket.setBroadcast(true)
@@ -179,6 +180,7 @@ export function createInboundHostTransport(
     socket.close()
   }
 
+  // SYNRA-COMM::TCP::SEND::FRAME_WRITE
   const writeFrame = async (socket: Socket, frame: LanFrame): Promise<void> => {
     const codec = decoders.get(socket) ?? new LengthPrefixedJsonCodec()
     decoders.set(socket, codec)
@@ -232,7 +234,9 @@ export function createInboundHostTransport(
     event === DEVICE_HOST_RETIRE_EVENT ||
     event === DEVICE_MEMBER_OFFLINE_EVENT
 
+  // SYNRA-COMM::TCP::RECEIVE::INBOUND_RECV_LOOP
   const handleFrame = async (socket: Socket, frame: LanFrame): Promise<void> => {
+    // SYNRA-COMM::DEVICE_HANDSHAKE::CONNECT::INBOUND_ACCEPT
     if (frame.event === DEVICE_TCP_CONNECT_EVENT) {
       const payload =
         frame.payload && typeof frame.payload === 'object'
@@ -342,6 +346,7 @@ export function createInboundHostTransport(
       }).catch(() => undefined)
       return
     }
+    // SYNRA-COMM::TCP::ACK::MESSAGE_ACK_AUTO
     if (!isControlEvent(frame.event)) {
       const ackTarget =
         typeof frame.target === 'string' && frame.target.length > 0
@@ -363,6 +368,7 @@ export function createInboundHostTransport(
         replyRequestId: frame.replyRequestId,
         payload: frame.payload
       }
+      // SYNRA-COMM::MESSAGE_ENVELOPE::RECEIVE::LAN_EVENT_ROUTE
       options.eventBus.publish({
         type:
           typeof frame.event === 'string' && isLanWireEventName(frame.event)
@@ -406,6 +412,7 @@ export function createInboundHostTransport(
     }
   }
 
+  // SYNRA-COMM::TCP::CONNECT::INBOUND_LISTEN
   const startTcpServer = async (): Promise<void> => {
     if (server) {
       return
@@ -455,6 +462,7 @@ export function createInboundHostTransport(
     })
   }
 
+  // SYNRA-COMM::UDP_DISCOVERY::RECEIVE::UDP_RESPONDER
   const startUdpResponder = async (): Promise<void> => {
     if (responder) {
       return
@@ -594,9 +602,11 @@ export function createInboundHostTransport(
       }
     },
     async closeTransport(deviceId) {
+      // SYNRA-COMM::TCP::CLOSE::TRANSPORT_CLOSE
       await closeLinks(deviceId)
     },
     async sendMessage(sendOptions) {
+      // SYNRA-COMM::TCP::SEND::MESSAGE_SEND
       const targetKey = resolvePeerWireIdKey(inboundLinksByPeerWireId, sendOptions.target)
       const link = targetKey ? inboundLinksByPeerWireId.get(targetKey) : undefined
       if (!link || link.socket.destroyed) {
@@ -614,6 +624,7 @@ export function createInboundHostTransport(
       return true
     },
     async sendLanEvent(sendOptions) {
+      // SYNRA-COMM::TCP::SEND::LAN_EVENT_SEND
       const targetKey = resolvePeerWireIdKey(inboundLinksByPeerWireId, sendOptions.target)
       const link = targetKey ? inboundLinksByPeerWireId.get(targetKey) : undefined
       if (!link || link.socket.destroyed) {
@@ -658,6 +669,7 @@ export function createInboundHostTransport(
       }
     },
     async heartbeatTick() {
+      // SYNRA-COMM::TCP::HEARTBEAT::TRANSPORT_HEARTBEAT
       const now = Date.now()
       for (const [deviceId, link] of inboundLinksByPeerWireId.entries()) {
         if (now - link.lastActiveAt <= DEFAULT_HEARTBEAT_TIMEOUT_MS) {

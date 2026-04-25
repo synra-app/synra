@@ -7,6 +7,7 @@ extension DeviceConnectionPluginCore {
         targets: [[String: Any]],
         timeoutMs: Int
     ) -> [[String: Any]] {
+        // SYNRA-COMM::DEVICE_HANDSHAKE::CONNECT::PROBE_BATCH
         var results: [[String: Any]] = []
         for raw in targets {
             guard
@@ -31,6 +32,7 @@ extension DeviceConnectionPluginCore {
         timeoutMs: Int,
         wireExtras: [String: Any]
     ) -> [String: Any] {
+        // SYNRA-COMM::DEVICE_HANDSHAKE::CONNECT::PROBE_SINGLE
         var base: [String: Any] = [
             "host": host,
             "port": Int(port),

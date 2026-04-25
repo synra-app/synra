@@ -273,6 +273,7 @@ export function validateDiscoverySendMessagePayload(payload: unknown): payload i
   payload: unknown
   timestamp?: number
 } {
+  // SYNRA-COMM::MESSAGE_ENVELOPE::SEND::SEND_MESSAGE_VALIDATE
   if (!isObject(payload)) {
     return false
   }
@@ -324,6 +325,7 @@ export function validateDiscoverySendLanEventPayload(payload: unknown): payload 
   payload?: unknown
   timestamp?: number
 } {
+  // SYNRA-COMM::MESSAGE_ENVELOPE::SEND::SEND_LAN_EVENT_VALIDATE
   if (!isObject(payload)) {
     return false
   }

@@ -3,6 +3,7 @@ import Network
 
 extension DeviceConnectionPluginCore {
     func startSynraTcpServerIfNeeded() {
+        // SYNRA-COMM::TCP::CONNECT::INBOUND_LISTEN
         if tcpListener != nil {
             return
         }
@@ -75,6 +76,7 @@ extension DeviceConnectionPluginCore {
     }
 
     private func startSynraInboundReceiveLoop(connectionId: String) {
+        // SYNRA-COMM::TCP::RECEIVE::INBOUND_RECV_LOOP
         guard let context = inboundConnections[connectionId] else {
             return
         }
@@ -99,6 +101,7 @@ extension DeviceConnectionPluginCore {
             let rawConnectRid = (frame["requestId"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
             let connectRequestId =
                 (rawConnectRid?.isEmpty == false) ? rawConnectRid! : UUID().uuidString
+            // SYNRA-COMM::DEVICE_HANDSHAKE::CONNECT::INBOUND_ACCEPT
             if wireEvent == self.deviceTcpConnectEvent {
                 let connectPayload = frame["payload"] as? [String: Any]
                 let from = connectPayload?["from"] as? String
@@ -183,6 +186,7 @@ extension DeviceConnectionPluginCore {
                     "incomingSynraConnectPayload": incomingSynraConnectPayload,
                 ]
                 self.onOutboundTransportOpened?(opened)
+            // SYNRA-COMM::MESSAGE_ENVELOPE::RECEIVE::LAN_EVENT_ROUTE
             } else if !self.isTransportControlEvent(wireEvent) {
                 guard current.canonicalDeviceId != nil else {
                     let errRid = (frame["requestId"] as? String) ?? UUID().uuidString
@@ -219,6 +223,7 @@ extension DeviceConnectionPluginCore {
                 } else {
                     self.onMessageReceived?(eventPayload)
                 }
+                // SYNRA-COMM::TCP::ACK::MESSAGE_ACK_AUTO
                 if let requestId = topRid, !requestId.isEmpty {
                     let ackRid = topRid ?? UUID().uuidString
                     let ackTargetRaw =

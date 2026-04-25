@@ -49,6 +49,7 @@ export function createTransportOperationsModule(options: {
   }
 
   async function openTransport(openOptions: RuntimeOpenTransportInput): Promise<void> {
+    // SYNRA-COMM::PLUGIN_BRIDGE::CONNECT::HOOK_OPEN_TRANSPORT
     const key = openTransportInflightKey(openOptions)
     if (openTransportInflightKeys.has(key)) {
       return
@@ -81,6 +82,7 @@ export function createTransportOperationsModule(options: {
   }
 
   async function closeTransport(deviceId?: string): Promise<void> {
+    // SYNRA-COMM::PLUGIN_BRIDGE::CLOSE::HOOK_CLOSE_TRANSPORT
     try {
       await adapter.closeTransport(deviceId)
       const shouldClearPrimary =
@@ -107,6 +109,7 @@ export function createTransportOperationsModule(options: {
   }
 
   async function sendMessage(input: SynraConnectionSendInput): Promise<void> {
+    // SYNRA-COMM::PLUGIN_BRIDGE::SEND::HOOK_SEND_MESSAGE
     try {
       openLinksBook.touchLinkActivity(input.target, Date.now(), 'outbound')
       await adapter.sendMessage({
@@ -147,6 +150,7 @@ export function createTransportOperationsModule(options: {
   }
 
   async function sendLanEvent(input: SynraLanWireSendInput): Promise<void> {
+    // SYNRA-COMM::PLUGIN_BRIDGE::SEND::HOOK_SEND_LAN_EVENT
     try {
       openLinksBook.touchLinkActivity(input.target, Date.now(), 'outbound')
       await adapter.sendLanEvent({

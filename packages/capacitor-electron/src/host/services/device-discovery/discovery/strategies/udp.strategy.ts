@@ -9,11 +9,13 @@ import type { DiscoveryContext, DiscoveryStrategy } from '../discovery-strategy'
 export function createUdpDiscoveryStrategy(): DiscoveryStrategy {
   return {
     kind: 'udp',
+    // SYNRA-COMM::UDP_DISCOVERY::CONNECT::DISCOVERY_SCAN
     async discover(context: DiscoveryContext): Promise<DiscoveredDevice[]> {
       const socket = createSocket('udp4')
       const devicesByIp = new Map<string, DiscoveredDevice>()
       const destinations = collectUdpBroadcastDestinations()
       await new Promise<void>((resolve) => {
+        // SYNRA-COMM::UDP_DISCOVERY::RECEIVE::DISCOVERY_RESPONSE
         socket.on('message', (buffer, remote) => {
           const text = buffer.toString('utf8').trim()
           const envelope = parseUdpDiscoveryEnvelope(text)
@@ -28,6 +30,7 @@ export function createUdpDiscoveryStrategy(): DiscoveryStrategy {
           // discovery requires a non-empty displayName from the Synra TCP connectAck (see probe-runner).
           devicesByIp.set(normalizedIp, toProbeCandidate(normalizedIp, 'probe'))
         })
+        // SYNRA-COMM::UDP_DISCOVERY::SEND::DISCOVERY_BROADCAST
         socket.bind(() => {
           socket.setBroadcast(true)
           const payload = Buffer.from(UDP_DISCOVERY_MAGIC, 'utf8')

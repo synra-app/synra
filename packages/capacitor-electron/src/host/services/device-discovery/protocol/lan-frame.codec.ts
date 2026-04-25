@@ -40,6 +40,9 @@ export interface LanFrameCodec {
   reset(): void
 }
 
+// SYNRA-COMM::MESSAGE_ENVELOPE::SEND::FRAME_CODEC
+// SYNRA-COMM::MESSAGE_ENVELOPE::RECEIVE::FRAME_CODEC
+// Shared framing contract for Node.js/Android/iOS: 4-byte BE length + JSON envelope.
 export class LengthPrefixedJsonCodec implements LanFrameCodec {
   private buffer = Buffer.allocUnsafe(1024)
   private length = 0

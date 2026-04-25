@@ -52,6 +52,7 @@ public final class DeviceConnectionPluginCore: NSObject {
         token: String?,
         connectType: String
     ) -> [String: Any]? {
+        // SYNRA-COMM::DEVICE_HANDSHAKE::CONNECT::OPEN_TRANSPORT
         let tcpPort = NWEndpoint.Port(rawValue: port.uint16Value)
         guard let endpointPort = tcpPort else {
             outboundTransportState.state = "error"
@@ -191,6 +192,7 @@ public final class DeviceConnectionPluginCore: NSObject {
     }
 
     public func closeTransport(target: String?) -> [String: Any] {
+        // SYNRA-COMM::TCP::CLOSE::TRANSPORT_CLOSE
         if let target,
            let inboundEntry = inboundConnections.first(where: { $0.value.canonicalDeviceId == target })
         {
@@ -239,6 +241,7 @@ public final class DeviceConnectionPluginCore: NSObject {
         payload: Any,
         timestamp: Int?
     ) -> [String: Any]? {
+        // SYNRA-COMM::TCP::SEND::MESSAGE_SEND
         let messageFrame = synraLanFrame(
             type: "message",
             requestId: requestId,
@@ -294,6 +297,7 @@ public final class DeviceConnectionPluginCore: NSObject {
         payload: Any?,
         timestamp: Int?
     ) -> [String: Any]? {
+        // SYNRA-COMM::TCP::SEND::LAN_EVENT_SEND
         let eventFrame = synraLanFrame(
             type: "event",
             requestId: requestId,
@@ -568,6 +572,7 @@ public final class DeviceConnectionPluginCore: NSObject {
         through target: NWConnection,
         onSent: (() -> Void)? = nil
     ) {
+        // SYNRA-COMM::TCP::SEND::FRAME_WRITE
         guard let payload = try? JSONSerialization.data(withJSONObject: frame) else {
             onSent?()
             return
@@ -584,6 +589,7 @@ public final class DeviceConnectionPluginCore: NSObject {
         through target: NWConnection,
         completion: @escaping ([String: Any]?) -> Void
     ) {
+        // SYNRA-COMM::TCP::RECEIVE::FRAME_READ
         target.receive(minimumIncompleteLength: 4, maximumLength: 4) { header, _, _, _ in
             guard let header, header.count == 4 else {
                 completion(nil)
@@ -613,6 +619,7 @@ public final class DeviceConnectionPluginCore: NSObject {
     }
 
     private func startReceiveLoop(on target: NWConnection) {
+        // SYNRA-COMM::TCP::RECEIVE::OUTBOUND_RECV_LOOP
         receiveSingleFrame(through: target) { [weak self] frame in
             guard let self else {
                 return
@@ -665,6 +672,7 @@ public final class DeviceConnectionPluginCore: NSObject {
                         fallbackDeviceId: self.outboundTransportState.deviceId
                     )
                 )
+            // SYNRA-COMM::MESSAGE_ENVELOPE::RECEIVE::LAN_EVENT_ROUTE
             } else if !self.isTransportControlEvent(wireEvent) {
                 let topRequestId = frame["requestId"] as? String
                 let eventPayload: [String: Any] = [
@@ -682,6 +690,7 @@ public final class DeviceConnectionPluginCore: NSObject {
                 } else {
                     self.onMessageReceived?(eventPayload)
                 }
+                // SYNRA-COMM::TCP::ACK::MESSAGE_ACK_AUTO
                 if let topRequestId, !topRequestId.isEmpty {
                     let ackTarget =
                         (frame["target"] as? String)?

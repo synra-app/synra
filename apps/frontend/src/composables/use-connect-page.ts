@@ -150,11 +150,13 @@ export function useConnectPage() {
   })
 
   async function onScanDiscovery(): Promise<void> {
+    // SYNRA-COMM::PLUGIN_BRIDGE::CONNECT::PAGE_TRIGGER_SCAN
     await store.ensureReady()
     await store.startScan()
   }
 
   async function onConnect(deviceId: string): Promise<void> {
+    // SYNRA-COMM::PLUGIN_BRIDGE::CONNECT::PAGE_CONNECT_DEVICE
     if (isDeviceActionPending(deviceId) || loading.value) {
       return
     }
@@ -167,6 +169,7 @@ export function useConnectPage() {
   }
 
   async function onDisconnect(deviceId: string): Promise<void> {
+    // SYNRA-COMM::PLUGIN_BRIDGE::CLOSE::PAGE_DISCONNECT_DEVICE
     if (isDeviceActionPending(deviceId)) {
       return
     }
@@ -179,6 +182,7 @@ export function useConnectPage() {
   }
 
   async function onPairDevice(device: DiscoveredDevice): Promise<void> {
+    // SYNRA-COMM::DEVICE_HANDSHAKE::SEND::PAGE_PAIRING_REQUEST
     if (isDeviceActionPending(device.deviceId) || loading.value) {
       return
     }
@@ -239,6 +243,7 @@ export function useConnectPage() {
   }
 
   async function onUnpairDevice(device: DisplayDevice): Promise<void> {
+    // SYNRA-COMM::DEVICE_HANDSHAKE::SEND::PAGE_UNPAIR_EVENT
     if (isDeviceActionPending(device.deviceId)) {
       return
     }

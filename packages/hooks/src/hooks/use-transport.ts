@@ -62,6 +62,7 @@ export function useTransport() {
   }
 
   async function startScan(): Promise<void> {
+    // SYNRA-COMM::UDP_DISCOVERY::CONNECT::UI_START_SCAN
     // Manual scan can run before connect-page onMounted finishes ensureReady(); without this,
     // discovery.start may run while DeviceConnection has not yet subscribed to onHostEvent
     // (inbound pairing events are then dropped on Electron).
@@ -73,6 +74,7 @@ export function useTransport() {
     deviceId: string,
     connectOptions?: ConnectToDeviceOptions
   ): Promise<string | undefined> {
+    // SYNRA-COMM::PLUGIN_BRIDGE::CONNECT::UI_CONNECT_TO_DEVICE
     const target = peers.value.find((peer) => peer.deviceId === deviceId)
     if (!target || !target.ipAddress) {
       return undefined
@@ -105,6 +107,7 @@ export function useTransport() {
     port: number,
     connectOptions?: ConnectToDeviceOptions
   ): Promise<string | undefined> {
+    // SYNRA-COMM::PLUGIN_BRIDGE::CONNECT::UI_CONNECT_TO_DEVICE_AT
     const hostTrimmed = host.trim()
     if (hostTrimmed.length === 0) {
       return undefined
@@ -169,6 +172,7 @@ export function useTransport() {
   }
 
   async function sendMessageToReadyDevice(input: SendMessageToReadyDeviceInput): Promise<void> {
+    // SYNRA-COMM::PLUGIN_BRIDGE::SEND::UI_SEND_READY_MESSAGE
     const readyLink = findTransportReadyLinkByPeer(input.deviceId)
     if (!readyLink?.deviceId) {
       throw new Error(`Device ${input.deviceId} is not ready for sending.`)
@@ -237,6 +241,7 @@ export function useTransport() {
   }
 
   async function sendConnectionMessage(input: SynraConnectionSendInput): Promise<void> {
+    // SYNRA-COMM::PLUGIN_BRIDGE::SEND::UI_SEND_CONNECTION_MESSAGE
     await runtime.sendMessage({
       requestId: input.requestId,
       from: input.from,
@@ -249,6 +254,7 @@ export function useTransport() {
   }
 
   async function sendLanEvent(input: SynraLanWireSendInput): Promise<void> {
+    // SYNRA-COMM::PLUGIN_BRIDGE::SEND::UI_SEND_LAN_EVENT
     await runtime.sendLanEvent(input)
   }
 

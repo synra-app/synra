@@ -111,6 +111,7 @@ public class DeviceConnectionPlugin extends Plugin {
 
     @PluginMethod
     public void openTransport(PluginCall call) {
+        // SYNRA-COMM::DEVICE_HANDSHAKE::CONNECT::OPEN_TRANSPORT
         String deviceId = call.getString("deviceId");
         String host = call.getString("host");
         Integer port = call.getInt("port");
@@ -220,6 +221,7 @@ public class DeviceConnectionPlugin extends Plugin {
 
     @PluginMethod
     public void probeSynraPeers(PluginCall call) {
+        // SYNRA-COMM::DEVICE_HANDSHAKE::CONNECT::PROBE_BATCH
         JSONArray targets = call.getData().optJSONArray("targets");
         int timeoutMs = call.getInt("timeoutMs", 1500);
         if (targets == null || targets.length() == 0) {
@@ -255,6 +257,7 @@ public class DeviceConnectionPlugin extends Plugin {
 
     private JSONObject probeSynraOneHost(String host, int port, int timeoutMs, JSONObject wireExtras)
             throws IOException, JSONException {
+        // SYNRA-COMM::DEVICE_HANDSHAKE::CONNECT::PROBE_SINGLE
         JSONObject base = new JSONObject();
         base.put("host", host);
         base.put("port", port);
@@ -367,6 +370,7 @@ public class DeviceConnectionPlugin extends Plugin {
 
     @PluginMethod
     public void closeTransport(PluginCall call) {
+        // SYNRA-COMM::TCP::CLOSE::TRANSPORT_CLOSE
         String target = call.getString("target", this.currentDeviceId);
         ioExecutor.submit(() -> {
             InboundConnectionContext inbound = findInboundByDeviceId(target);
@@ -392,6 +396,7 @@ public class DeviceConnectionPlugin extends Plugin {
 
     @PluginMethod
     public void sendMessage(PluginCall call) {
+        // SYNRA-COMM::TCP::SEND::MESSAGE_SEND
         String requestId = call.getString("requestId");
         String from = call.getString("from");
         String target = call.getString("target");
@@ -481,6 +486,7 @@ public class DeviceConnectionPlugin extends Plugin {
 
     @PluginMethod
     public void sendLanEvent(PluginCall call) {
+        // SYNRA-COMM::TCP::SEND::LAN_EVENT_SEND
         String requestId = call.getString("requestId");
         String from = call.getString("from");
         String target = call.getString("target");
@@ -649,6 +655,7 @@ public class DeviceConnectionPlugin extends Plugin {
     }
 
     private void startPrimaryOutboundReader() {
+        // SYNRA-COMM::TCP::RECEIVE::OUTBOUND_RECV_LOOP
         readerExecutor.submit(() -> {
             while (primaryOutboundOpen.get() && primaryOutboundInput != null) {
                 try {
@@ -679,6 +686,7 @@ public class DeviceConnectionPlugin extends Plugin {
                         event.put("transport", "tcp");
                         notifyListeners("transportClosed", event);
                         closePrimaryOutboundSocket();
+                    // SYNRA-COMM::MESSAGE_ENVELOPE::RECEIVE::LAN_EVENT_ROUTE
                     } else if (!isTransportControlEvent(wireEvent)) {
                         String topRid = frame.optString("requestId", null);
                         JSObject event = new JSObject();
@@ -697,6 +705,7 @@ public class DeviceConnectionPlugin extends Plugin {
                         } else {
                             notifyListeners("messageReceived", event);
                         }
+                        // SYNRA-COMM::TCP::ACK::MESSAGE_ACK_AUTO
                         if (topRid != null && !topRid.isBlank() && primaryOutboundOutput != null) {
                             String ackRid = topRid;
                             String ackTarget =
@@ -744,6 +753,7 @@ public class DeviceConnectionPlugin extends Plugin {
     }
 
     private synchronized void startInboundTcpServerIfNeeded() {
+        // SYNRA-COMM::TCP::CONNECT::INBOUND_LISTEN
         if (inboundServerRunning.get()) {
             return;
         }
@@ -792,6 +802,7 @@ public class DeviceConnectionPlugin extends Plugin {
     }
 
     private void handleInboundSocket(Socket socket) {
+        // SYNRA-COMM::TCP::RECEIVE::INBOUND_RECV_LOOP
         String activeConnectionId = null;
         InboundConnectionContext activeContext = null;
         boolean closed = false;
@@ -801,6 +812,7 @@ public class DeviceConnectionPlugin extends Plugin {
             while (true) {
                 JSONObject inbound = readFrame(input);
                 String wireEvent = inbound.optString("event");
+                // SYNRA-COMM::DEVICE_HANDSHAKE::CONNECT::INBOUND_ACCEPT
                 if (DEVICE_TCP_CONNECT_EVENT.equals(wireEvent)) {
                     String connectRequestId = inbound.optString("requestId", null);
                     if (connectRequestId == null || connectRequestId.isBlank()) {
@@ -918,6 +930,7 @@ public class DeviceConnectionPlugin extends Plugin {
                     );
                     continue;
                 }
+                // SYNRA-COMM::MESSAGE_ENVELOPE::RECEIVE::LAN_EVENT_ROUTE
                 if (!isTransportControlEvent(wireEvent)) {
                     JSObject event = new JSObject();
                     String topRid = inbound.optString("requestId", null);
@@ -936,6 +949,7 @@ public class DeviceConnectionPlugin extends Plugin {
                     } else {
                         notifyListeners("messageReceived", event);
                     }
+                    // SYNRA-COMM::TCP::ACK::MESSAGE_ACK_AUTO
                     if (topRid != null && !topRid.isBlank()) {
                         String ackRid = inbound.optString("requestId", null);
                         if (ackRid == null || ackRid.isBlank()) {
@@ -1179,6 +1193,7 @@ public class DeviceConnectionPlugin extends Plugin {
     }
 
     private void closePrimaryOutboundSocket() {
+        // SYNRA-COMM::TCP::CLOSE::OUTBOUND_CLOSE
         stopHeartbeatLoop();
         this.primaryOutboundOpen.set(false);
         if (this.primaryOutboundSocket != null) {
@@ -1190,6 +1205,7 @@ public class DeviceConnectionPlugin extends Plugin {
     }
 
     private synchronized void startHeartbeatLoop() {
+        // SYNRA-COMM::TCP::HEARTBEAT::TRANSPORT_HEARTBEAT
         stopHeartbeatLoop();
         heartbeatTask =
             heartbeatExecutor.scheduleAtFixedRate(

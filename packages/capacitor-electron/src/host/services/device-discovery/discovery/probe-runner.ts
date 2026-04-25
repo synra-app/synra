@@ -31,6 +31,7 @@ export async function probeDevices(
   devices: DiscoveredDevice[],
   options: ProbeOptions
 ): Promise<DiscoveredDevice[]> {
+  // SYNRA-COMM::UDP_DISCOVERY::CONNECT::PROBE_BATCH
   const pending = [...devices]
   const results: DiscoveredDevice[] = []
   const workerCount = Math.max(
@@ -57,6 +58,7 @@ async function probeSingle(
   device: DiscoveredDevice,
   options: ProbeOptions
 ): Promise<DiscoveredDevice> {
+  // SYNRA-COMM::DEVICE_HANDSHAKE::CONNECT::PROBE_SINGLE
   const timeoutMs = options.timeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS
   const port = options.port ?? DEFAULT_TCP_PORT
   const socket = new Socket()
