@@ -134,11 +134,6 @@ export type TransportErrorPayload = {
   details?: unknown
 }
 
-export type SessionOpenPayload = {
-  nodeId: DeviceId
-  requestedAt: number
-}
-
 export type RelayRequestPayload = {
   requestId: string
   routeTo: DeviceId
@@ -214,7 +209,6 @@ export type SynraCrossDevicePayloadByType = {
   'transport.message.received': TransportMessageReceivedPayload
   'transport.message.ack': TransportMessageAckPayload
   'transport.error': TransportErrorPayload
-  'session.open': SessionOpenPayload
   'relay.request': RelayRequestPayload
   'relay.ack': RelayAckPayload
   'relay.result': RelayResultPayload

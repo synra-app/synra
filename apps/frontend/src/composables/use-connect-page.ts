@@ -38,6 +38,14 @@ function isIpv4Address(value: string | undefined): boolean {
   )
 }
 
+function isTransportNotOpenError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false
+  }
+  const message = error.message.toLowerCase()
+  return message.includes('transport is not open') || message.includes('connection is not open')
+}
+
 export function useConnectPage() {
   const store = useLanDiscoveryStore()
   const pairingStore = usePairingStore()
@@ -164,18 +172,41 @@ export function useConnectPage() {
       registerPairingOutbound(requestId, device)
       const selfOnLan = await resolveSelfOnLanForPairing()
       const initiator = await buildLocalPairInitiatorProfile(selfOnLan)
-      await store.sendLanEvent({
+      const payload = {
         requestId,
         sourceDeviceId: initiator.deviceId,
         targetDeviceId,
-        eventName: 'pairing.request',
-        payload: {
+        initiator
+      }
+      try {
+        await store.sendLanEvent({
           requestId,
           sourceDeviceId: initiator.deviceId,
           targetDeviceId,
-          initiator
+          eventName: 'pairing.request',
+          payload
+        })
+      } catch (error) {
+        if (!isTransportNotOpenError(error)) {
+          throw error
         }
-      })
+        const retriedTargetDeviceId = await store.connectToDevice(device.deviceId, {
+          suppressGlobalError: true
+        })
+        if (!retriedTargetDeviceId) {
+          throw error
+        }
+        await store.sendLanEvent({
+          requestId,
+          sourceDeviceId: initiator.deviceId,
+          targetDeviceId: retriedTargetDeviceId,
+          eventName: 'pairing.request',
+          payload: {
+            ...payload,
+            targetDeviceId: retriedTargetDeviceId
+          }
+        })
+      }
     } catch {
       pairingStore.pushFeedback('Pairing request failed.')
       setPairAwaitingAccept(device.deviceId, false)

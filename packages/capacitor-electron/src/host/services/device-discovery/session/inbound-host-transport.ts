@@ -535,7 +535,7 @@ export function createInboundHostTransport(
     })
   }
 
-  const closeSessions = async (deviceId?: string): Promise<void> => {
+  const closeLinks = async (deviceId?: string): Promise<void> => {
     const targetIds = deviceId
       ? (() => {
           const key = resolvePeerWireIdKey(inboundLinksByPeerWireId, deviceId)
@@ -597,7 +597,7 @@ export function createInboundHostTransport(
       }
     },
     async closeTransport(deviceId) {
-      await closeSessions(deviceId)
+      await closeLinks(deviceId)
     },
     async sendMessage(sendOptions) {
       const targetKey = resolvePeerWireIdKey(inboundLinksByPeerWireId, sendOptions.targetDeviceId)
@@ -689,7 +689,7 @@ export function createInboundHostTransport(
           code: 'INBOUND_HEARTBEAT_TIMEOUT',
           transport: 'tcp'
         })
-        await closeSessions(deviceId)
+        await closeLinks(deviceId)
       }
     }
   }

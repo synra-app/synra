@@ -165,7 +165,7 @@ export function createDeviceDiscoveryService(
       const outboundState = await outboundTransport.getState({
         targetDeviceId: sendOptions.targetDeviceId
       })
-      if (outboundState.state === 'open' && outboundState.deviceId === sendOptions.targetDeviceId) {
+      if (outboundState.state === 'open') {
         return outboundTransport.sendMessage(sendOptions)
       }
       const sentViaInbound = await inboundTransport.sendMessage(sendOptions)
@@ -183,7 +183,7 @@ export function createDeviceDiscoveryService(
       const outboundState = await outboundTransport.getState({
         targetDeviceId: sendOptions.targetDeviceId
       })
-      if (outboundState.state === 'open' && outboundState.deviceId === sendOptions.targetDeviceId) {
+      if (outboundState.state === 'open') {
         return outboundTransport.sendLanEvent(sendOptions)
       }
       const sentViaInbound = await inboundTransport.sendLanEvent(sendOptions)

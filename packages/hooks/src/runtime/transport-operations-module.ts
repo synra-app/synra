@@ -57,13 +57,12 @@ export function createTransportOperationsModule(options: {
     const suppressGlobalError = openOptions.suppressGlobalError === true
     try {
       const hook = getHooksRuntimeOptions().resolveSynraConnectType
-      const fromHook = hook ? await Promise.resolve(hook(openOptions.deviceId)) : undefined
-      const connectType = openOptions.connectType ?? fromHook
-      if (connectType !== 'fresh' && connectType !== 'paired') {
-        throw new Error(
-          'connectType is required: set RuntimeOpenTransportInput.connectType or configureHooksRuntime({ resolveSynraConnectType }).'
-        )
-      }
+      const fromHook = hook
+        ? await Promise.resolve(hook(openOptions.deviceId)).catch(() => undefined)
+        : undefined
+      const connectType =
+        openOptions.connectType ??
+        (fromHook === 'fresh' || fromHook === 'paired' ? fromHook : 'paired')
       await adapter.openTransport({
         deviceId: openOptions.deviceId,
         host: openOptions.host,

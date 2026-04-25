@@ -32,4 +32,6 @@ const pairingProtocolHolder = shallowRef<PairingProtocolContext | null>(null)
 app.provide(PAIRING_PROTOCOL_KEY, pairingProtocolHolder)
 setupSynraRuntime(pinia, pairingProtocolHolder)
 
+console.log('frontend main')
+
 app.mount('#app')

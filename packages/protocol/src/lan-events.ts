@@ -59,7 +59,7 @@ export type LanPairingPeerResetPayload = {
   reason?: string
 }
 
-/** Ask the receiver to drop local pairing for this session's peer (replaces legacy `custom.pair.unpairRequired`). */
+/** Ask the receiver to drop local pairing for this active peer link (replaces legacy `custom.pair.unpairRequired`). */
 export type LanPairingUnpairRequiredPayload = {
   reason?: string
   mode?: 'fresh' | 'stale'

@@ -16,7 +16,7 @@ import type {
   DeviceTransportSnapshot
 } from '../../../../shared/protocol/types'
 import { DEFAULT_ACK_TIMEOUT_MS, DEFAULT_HEARTBEAT_TIMEOUT_MS } from '../core/constants'
-import { localDisplayName } from '../core/device-identity'
+import { hashDeviceId, localDisplayName } from '../core/device-identity'
 import { pickPrimarySourceHostIp } from '../core/network'
 import type { HostEventBus } from '../events/host-event-bus'
 import type { ProbeSocketRegistry } from '../discovery/probe-socket-registry'
@@ -36,6 +36,17 @@ type OutboundState = {
   openedAt?: number
   closedAt?: number
   lastError?: string
+}
+
+function buildDeviceAliases(deviceId: string | undefined): Set<string> {
+  const aliases = new Set<string>()
+  if (!deviceId || deviceId.trim().length === 0) {
+    return aliases
+  }
+  const normalized = deviceId.trim()
+  aliases.add(normalized)
+  aliases.add(hashDeviceId(normalized))
+  return aliases
 }
 
 type OutboundClientTransportOptions = {
@@ -67,6 +78,7 @@ export function createOutboundClientTransport(
   const pendingAcks = new Map<string, () => void>()
   let socket: Socket | undefined
   let state: OutboundState = { state: 'idle' }
+  let remoteDeviceAliases = new Set<string>()
   let lastHeartbeatAt = 0
   let resolveConnect: ((result: ConnectAckResult) => void) | undefined
   let rejectConnect: ((reason: unknown) => void) | undefined
@@ -77,12 +89,24 @@ export function createOutboundClientTransport(
       socket = undefined
     }
     codec.reset()
+    remoteDeviceAliases = new Set<string>()
     state = {
       ...state,
       state: 'closed',
       closedAt: Date.now(),
       lastError: reason
     }
+  }
+
+  const canRouteToTargetDevice = (targetDeviceId: string | undefined): boolean => {
+    if (!targetDeviceId || targetDeviceId.trim().length === 0) {
+      return true
+    }
+    const normalized = targetDeviceId.trim()
+    if (remoteDeviceAliases.has(normalized)) {
+      return true
+    }
+    return remoteDeviceAliases.has(hashDeviceId(normalized))
   }
 
   const publishTransportError = (code: string, payload: unknown) => {
@@ -286,6 +310,7 @@ export function createOutboundClientTransport(
           closedAt: undefined,
           lastError: undefined
         }
+        remoteDeviceAliases = buildDeviceAliases(openOptions.deviceId)
         attachSocketHandlers(socket)
         options.eventBus.publish({
           type: 'transport.opened',
@@ -379,6 +404,10 @@ export function createOutboundClientTransport(
       })
 
       const now = Date.now()
+      remoteDeviceAliases = new Set<string>([
+        ...buildDeviceAliases(openOptions.deviceId),
+        ...buildDeviceAliases(connectAck.remoteDeviceId)
+      ])
       lastHeartbeatAt = now
       state = {
         ...state,
@@ -501,7 +530,7 @@ export function createOutboundClientTransport(
       }
     },
     async getState(getOptions = {}) {
-      if (getOptions.targetDeviceId && getOptions.targetDeviceId !== state.deviceId) {
+      if (getOptions.targetDeviceId && !canRouteToTargetDevice(getOptions.targetDeviceId)) {
         return {
           state: 'closed',
           deviceId: getOptions.targetDeviceId,

@@ -49,6 +49,16 @@ export function setupSynraRuntime(
   const ensureRuntimeListeners = async (): Promise<void> => {
     await lanDiscoveryStore.ensureReady().catch(() => undefined)
   }
+  let runtimeInitialized = false
+  const initializeRuntime = async (): Promise<void> => {
+    if (runtimeInitialized) {
+      return
+    }
+    runtimeInitialized = true
+    await ensureRuntimeListeners()
+    await registerPairingProtocol(pinia, pairingProtocolHolder)
+    registerPairedAutoConnect(pinia)
+  }
 
   /** Matches connect page: `ensureReady` then `startScan` only — no extra native reads. */
   const startInitialDiscovery = async (): Promise<void> => {
@@ -66,7 +76,9 @@ export function setupSynraRuntime(
     }
   }
 
-  void ensureDeviceInstanceUuid()
+  void initializeRuntime()
+    .catch(() => undefined)
+    .then(() => ensureDeviceInstanceUuid())
     .then(async (deviceInstanceUuid) => {
       try {
         await ensureDeviceBasicInfo(deviceInstanceUuid)
@@ -103,16 +115,12 @@ export function setupSynraRuntime(
           usePairingStore(pinia).bumpPairedList()
         }
       })
-      await ensureRuntimeListeners()
-      await registerPairingProtocol(pinia, pairingProtocolHolder)
-      registerPairedAutoConnect(pinia)
+      await initializeRuntime()
       await startInitialDiscovery()
     })
     .catch(() => {
       void (async () => {
-        await ensureRuntimeListeners()
-        await registerPairingProtocol(pinia, pairingProtocolHolder)
-        registerPairedAutoConnect(pinia)
+        await initializeRuntime()
         await startInitialDiscovery()
       })()
     })
