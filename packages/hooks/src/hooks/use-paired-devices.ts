@@ -8,6 +8,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { getPairAwaitingAcceptDeviceIds } from '../runtime/pair-awaiting-accept'
 import { pairedDevicesStorageEpoch } from '../runtime/paired-devices-storage-epoch'
 import { getPairedLinkPhases } from '../runtime/paired-link-phases'
+import { findReadyTransportLinkForDevice } from '../runtime/ready-transport-link'
 import { useTransport } from './use-transport'
 
 export type PairedLinkStatus = 'disconnected' | 'idle' | 'connecting' | 'connected'
@@ -22,6 +23,8 @@ export type PairedDeviceRow = {
   connectCheckError?: string
   lastSeenAt?: number
   pairedAt: number
+  /** Single source of truth for send readiness. */
+  ready: boolean
   linkStatus: PairedLinkStatus
 }
 
@@ -30,7 +33,7 @@ export type PairedDeviceRow = {
  * for device lists; do not call `startScan` / `startDiscovery` from plugin code.
  */
 export function usePairedDevices() {
-  const { peers, appReadyDeviceIds, ensureReady } = useTransport()
+  const { peers, openTransportLinks, ensureReady } = useTransport()
   const pairedRecords = ref<SynraPairedDeviceRecord[]>([])
 
   async function reloadPairedRecords(): Promise<void> {
@@ -56,9 +59,15 @@ export function usePairedDevices() {
       const live = byId.get(record.deviceId)
       const transportPending = linkPhases.has(record.deviceId)
       const pairPending = pairAwaiting.has(record.deviceId)
-      const connected = appReadyDeviceIds.value.includes(record.deviceId)
+      const ready = Boolean(
+        findReadyTransportLinkForDevice({
+          deviceId: record.deviceId,
+          devices: peers.value,
+          links: openTransportLinks.value
+        })
+      )
       let linkStatus: PairedLinkStatus = 'disconnected'
-      if (connected && !transportPending && !pairPending) {
+      if (ready && !transportPending && !pairPending) {
         linkStatus = 'connected'
       } else if (transportPending || pairPending) {
         linkStatus = 'connecting'
@@ -75,6 +84,7 @@ export function usePairedDevices() {
         connectCheckError: live?.connectCheckError,
         lastSeenAt: live?.lastSeenAt,
         pairedAt: record.pairedAt,
+        ready,
         linkStatus
       }
     })

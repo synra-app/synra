@@ -1,7 +1,9 @@
-import type { SynraPluginManifest, SynraUiManifestMetadata } from '@synra/plugin-sdk'
+import type { SynraUiManifestMetadata } from '@synra/plugin-sdk'
 import type { Router } from 'vue-router'
-import ChatPlugin from '@synra-plugin/chat'
-import chatPackageJson from '@synra-plugin/chat/package.json'
+import {
+  discoverBuiltinSynraUiPluginPackages,
+  loadBuiltinSynraPluginEntry
+} from './builtin-plugin-loaders'
 import type { RegisteredBuiltinPlugin } from './types'
 import { registerBuiltinPluginFromManifest } from './register-builtin-from-manifest'
 import { PluginRegistry } from './plugin-registry'
@@ -18,10 +20,23 @@ export class PluginHostFacade {
     this.metadataByPluginId
   )
 
-  constructor() {
-    this.registerBuiltinPlugin(
-      registerBuiltinPluginFromManifest(chatPackageJson as SynraPluginManifest, new ChatPlugin())
-    )
+  private builtinPluginsInit: Promise<void> | null = null
+
+  /**
+   * Discovers `@synra-plugin/*` packages under node_modules, dynamically imports each
+   * entry + manifest, and registers builtins. Idempotent.
+   */
+  initializeBuiltinPlugins(): Promise<void> {
+    if (this.builtinPluginsInit) {
+      return this.builtinPluginsInit
+    }
+    this.builtinPluginsInit = (async () => {
+      for (const { packageName, manifest } of discoverBuiltinSynraUiPluginPackages()) {
+        const PluginCtor = await loadBuiltinSynraPluginEntry(packageName)
+        this.registerBuiltinPlugin(registerBuiltinPluginFromManifest(manifest, new PluginCtor()))
+      }
+    })()
+    return this.builtinPluginsInit
   }
 
   listBuiltinPlugins(): SynraUiManifestMetadata[] {

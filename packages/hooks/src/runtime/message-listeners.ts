@@ -15,18 +15,17 @@ export function createMessageListenersRegistry(): MessageListenersRegistry {
       eventId: resolveMessageEventId({
         type: 'messageReceived',
         requestId: event.requestId,
-        sourceDeviceId: event.sourceDeviceId,
-        targetDeviceId: event.targetDeviceId,
-        messageId: event.messageId,
+        from: event.from,
+        target: event.target,
+        eventName: event.event,
         timestamp: event.timestamp
       }),
       requestId: event.requestId,
-      sourceDeviceId: event.sourceDeviceId,
-      targetDeviceId: event.targetDeviceId,
-      replyToRequestId: event.replyToRequestId,
-      messageType: event.messageType,
+      event: event.event,
+      from: event.from,
+      target: event.target,
+      replyRequestId: event.replyRequestId,
       payload: event.payload,
-      messageId: event.messageId,
       timestamp: event.timestamp
     }
 
@@ -36,12 +35,12 @@ export function createMessageListenersRegistry(): MessageListenersRegistry {
       }
       if (
         listener.filter?.deviceId &&
-        listener.filter.deviceId !== normalized.sourceDeviceId &&
+        listener.filter.deviceId !== normalized.from &&
         listener.filter.deviceId !== deviceId
       ) {
         continue
       }
-      if (listener.filter?.messageType && listener.filter.messageType !== normalized.messageType) {
+      if (listener.filter?.event && listener.filter.event !== normalized.event) {
         continue
       }
       void Promise.resolve(listener.handler(normalized))

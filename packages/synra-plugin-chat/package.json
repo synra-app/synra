@@ -35,12 +35,14 @@
   },
   "devDependencies": {
     "@iconify-json/eos-icons": "^1.2.4",
+    "@iconify-json/lucide": "^1.2.44",
     "@tsdown/css": "catalog:",
     "@types/node": "catalog:types",
     "@unocss/preset-icons": "catalog:unocss",
     "@unocss/preset-wind3": "catalog:unocss",
     "bumpp": "catalog:release",
     "typescript": "catalog:types",
+    "uno-colors": "catalog:style",
     "unocss": "catalog:unocss",
     "vite-plus": "catalog:vite"
   },

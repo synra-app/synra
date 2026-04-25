@@ -7,10 +7,12 @@ import {
   type SynraWireEventContext
 } from '@synra/transport-events'
 import {
-  getConnectionRuntime,
-  setPairAwaitingAccept,
-  setPairedDeviceConnecting
-} from '@synra/hooks'
+  DEVICE_PAIRING_PEER_RESET_EVENT,
+  DEVICE_PAIRING_REQUEST_EVENT,
+  DEVICE_PAIRING_RESPONSE_EVENT,
+  DEVICE_PAIRING_UNPAIR_REQUIRED_EVENT
+} from '@synra/protocol'
+import { setPairAwaitingAccept, setPairedDeviceConnecting } from '@synra/hooks'
 import { consumePairingOutbound } from '../lib/pairing-outbound-pending'
 import {
   listPairedDeviceRecords,
@@ -47,7 +49,6 @@ export function usePairingProtocolContext(): ShallowRef<PairingProtocolContext |
 }
 
 export function createPairingProtocolContext(pinia: Pinia): PairingProtocolContext {
-  const runtime = getConnectionRuntime()
   const pairingStore = usePairingStore(pinia)
 
   async function unpairLocalOnly(deviceId: string, reason: string): Promise<void> {
@@ -58,13 +59,12 @@ export function createPairingProtocolContext(pinia: Pinia): PairingProtocolConte
     pairingStore.bumpPairedList()
     setPairAwaitingAccept(deviceId, false)
     setPairedDeviceConnecting(deviceId, false)
-    runtime.setAppLinkForDevice(deviceId, 'disconnected', reason)
     pairingStore.pushFeedback(reason)
   }
 
   function registerLanSynraWireHandlers(): void {
     createSynraEvent({
-      eventName: 'pairing.request',
+      event: DEVICE_PAIRING_REQUEST_EVENT,
       handlers: synraHandlersAllPlatforms((ctx: SynraWireEventContext) => {
         const wirePayload = ctx.payload
         if (pairingStore.hasOpenIncoming()) {
@@ -76,8 +76,8 @@ export function createPairingProtocolContext(pinia: Pinia): PairingProtocolConte
         const pairPayload: PairRequestPayload = wirePayload
         pairingStore.setIncoming({
           requestId: pairPayload.requestId,
-          sourceDeviceId: ctx.sourceDeviceId,
-          targetDeviceId: ctx.targetDeviceId,
+          from: ctx.from,
+          target: ctx.target,
           initiator: pairPayload.initiator
         })
         setPairAwaitingAccept(pairPayload.initiator.deviceId, true)
@@ -85,7 +85,7 @@ export function createPairingProtocolContext(pinia: Pinia): PairingProtocolConte
     })
 
     createSynraEvent({
-      eventName: 'pairing.response',
+      event: DEVICE_PAIRING_RESPONSE_EVENT,
       handlers: synraHandlersAllPlatforms((ctx: SynraWireEventContext) => {
         const parsed = parsePairingResponsePayload(ctx.payload)
         if (!parsed) {
@@ -110,7 +110,6 @@ export function createPairingProtocolContext(pinia: Pinia): PairingProtocolConte
             () => {
               pairingStore.bumpPairedList()
               pairingStore.pushFeedback('Pairing completed.')
-              runtime.setAppLinkForDevice(target.deviceId, 'connected')
             },
             () => {
               pairingStore.pushFeedback('Failed to save paired device.')
@@ -122,13 +121,11 @@ export function createPairingProtocolContext(pinia: Pinia): PairingProtocolConte
         if (rejected) {
           setPairAwaitingAccept(rejected.target.deviceId, false)
           setPairedDeviceConnecting(rejected.target.deviceId, false)
-          runtime.setAppLinkForDevice(rejected.target.deviceId, 'failed', 'Pairing was declined.')
         } else {
-          const declinedDeviceId = ctx.sourceDeviceId
+          const declinedDeviceId = ctx.from
           if (declinedDeviceId) {
             setPairAwaitingAccept(declinedDeviceId, false)
             setPairedDeviceConnecting(declinedDeviceId, false)
-            runtime.setAppLinkForDevice(declinedDeviceId, 'failed', 'Pairing was declined.')
           }
         }
         const reason =
@@ -140,20 +137,20 @@ export function createPairingProtocolContext(pinia: Pinia): PairingProtocolConte
     })
 
     createSynraEvent({
-      eventName: 'pairing.peerReset',
+      event: DEVICE_PAIRING_PEER_RESET_EVENT,
       handlers: synraHandlersAllPlatforms(async (ctx: SynraWireEventContext) => {
         const parsed = parsePairingPeerResetPayload(ctx.payload)
         if (!parsed) {
           return
         }
-        await unpairLocalOnly(parsed.fromDeviceId, parsed.reason)
+        await unpairLocalOnly(parsed.from, parsed.reason)
       })
     })
 
     createSynraEvent({
-      eventName: 'pairing.unpairRequired',
+      event: DEVICE_PAIRING_UNPAIR_REQUIRED_EVENT,
       handlers: synraHandlersAllPlatforms(async (ctx: SynraWireEventContext) => {
-        const deviceId = ctx.sourceDeviceId
+        const deviceId = ctx.from
         if (!deviceId) {
           return
         }

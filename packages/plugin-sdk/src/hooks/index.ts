@@ -11,7 +11,9 @@ export {
   useTransport,
   type DeviceCardBadge,
   type DisplayDevice,
+  type SendMessageToReadyDeviceInput,
   type PairedDeviceRow,
   type PairedLinkStatus,
+  type TransportBroadcastMessageInput,
   type ScanPhase
 } from '@synra/hooks'

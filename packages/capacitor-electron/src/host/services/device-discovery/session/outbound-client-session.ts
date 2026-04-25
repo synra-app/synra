@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto'
 import { Socket } from 'node:net'
+import { isLanWireEventName } from '@synra/protocol'
 import { BridgeError } from '../../../../shared/errors/bridge-error'
 import { BRIDGE_ERROR_CODES } from '../../../../shared/errors/codes'
 import type {
-  DeviceDiscoveryHostEvent,
   DeviceTransportCloseOptions,
   DeviceTransportCloseResult,
   DeviceTransportGetStateOptions,
@@ -21,8 +21,13 @@ import { pickPrimarySourceHostIp } from '../core/network'
 import type { HostEventBus } from '../events/host-event-bus'
 import type { ProbeSocketRegistry } from '../discovery/probe-socket-registry'
 import {
-  LAN_APP_ID,
-  LAN_PROTOCOL_VERSION,
+  DEVICE_HOST_RETIRE_EVENT,
+  DEVICE_MEMBER_OFFLINE_EVENT,
+  DEVICE_TCP_ACK_EVENT,
+  DEVICE_TCP_CLOSE_EVENT,
+  DEVICE_TCP_CONNECT_ACK_EVENT,
+  DEVICE_TCP_CONNECT_EVENT,
+  DEVICE_TCP_HEARTBEAT_EVENT,
   LengthPrefixedJsonCodec,
   type LanFrame
 } from '../protocol/lan-frame.codec'
@@ -112,7 +117,6 @@ export function createOutboundClientTransport(
   const publishTransportError = (code: string, payload: unknown) => {
     options.eventBus.publish({
       type: 'transport.error',
-      remote: `${state.host ?? ''}:${String(state.port ?? '')}`,
       deviceId: state.deviceId,
       code,
       payload,
@@ -136,13 +140,17 @@ export function createOutboundClientTransport(
     })
   }
 
+  const isControlEvent = (event: string): boolean =>
+    event === DEVICE_TCP_CONNECT_EVENT ||
+    event === DEVICE_TCP_CONNECT_ACK_EVENT ||
+    event === DEVICE_TCP_ACK_EVENT ||
+    event === DEVICE_TCP_CLOSE_EVENT ||
+    event === DEVICE_TCP_HEARTBEAT_EVENT ||
+    event === DEVICE_HOST_RETIRE_EVENT ||
+    event === DEVICE_MEMBER_OFFLINE_EVENT
+
   const handleFrame = (frame: LanFrame) => {
-    if (
-      frame.type === 'connectAck' &&
-      resolveConnect &&
-      frame.requestId &&
-      frame.appId === LAN_APP_ID
-    ) {
+    if (frame.event === DEVICE_TCP_CONNECT_ACK_EVENT && resolveConnect && frame.requestId) {
       const payload =
         frame.payload && typeof frame.payload === 'object'
           ? (frame.payload as Record<string, unknown>)
@@ -152,9 +160,7 @@ export function createOutboundClientTransport(
           ? payload.displayName
           : undefined
       const remoteDeviceId =
-        typeof payload.sourceDeviceId === 'string' && payload.sourceDeviceId.length > 0
-          ? payload.sourceDeviceId
-          : undefined
+        typeof payload.from === 'string' && payload.from.length > 0 ? payload.from : undefined
       resolveConnect({
         displayName,
         remoteDeviceId
@@ -163,92 +169,79 @@ export function createOutboundClientTransport(
       rejectConnect = undefined
       return
     }
-    if (frame.type === 'ack' && frame.targetDeviceId && frame.messageId) {
-      const key = `${frame.targetDeviceId}:${frame.messageId}`
+    if (frame.event === DEVICE_TCP_ACK_EVENT && frame.target && frame.replyRequestId) {
+      const key = `${frame.target}:${frame.replyRequestId}`
       const resolve = pendingAcks.get(key)
       pendingAcks.delete(key)
       resolve?.()
       options.eventBus.publish({
         type: 'transport.message.ack',
-        remote: `${state.host ?? ''}:${String(state.port ?? '')}`,
-        deviceId: frame.targetDeviceId,
-        messageId: frame.messageId,
+        deviceId: frame.target,
+        event: frame.event,
+        target: frame.target,
+        from: frame.from,
+        replyRequestId: frame.replyRequestId,
         payload: {
-          requestId: frame.requestId,
-          targetDeviceId: frame.targetDeviceId
+          requestId: frame.requestId
         },
         transport: 'tcp'
       })
       return
     }
-    if (frame.type === 'message' && frame.requestId) {
+    if (!isControlEvent(frame.event) && frame.requestId) {
+      const ackTarget =
+        typeof frame.target === 'string' && frame.target.length > 0 ? frame.target : state.deviceId
+      if (!ackTarget || ackTarget.length === 0) {
+        return
+      }
       void writeFrame({
-        version: LAN_PROTOCOL_VERSION,
-        type: 'ack',
-        requestId: frame.requestId,
-        targetDeviceId: state.deviceId,
-        messageId: frame.messageId,
+        requestId: randomUUID(),
+        event: DEVICE_TCP_ACK_EVENT,
+        target: ackTarget,
+        from: options.resolveLocalDeviceUuid(),
+        replyRequestId: frame.requestId,
         timestamp: Date.now()
       }).catch(() => undefined)
-      const payload = frame.payload
-      const messageType =
-        payload && typeof payload === 'object' && 'messageType' in payload
-          ? ((payload as { messageType?: string })
-              .messageType as DeviceDiscoveryHostEvent['messageType'])
-          : undefined
+      const envelopePayload = {
+        requestId: frame.requestId,
+        event: frame.event,
+        from: frame.from,
+        target: frame.target,
+        replyRequestId: frame.replyRequestId,
+        payload: frame.payload
+      }
       options.eventBus.publish({
-        type: 'transport.message.received',
-        remote: `${state.host ?? ''}:${String(state.port ?? '')}`,
+        type:
+          typeof frame.event === 'string' && isLanWireEventName(frame.event)
+            ? 'transport.lan.event.received'
+            : 'transport.message.received',
         deviceId: state.deviceId,
-        messageId: frame.messageId,
-        messageType,
-        payload: frame.payload,
+        event: frame.event,
+        target: frame.target,
+        from: frame.from,
+        replyRequestId: frame.replyRequestId,
+        payload: envelopePayload,
         transport: 'tcp'
       })
       return
     }
-    if (frame.type === 'event' && frame.requestId) {
-      const pl =
-        frame.payload && typeof frame.payload === 'object'
-          ? (frame.payload as Record<string, unknown>)
-          : {}
-      const eventName = typeof pl.eventName === 'string' ? pl.eventName : ''
-      options.eventBus.publish({
-        type: 'transport.lan.event.received',
-        remote: `${state.host ?? ''}:${String(state.port ?? '')}`,
-        deviceId: state.deviceId,
-        payload: {
-          requestId: frame.requestId,
-          sourceDeviceId: frame.sourceDeviceId,
-          targetDeviceId: frame.targetDeviceId,
-          replyToRequestId: frame.replyToRequestId,
-          eventName,
-          eventPayload: pl.payload,
-          fromDeviceId: state.deviceId
-        },
-        transport: 'tcp'
-      })
-      return
-    }
-    if (frame.type === 'heartbeat') {
+    if (frame.event === DEVICE_TCP_HEARTBEAT_EVENT) {
       lastHeartbeatAt = Date.now()
       return
     }
-    if (frame.type === 'hostRetire' || frame.type === 'memberOffline') {
+    if (frame.event === DEVICE_HOST_RETIRE_EVENT || frame.event === DEVICE_MEMBER_OFFLINE_EVENT) {
       options.eventBus.publish({
-        type: frame.type === 'hostRetire' ? 'host.retire' : 'host.member.offline',
-        remote: `${state.host ?? ''}:${String(state.port ?? '')}`,
+        type: frame.event === DEVICE_HOST_RETIRE_EVENT ? 'host.retire' : 'host.member.offline',
         deviceId: state.deviceId,
         payload: frame.payload,
         transport: 'tcp'
       })
       return
     }
-    if (frame.type === 'close') {
+    if (frame.event === DEVICE_TCP_CLOSE_EVENT) {
       closeWithError('REMOTE_CLOSED')
       options.eventBus.publish({
         type: 'transport.closed',
-        remote: `${state.host ?? ''}:${String(state.port ?? '')}`,
         deviceId: state.deviceId,
         payload: { reason: 'REMOTE_CLOSED' },
         transport: 'tcp'
@@ -262,6 +255,15 @@ export function createOutboundClientTransport(
         return
       }
       for (const frame of codec.decodeChunk(chunk)) {
+        console.info('[tcp-message-recv]', {
+          deviceId: state.deviceId,
+          event: frame.event,
+          requestId: frame.requestId,
+          from: frame.from,
+          target: frame.target,
+          replyRequestId: frame.replyRequestId,
+          timestamp: frame.timestamp
+        })
         handleFrame(frame)
       }
     })
@@ -314,7 +316,6 @@ export function createOutboundClientTransport(
         attachSocketHandlers(socket)
         options.eventBus.publish({
           type: 'transport.opened',
-          remote: `${openOptions.host}:${String(openOptions.port)}`,
           deviceId: openOptions.deviceId,
           payload: {
             direction: 'outbound',
@@ -353,8 +354,9 @@ export function createOutboundClientTransport(
         const timeout = setTimeout(() => reject('TRANSPORT_OPEN_TIMEOUT'), DEFAULT_ACK_TIMEOUT_MS)
         socket?.connect(openOptions.port, openOptions.host, () => {
           const payload: Record<string, unknown> = {
+            appId: 'synra',
             token: openOptions.token,
-            sourceDeviceId: options.resolveLocalDeviceUuid(),
+            from: options.resolveLocalDeviceUuid(),
             probe: false,
             displayName: localDisplayName(),
             connectType: openOptions.connectType
@@ -364,15 +366,11 @@ export function createOutboundClientTransport(
             payload.sourceHostIp = sourceHostIp
           }
           const connect: LanFrame = {
-            version: LAN_PROTOCOL_VERSION,
-            type: 'connect',
             requestId: randomUUID(),
-            sourceDeviceId: options.resolveLocalDeviceUuid(),
-            targetDeviceId: openOptions.deviceId,
+            event: DEVICE_TCP_CONNECT_EVENT,
+            target: openOptions.deviceId,
+            from: options.resolveLocalDeviceUuid(),
             timestamp: Date.now(),
-            appId: LAN_APP_ID,
-            protocolVersion: LAN_PROTOCOL_VERSION,
-            capabilities: ['message', 'event'],
             payload
           }
           void writeFrame(connect).catch(reject)
@@ -417,7 +415,6 @@ export function createOutboundClientTransport(
       }
       options.eventBus.publish({
         type: 'transport.opened',
-        remote: `${openOptions.host}:${String(openOptions.port)}`,
         deviceId: openOptions.deviceId,
         payload: {
           direction: 'outbound',
@@ -436,21 +433,20 @@ export function createOutboundClientTransport(
       }
     },
     async close(closeOptions = {}) {
-      const targetDeviceId = closeOptions.targetDeviceId ?? state.deviceId
-      if (state.state === 'open' && targetDeviceId) {
+      const target = closeOptions.target ?? state.deviceId
+      if (state.state === 'open' && target) {
         await writeFrame({
-          version: LAN_PROTOCOL_VERSION,
-          type: 'close',
           requestId: randomUUID(),
-          sourceDeviceId: options.resolveLocalDeviceUuid(),
-          targetDeviceId,
+          event: DEVICE_TCP_CLOSE_EVENT,
+          target,
+          from: options.resolveLocalDeviceUuid(),
           timestamp: Date.now()
         }).catch(() => undefined)
       }
       closeWithError('TRANSPORT_CLOSED_BY_CLIENT')
       return {
         success: true,
-        targetDeviceId,
+        target,
         transport: 'tcp'
       }
     },
@@ -458,29 +454,18 @@ export function createOutboundClientTransport(
       if (state.state !== 'open' || !state.deviceId) {
         throw new BridgeError(BRIDGE_ERROR_CODES.unsupportedOperation, 'Transport is not open.')
       }
-      const envelope: Record<string, unknown> = {
-        eventName: sendOptions.eventName,
-        payload: sendOptions.payload
-      }
-      if (sendOptions.eventId !== undefined) {
-        envelope.eventId = sendOptions.eventId
-      }
-      if (sendOptions.schemaVersion !== undefined) {
-        envelope.schemaVersion = sendOptions.schemaVersion
-      }
       await writeFrame({
-        version: LAN_PROTOCOL_VERSION,
-        type: 'event',
         requestId: sendOptions.requestId,
-        sourceDeviceId: sendOptions.sourceDeviceId,
-        targetDeviceId: sendOptions.targetDeviceId,
-        replyToRequestId: sendOptions.replyToRequestId,
-        timestamp: Date.now(),
-        payload: envelope
+        event: sendOptions.event,
+        from: sendOptions.from,
+        target: sendOptions.target,
+        replyRequestId: sendOptions.replyRequestId,
+        timestamp: sendOptions.timestamp ?? Date.now(),
+        payload: sendOptions.payload
       })
       return {
         success: true,
-        targetDeviceId: sendOptions.targetDeviceId,
+        target: sendOptions.target,
         transport: 'tcp'
       }
     },
@@ -488,8 +473,7 @@ export function createOutboundClientTransport(
       if (state.state !== 'open' || !state.deviceId) {
         throw new BridgeError(BRIDGE_ERROR_CODES.unsupportedOperation, 'Transport is not open.')
       }
-      const messageId = sendOptions.messageId ?? randomUUID()
-      const key = `${sendOptions.targetDeviceId}:${messageId}`
+      const key = `${sendOptions.target}:${sendOptions.requestId}`
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(() => {
           pendingAcks.delete(key)
@@ -500,18 +484,13 @@ export function createOutboundClientTransport(
           resolve()
         })
         void writeFrame({
-          version: LAN_PROTOCOL_VERSION,
-          type: 'message',
           requestId: sendOptions.requestId,
-          sourceDeviceId: sendOptions.sourceDeviceId,
-          targetDeviceId: sendOptions.targetDeviceId,
-          replyToRequestId: sendOptions.replyToRequestId,
-          messageId,
-          timestamp: Date.now(),
-          payload: {
-            messageType: sendOptions.messageType,
-            payload: sendOptions.payload
-          }
+          event: sendOptions.event,
+          from: sendOptions.from,
+          target: sendOptions.target,
+          replyRequestId: sendOptions.replyRequestId,
+          timestamp: sendOptions.timestamp ?? Date.now(),
+          payload: sendOptions.payload
         }).catch((error) => {
           clearTimeout(timer)
           pendingAcks.delete(key)
@@ -524,16 +503,15 @@ export function createOutboundClientTransport(
       })
       return {
         success: true,
-        messageId,
-        targetDeviceId: sendOptions.targetDeviceId,
+        target: sendOptions.target,
         transport: 'tcp'
       }
     },
     async getState(getOptions = {}) {
-      if (getOptions.targetDeviceId && !canRouteToTargetDevice(getOptions.targetDeviceId)) {
+      if (getOptions.target && !canRouteToTargetDevice(getOptions.target)) {
         return {
           state: 'closed',
-          deviceId: getOptions.targetDeviceId,
+          deviceId: getOptions.target,
           closedAt: Date.now(),
           lastError: 'TRANSPORT_NOT_FOUND',
           direction: 'outbound',
@@ -553,7 +531,6 @@ export function createOutboundClientTransport(
       if (Date.now() - lastHeartbeatAt > DEFAULT_HEARTBEAT_TIMEOUT_MS) {
         options.eventBus.publish({
           type: 'host.heartbeat.timeout',
-          remote: `${state.host ?? ''}:${String(state.port ?? '')}`,
           deviceId: state.deviceId,
           code: 'REMOTE_HEARTBEAT_TIMEOUT',
           transport: 'tcp'
@@ -562,11 +539,10 @@ export function createOutboundClientTransport(
         return
       }
       await writeFrame({
-        version: LAN_PROTOCOL_VERSION,
-        type: 'heartbeat',
         requestId: randomUUID(),
-        sourceDeviceId: options.resolveLocalDeviceUuid(),
-        targetDeviceId: state.deviceId,
+        event: DEVICE_TCP_HEARTBEAT_EVENT,
+        from: options.resolveLocalDeviceUuid(),
+        target: state.deviceId,
         timestamp: Date.now()
       }).catch(() => undefined)
     }

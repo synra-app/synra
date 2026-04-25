@@ -1,5 +1,4 @@
 import {
-  getConnectionRuntime,
   getPairAwaitingAcceptDeviceIds,
   getPairedLinkPhases,
   mergePairedAndDiscoveredDevices,
@@ -8,6 +7,7 @@ import {
   setPairedDeviceConnecting,
   type DisplayDevice
 } from '@synra/hooks'
+import { DEVICE_PAIRING_REQUEST_EVENT, DEVICE_PAIRING_UNPAIR_REQUIRED_EVENT } from '@synra/protocol'
 import { storeToRefs } from 'pinia'
 import { computed, onMounted, ref, watch } from 'vue'
 import type { DiscoveredDevice } from '@synra/capacitor-lan-discovery'
@@ -19,7 +19,6 @@ import { syncPairedDiscoveryExclusionFromRecords } from '../lib/discovery-paired
 import {
   listPairedDeviceRecords,
   removePairedDeviceRecord,
-  repairPairedDevicesPersistenceIfNeeded,
   type SynraPairedDeviceRecord
 } from '../lib/paired-devices-storage'
 import { tryOpenTransportForPairedRecord } from '../lib/connect-paired-record'
@@ -31,7 +30,7 @@ import { usePairingProtocolContext } from './use-pairing-protocol-context'
 type DeviceViewState = {
   tone: 'yellow' | 'green' | 'gray'
   pending: boolean
-  appReady: boolean
+  ready: boolean
 }
 
 function isTransportNotOpenError(error: unknown): boolean {
@@ -46,15 +45,7 @@ export function useConnectPage() {
   const store = useLanDiscoveryStore()
   const pairingStore = usePairingStore()
   const pairingProtocol = usePairingProtocolContext()
-  const {
-    scanState,
-    peers,
-    appReadyDeviceIds,
-    openTransportLinks,
-    transportReadyDeviceIds,
-    loading,
-    error
-  } = storeToRefs(store)
+  const { scanState, peers, openTransportLinks, loading, error } = storeToRefs(store)
   const { pairedListEpoch, feedbackMessage } = storeToRefs(pairingStore)
   const reconStore = usePairedReconnectStore()
   const { reconnectGaveUpByDeviceId } = storeToRefs(reconStore)
@@ -77,20 +68,39 @@ export function useConnectPage() {
   }
 
   async function refreshPairedRecords(): Promise<void> {
-    await repairPairedDevicesPersistenceIfNeeded()
-    pairedRecords.value = await listPairedDeviceRecords()
-    syncPairedDiscoveryExclusionFromRecords(pairedRecords.value)
+    try {
+      const records = await listPairedDeviceRecords()
+      pairedRecords.value = records
+      syncPairedDiscoveryExclusionFromRecords(records)
+    } catch {
+      // Keep current paired rows on transient storage failures so paired devices remain visible.
+      syncPairedDiscoveryExclusionFromRecords(pairedRecords.value)
+    }
   }
 
   const discoveredIpv4Peers = computed(() =>
     peers.value.filter((device) => isIpv4Address(device.ipAddress))
   )
 
+  const readyDeviceIds = computed(
+    () =>
+      new Set(
+        openTransportLinks.value
+          .filter(
+            (link) =>
+              link.transport === 'ready' &&
+              typeof link.deviceId === 'string' &&
+              link.deviceId.length > 0
+          )
+          .map((link) => link.deviceId)
+      )
+  )
+
   const displayDevices = computed<DisplayDevice[]>(() =>
     mergePairedAndDiscoveredDevices(
       pairedRecords.value,
       discoveredIpv4Peers.value,
-      new Set(transportReadyDeviceIds.value),
+      readyDeviceIds.value,
       openTransportLinks.value
     )
   )
@@ -113,21 +123,18 @@ export function useConnectPage() {
     const transportPending = getPairedLinkPhases().value
     const pairAwaiting = getPairAwaitingAcceptDeviceIds().value
     const pendingActions = new Set(pendingDeviceActionIds.value)
-    const pairedReady = new Set(appReadyDeviceIds.value)
-    const tcpReady = new Set(transportReadyDeviceIds.value)
     const states: Record<string, DeviceViewState> = {}
     for (const device of displayDevices.value) {
       const deviceId = device.deviceId
       const pending =
         pendingActions.has(deviceId) || transportPending.has(deviceId) || pairAwaiting.has(deviceId)
-      const appReady = pairedReady.has(deviceId)
-      const pairedTcpReady = device.isPaired && tcpReady.has(deviceId)
+      const ready = device.isPaired && readyDeviceIds.value.has(deviceId)
       states[deviceId] = {
         pending,
-        appReady,
+        ready,
         tone: deriveDeviceTone({
           isPending: pending,
-          isPairedReady: appReady || pairedTcpReady
+          isPairedReady: ready
         })
       }
     }
@@ -182,11 +189,6 @@ export function useConnectPage() {
       if (!targetDeviceId) {
         pairingStore.pushFeedback('Could not open transport for pairing.')
         setPairAwaitingAccept(device.deviceId, false)
-        getConnectionRuntime().setAppLinkForDevice(
-          device.deviceId,
-          'failed',
-          'No transport for pairing.'
-        )
         return
       }
       const requestId = crypto.randomUUID()
@@ -195,16 +197,16 @@ export function useConnectPage() {
       const initiator = await buildLocalPairInitiatorProfile(selfOnLan)
       const payload = {
         requestId,
-        sourceDeviceId: initiator.deviceId,
-        targetDeviceId,
+        from: initiator.deviceId,
+        target: targetDeviceId,
         initiator
       }
       try {
         await store.sendLanEvent({
           requestId,
-          sourceDeviceId: initiator.deviceId,
-          targetDeviceId,
-          eventName: 'pairing.request',
+          from: initiator.deviceId,
+          target: targetDeviceId,
+          event: DEVICE_PAIRING_REQUEST_EVENT,
           payload
         })
       } catch (error) {
@@ -219,23 +221,18 @@ export function useConnectPage() {
         }
         await store.sendLanEvent({
           requestId,
-          sourceDeviceId: initiator.deviceId,
-          targetDeviceId: retriedTargetDeviceId,
-          eventName: 'pairing.request',
+          from: initiator.deviceId,
+          target: retriedTargetDeviceId,
+          event: DEVICE_PAIRING_REQUEST_EVENT,
           payload: {
             ...payload,
-            targetDeviceId: retriedTargetDeviceId
+            target: retriedTargetDeviceId
           }
         })
       }
     } catch {
       pairingStore.pushFeedback('Pairing request failed.')
       setPairAwaitingAccept(device.deviceId, false)
-      getConnectionRuntime().setAppLinkForDevice(
-        device.deviceId,
-        'failed',
-        'Pairing request failed.'
-      )
     } finally {
       removePendingDeviceAction(device.deviceId)
     }
@@ -256,9 +253,9 @@ export function useConnectPage() {
         await store
           .sendLanEvent({
             requestId,
-            sourceDeviceId: 'local-device',
-            targetDeviceId: device.deviceId,
-            eventName: 'pairing.unpairRequired',
+            from: 'local-device',
+            target: device.deviceId,
+            event: DEVICE_PAIRING_UNPAIR_REQUIRED_EVENT,
             payload: {
               mode: 'stale',
               reason: 'Peer manually removed this pairing.'
@@ -276,11 +273,6 @@ export function useConnectPage() {
         syncPairedDiscoveryExclusionFromRecords(next)
         pairingStore.bumpPairedList()
         setPairedDeviceConnecting(device.deviceId, false)
-        getConnectionRuntime().setAppLinkForDevice(
-          device.deviceId,
-          'disconnected',
-          localUnpairReason
-        )
         pairingStore.pushFeedback(localUnpairReason)
       }
       await store.disconnectDevice(device.deviceId)
@@ -305,7 +297,7 @@ export function useConnectPage() {
     try {
       const ok = await tryOpenTransportForPairedRecord(
         {
-          isTransportReady: (id) => transportReadyDeviceIds.value.includes(id),
+          isTransportReady: (id) => readyDeviceIds.value.has(id),
           peers: () => peers.value,
           connectToDevice: store.connectToDevice,
           connectToDeviceAt: store.connectToDeviceAt
@@ -320,9 +312,11 @@ export function useConnectPage() {
     }
   }
 
-  onMounted(async () => {
-    await store.ensureReady()
-    await refreshPairedRecords()
+  onMounted(() => {
+    // Paired devices are local persisted data; always load them immediately on page mount,
+    // independent from transport/runtime readiness.
+    void refreshPairedRecords()
+    void store.ensureReady().catch(() => undefined)
   })
 
   watch(pairedListEpoch, () => {

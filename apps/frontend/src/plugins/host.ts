@@ -1,6 +1,7 @@
 export {
   activatePlugin,
   deactivatePlugin,
+  initializePluginHost,
   listBuiltinPlugins,
   openPluginPage,
   registerBuiltinPlugin,

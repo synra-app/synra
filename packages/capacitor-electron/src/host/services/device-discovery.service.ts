@@ -104,8 +104,8 @@ export function createDeviceDiscoveryService(
   const resolveTransportState = async (
     queryOptions: DeviceTransportGetStateOptions = {}
   ): Promise<DeviceTransportSnapshot> => {
-    if (queryOptions.targetDeviceId) {
-      const inboundState = inboundTransport.getTransportState(queryOptions.targetDeviceId)
+    if (queryOptions.target) {
+      const inboundState = inboundTransport.getTransportState(queryOptions.target)
       if (inboundState) {
         return inboundState
       }
@@ -140,30 +140,30 @@ export function createDeviceDiscoveryService(
       return outboundTransport.open(openOptions)
     },
     async closeTransport(closeOptions = {}) {
-      const targetDeviceId = closeOptions.targetDeviceId
-      if (!targetDeviceId) {
+      const target = closeOptions.target
+      if (!target) {
         await outboundTransport.close(closeOptions)
         await inboundTransport.closeTransport()
         return {
           success: true,
-          targetDeviceId: undefined,
+          target: undefined,
           transport: 'tcp'
         }
       }
       const outboundState = await outboundTransport.getState()
-      if (outboundState.deviceId === targetDeviceId) {
+      if (outboundState.deviceId === target) {
         return outboundTransport.close(closeOptions)
       }
-      await inboundTransport.closeTransport(targetDeviceId)
+      await inboundTransport.closeTransport(target)
       return {
         success: true,
-        targetDeviceId,
+        target,
         transport: 'tcp'
       }
     },
     async sendMessage(sendOptions) {
       const outboundState = await outboundTransport.getState({
-        targetDeviceId: sendOptions.targetDeviceId
+        target: sendOptions.target
       })
       if (outboundState.state === 'open') {
         return outboundTransport.sendMessage(sendOptions)
@@ -174,14 +174,13 @@ export function createDeviceDiscoveryService(
       }
       return {
         success: true,
-        messageId: sendOptions.messageId ?? `${Date.now()}`,
-        targetDeviceId: sendOptions.targetDeviceId,
+        target: sendOptions.target,
         transport: 'tcp'
       }
     },
     async sendLanEvent(sendOptions) {
       const outboundState = await outboundTransport.getState({
-        targetDeviceId: sendOptions.targetDeviceId
+        target: sendOptions.target
       })
       if (outboundState.state === 'open') {
         return outboundTransport.sendLanEvent(sendOptions)
@@ -192,7 +191,7 @@ export function createDeviceDiscoveryService(
       }
       return {
         success: true,
-        targetDeviceId: sendOptions.targetDeviceId,
+        target: sendOptions.target,
         transport: 'tcp'
       }
     },

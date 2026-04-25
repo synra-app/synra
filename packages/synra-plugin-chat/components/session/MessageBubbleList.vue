@@ -48,14 +48,17 @@ watch(
 <template>
   <div
     ref="containerRef"
-    class="app-scroll-container h-[45vh] min-h-64 space-y-3 overflow-auto rounded-xl border border-white/12 bg-[#0b1020]/68 p-3 md:h-[52vh]"
+    class="chat-msg-scroll min-h-0 flex-1 space-y-2 overflow-auto px-1 py-2 sm:px-2"
   >
-    <div v-if="loading && messages.length === 0" class="text-center text-sm text-slate-400">
-      Loading chat...
+    <div v-if="loading && messages.length === 0" class="py-6 text-center text-xs text-slate-500">
+      加载中…
     </div>
 
-    <div v-else-if="messages.length === 0" class="text-center text-sm text-slate-400">
-      No messages yet. Start chatting after connecting a device.
+    <div
+      v-else-if="messages.length === 0"
+      class="py-10 text-center text-xs leading-relaxed text-slate-500"
+    >
+      暂无消息，连接设备后即可开始对话。
     </div>
 
     <article
@@ -71,49 +74,37 @@ watch(
       "
     >
       <div
-        class="max-w-[80%] rounded-2xl px-3 py-2 text-sm"
+        class="max-w-[min(92%,28rem)] rounded-2xl px-3 py-2 text-sm leading-snug"
         :class="
           message.direction === 'outgoing'
-            ? 'rounded-br-md border border-indigo-300/30 bg-indigo-500/85 text-white shadow-[0_8px_20px_rgba(79,70,229,0.35)]'
+            ? 'bg-indigo-500/80 text-white'
             : message.direction === 'incoming'
-              ? 'rounded-bl-md border border-white/14 bg-white/10 text-slate-100'
-              : 'border border-white/12 bg-white/8 text-xs text-slate-300'
+              ? 'bg-white/[0.08] text-slate-100'
+              : 'bg-white/[0.05] text-xs text-slate-400'
         "
       >
         <p class="break-words whitespace-pre-wrap">{{ message.text }}</p>
-        <footer
-          class="mt-1 flex items-center justify-end gap-2 text-[10px]"
-          :class="
-            message.direction === 'outgoing'
-              ? 'text-indigo-100'
-              : message.direction === 'incoming'
-                ? 'text-slate-300'
-                : 'justify-center text-slate-400'
-          "
+        <p
+          class="mt-1 text-end text-[10px] tabular-nums opacity-70"
+          :class="message.direction === 'outgoing' ? 'text-indigo-50' : 'text-slate-400'"
         >
-          <span>{{ message.timeLabel }}</span>
-          <span v-if="message.direction === 'outgoing'">{{ message.status }}</span>
-        </footer>
+          {{ message.timeLabel }}
+          <template v-if="message.direction === 'outgoing'"> · {{ message.status }}</template>
+        </p>
       </div>
     </article>
   </div>
 </template>
 
 <style scoped>
-.app-scroll-container::-webkit-scrollbar {
+.chat-msg-scroll::-webkit-scrollbar {
   width: 0;
 }
-
-.app-scroll-container:hover::-webkit-scrollbar {
-  width: 8px;
+.chat-msg-scroll:hover::-webkit-scrollbar {
+  width: 6px;
 }
-
-.app-scroll-container::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.app-scroll-container::-webkit-scrollbar-thumb {
+.chat-msg-scroll::-webkit-scrollbar-thumb {
   border-radius: 9999px;
-  background: rgba(148, 163, 184, 0.52);
+  background: rgba(148, 163, 184, 0.3);
 }
 </style>

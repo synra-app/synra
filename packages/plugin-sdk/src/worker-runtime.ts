@@ -23,14 +23,6 @@ export type PluginWorkerRuntime = {
   ): Promise<PluginWorkerTaskResult<TResult>>
 }
 
-type WorkerRequestMessage = {
-  requestId: string
-  pluginId: string
-  taskType: string
-  payload: unknown
-  timeoutMs?: number
-}
-
 type WorkerResponseMessage = PluginWorkerTaskResult
 
 type WorkerMessageEvent = {
@@ -80,7 +72,7 @@ export class WorkerProxyRuntime implements PluginWorkerRuntime {
     request: PluginWorkerTaskRequest<TPayload>
   ): Promise<PluginWorkerTaskResult<TResult>> {
     const timeoutMs = request.timeoutMs ?? this.options.timeoutMs ?? 10_000
-    const requestMessage: WorkerRequestMessage = {
+    const requestMessage: PluginWorkerTaskRequest<unknown> = {
       requestId: request.requestId,
       pluginId: request.pluginId,
       taskType: request.taskType,

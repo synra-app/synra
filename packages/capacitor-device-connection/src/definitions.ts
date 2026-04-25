@@ -1,6 +1,6 @@
 /** DeviceConnection exposes transport + opaque `connectAck` payloads; app-specific pairing keys live in hooks/frontend. */
 import type { PluginListenerHandle } from '@capacitor/core'
-import type { SynraMessageType } from '@synra/protocol'
+import type { LanWireEventName } from '@synra/protocol'
 
 export type ConnectionTransport = 'tcp'
 
@@ -41,54 +41,52 @@ export type OpenTransportResult = {
 }
 
 export type CloseTransportOptions = {
-  targetDeviceId?: string
+  target?: string
   transport?: ConnectionTransport
 }
 
 export type CloseTransportResult = {
   success: true
-  targetDeviceId?: string
+  target?: string
   transport: ConnectionTransport
 }
 
 export type SendMessageOptions = {
   requestId: string
-  sourceDeviceId: string
-  targetDeviceId: string
-  replyToRequestId?: string
-  messageType: SynraMessageType
+  event: string
+  target: string
+  from: string
+  replyRequestId?: string
   payload: unknown
-  messageId?: string
+  timestamp?: number
   transport?: ConnectionTransport
 }
 
 export type SendMessageResult = {
   success: true
-  messageId: string
-  targetDeviceId: string
+  target: string
   transport: ConnectionTransport
 }
 
 export type SendLanEventOptions = {
   requestId: string
-  sourceDeviceId: string
-  targetDeviceId: string
-  replyToRequestId?: string
-  eventName: string
+  event: LanWireEventName
+  target: string
+  from: string
+  replyRequestId?: string
   payload?: unknown
-  eventId?: string
-  schemaVersion?: number
+  timestamp?: number
   transport?: ConnectionTransport
 }
 
 export type SendLanEventResult = {
   success: true
-  targetDeviceId: string
+  target: string
   transport: ConnectionTransport
 }
 
 export type GetTransportStateOptions = {
-  targetDeviceId?: string
+  target?: string
   transport?: ConnectionTransport
 }
 
@@ -108,10 +106,11 @@ export type HostEvent = {
     | 'host.retire'
     | 'host.member.offline'
     | 'host.heartbeat.timeout'
-  remote: string
+  event?: string
+  target?: string
+  from?: string
+  replyRequestId?: string
   deviceId?: string
-  messageId?: string
-  messageType?: SynraMessageType
   code?: string
   payload?: unknown
   transport: ConnectionTransport
@@ -170,11 +169,12 @@ export type ProbeSynraPeersResult = {
 
 export type LanWireEventReceivedEvent = {
   requestId: string
-  sourceDeviceId: string
-  targetDeviceId: string
-  replyToRequestId?: string
-  eventName: string
-  eventPayload: unknown
+  event: LanWireEventName
+  target: string
+  from: string
+  replyRequestId?: string
+  payload: unknown
+  timestamp: number
   transport: ConnectionTransport
 }
 
@@ -186,30 +186,42 @@ export type TransportClosedEvent = {
 
 export type MessageReceivedEvent = {
   requestId: string
-  sourceDeviceId: string
-  targetDeviceId: string
-  replyToRequestId?: string
-  messageId?: string
-  messageType: SynraMessageType
+  event: string
+  target: string
+  from: string
+  replyRequestId?: string
   payload: unknown
   timestamp: number
   transport: ConnectionTransport
 }
 
 export type MessageAckEvent = {
-  targetDeviceId: string
+  target: string
+  event?: string
+  from?: string
+  replyRequestId: string
   requestId: string
-  messageId: string
   timestamp: number
   transport: ConnectionTransport
 }
 
 export type TransportErrorEvent = {
   deviceId?: string
-  code?: string
+  code?: DeviceConnectionTransportErrorCode
   message: string
   transport: ConnectionTransport
 }
+
+export const DEVICE_CONNECTION_TRANSPORT_ERROR_CODES = {
+  transportIoError: 'TRANSPORT_IO_ERROR',
+  hostHeartbeatTimeout: 'HOST_HEARTBEAT_TIMEOUT',
+  heartbeatSendFailed: 'HEARTBEAT_SEND_FAILED',
+  connectInvalid: 'CONNECT_INVALID',
+  connectNotEstablished: 'CONNECT_NOT_ESTABLISHED'
+} as const
+
+export type DeviceConnectionTransportErrorCode =
+  (typeof DEVICE_CONNECTION_TRANSPORT_ERROR_CODES)[keyof typeof DEVICE_CONNECTION_TRANSPORT_ERROR_CODES]
 
 export interface DeviceConnectionPlugin {
   openTransport(options: OpenTransportOptions): Promise<OpenTransportResult>

@@ -34,9 +34,11 @@ const emit = defineEmits<{
       <ScrollContainer
         as="main"
         class="app-shell-content min-h-0 min-w-0 flex-1 lg:h-full lg:glass-panel"
-        viewport-class="h-full p-4 md:p-5"
+        viewport-class="h-full min-w-0 p-4 md:p-5"
       >
-        <div class="app-shell-content-inner mx-auto w-full max-w-[1400px]">
+        <div
+          class="app-shell-content-inner mx-auto flex min-h-full w-full min-w-0 max-w-[1400px] flex-col"
+        >
           <slot />
         </div>
       </ScrollContainer>

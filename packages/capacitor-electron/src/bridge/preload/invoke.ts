@@ -80,7 +80,7 @@ function validatePayload(method: string, payload: unknown): void {
   ) {
     throw new BridgeError(
       BRIDGE_ERROR_CODES.invalidParams,
-      'connection.sendMessage expects { requestId, sourceDeviceId, targetDeviceId, messageType, payload, messageId? }.'
+      'connection.sendMessage expects { requestId, event, target, from, payload, replyRequestId?, timestamp? }.'
     )
   }
 
@@ -90,7 +90,7 @@ function validatePayload(method: string, payload: unknown): void {
   ) {
     throw new BridgeError(
       BRIDGE_ERROR_CODES.invalidParams,
-      'connection.sendLanEvent expects { requestId, sourceDeviceId, targetDeviceId, eventName, payload?, eventId?, schemaVersion? }.'
+      'connection.sendLanEvent expects { requestId, event, target, from, payload?, replyRequestId?, timestamp? }.'
     )
   }
 }

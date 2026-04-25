@@ -102,7 +102,7 @@ test('synraVitePluginConfig generates default plugin package config', () => {
 
 test('plugin-sdk hooks should re-export useTransport from @synra/hooks', () => {
   const transport = useTransport()
-  expect(typeof transport.sendToDevice).toBe('function')
-  expect(typeof transport.broadcast).toBe('function')
-  expect(typeof transport.onMessage).toBe('function')
+  expect(typeof transport.sendMessageToReadyDevice).toBe('function')
+  expect(typeof transport.broadcastMessage).toBe('function')
+  expect(typeof transport.onSynraMessage).toBe('function')
 })

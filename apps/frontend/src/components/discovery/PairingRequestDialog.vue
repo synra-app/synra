@@ -1,11 +1,8 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
 import { ref } from 'vue'
-import {
-  getConnectionRuntime,
-  setPairAwaitingAccept,
-  setPairedDeviceConnecting
-} from '@synra/hooks'
+import { setPairAwaitingAccept, setPairedDeviceConnecting } from '@synra/hooks'
+import { DEVICE_PAIRING_RESPONSE_EVENT } from '@synra/protocol'
 import { upsertPairedDeviceRecord } from '../../lib/paired-devices-storage'
 import { isIpv4Address } from '../../lib/network'
 import { useLanDiscoveryStore } from '../../stores/lan-discovery'
@@ -42,20 +39,19 @@ async function onAccept(): Promise<void> {
     )
     await lanStore.sendLanEvent({
       requestId: crypto.randomUUID(),
-      sourceDeviceId: current.targetDeviceId,
-      targetDeviceId: current.sourceDeviceId,
-      replyToRequestId: current.requestId,
-      eventName: 'pairing.response',
+      from: current.target,
+      target: current.from,
+      replyRequestId: current.requestId,
+      event: DEVICE_PAIRING_RESPONSE_EVENT,
       payload: {
         requestId: crypto.randomUUID(),
-        sourceDeviceId: current.targetDeviceId,
-        targetDeviceId: current.sourceDeviceId,
-        replyToRequestId: current.requestId,
+        from: current.target,
+        target: current.from,
+        replyRequestId: current.requestId,
         accepted: true
       }
     })
     const initiatorId = current.initiator.deviceId
-    getConnectionRuntime().setAppLinkForDevice(initiatorId, 'connected')
     setPairedDeviceConnecting(initiatorId, false)
     setPairAwaitingAccept(initiatorId, false)
     pairingStore.bumpPairedList()
@@ -74,15 +70,15 @@ async function onReject(): Promise<void> {
   try {
     await lanStore.sendLanEvent({
       requestId: crypto.randomUUID(),
-      sourceDeviceId: current.targetDeviceId,
-      targetDeviceId: current.sourceDeviceId,
-      replyToRequestId: current.requestId,
-      eventName: 'pairing.response',
+      from: current.target,
+      target: current.from,
+      replyRequestId: current.requestId,
+      event: DEVICE_PAIRING_RESPONSE_EVENT,
       payload: {
         requestId: crypto.randomUUID(),
-        sourceDeviceId: current.targetDeviceId,
-        targetDeviceId: current.sourceDeviceId,
-        replyToRequestId: current.requestId,
+        from: current.target,
+        target: current.from,
+        replyRequestId: current.requestId,
         accepted: false,
         reason: 'Declined'
       }

@@ -2,36 +2,40 @@ import { describe, expect, test, vi } from 'vite-plus/test'
 import { createLoopbackTransportPair } from '../../../../transport-core/src/index.ts'
 import { createBridgeHandlers } from '../../../src/bridge/main/handlers'
 import { createMainDispatcher } from '../../../src/bridge/main/dispatch'
-import { createGitHubOpenPlugin } from '../../../src/host/plugins/github-open.plugin'
+import { createOpenUrlRuntimeFixturePlugin } from '../../support/open-url-runtime-fixture.plugin'
 import { createPluginCatalogService } from '../../../src/host/services/plugin-catalog.service'
 import { createPluginRuntimeService } from '../../../src/host/services/plugin-runtime.service'
 import { createRuntimeInfoService } from '../../../src/host/services/runtime-info.service'
 import { BRIDGE_METHODS, BRIDGE_PROTOCOL_VERSION } from '../../../src/shared/protocol/constants'
 import type { MethodResultMap } from '../../../src/shared/protocol/types'
+import type { RuntimeExecuteOptions } from '../../../src/shared/protocol/types'
 
-function createLegacyMessage(messageId: string) {
+function createRuntimeExecuteMessage(requestId: string) {
   return {
     protocolVersion: '1.0' as const,
-    messageId,
-    requestId: `req-${messageId}`,
-    sessionId: 'session-dup',
+    requestId,
+    replyRequestId: undefined,
+    event: 'action.selected' as const,
     traceId: 'trace-dup',
-    type: 'action.selected' as const,
     sentAt: Date.now(),
     ttlMs: 15_000,
-    fromDeviceId: 'mobile-1',
-    toDeviceId: 'pc-1',
+    from: 'mobile-1',
+    target: 'pc-1',
     payload: {
-      sessionId: 'session-dup',
+      requestId: `execute-${requestId}`,
+      sourceDeviceId: 'mobile-1',
+      targetDeviceId: 'pc-1',
+      replyToRequestId: undefined,
       input: { type: 'url', raw: 'https://github.com/synra/synra' },
       action: {
-        actionId: 'github-open:open',
-        pluginId: 'github-open',
+        actionId: 'test-external-url:open',
+        pluginId: 'test-external-url',
         actionType: 'external.open-url',
         label: 'Open in browser',
         requiresConfirm: true,
         payload: { url: 'https://github.com/synra/synra' }
-      }
+      },
+      timeoutMs: 15_000
     }
   }
 }
@@ -40,7 +44,7 @@ describe('bridge/main runtime e2e flow', () => {
   test('runs catalog -> resolveActions -> execute with runtime lifecycle', async () => {
     const openExternal = vi.fn(async () => ({ success: true as const }))
     const runtime = createPluginRuntimeService()
-    runtime.register(createGitHubOpenPlugin({ openExternal }))
+    runtime.register(createOpenUrlRuntimeFixturePlugin({ openExternal }))
     const catalog = createPluginCatalogService(runtime)
     const handlers = createBridgeHandlers({
       runtimeInfoService: createRuntimeInfoService(),
@@ -69,18 +73,17 @@ describe('bridge/main runtime e2e flow', () => {
         })),
         closeTransport: vi.fn(async () => ({
           success: true as const,
-          targetDeviceId: 'dev-e2e-1',
+          target: 'dev-e2e-1',
           transport: 'tcp' as const
         })),
         sendMessage: vi.fn(async () => ({
           success: true as const,
-          messageId: 'msg-e2e-1',
-          targetDeviceId: 'dev-e2e-1',
+          target: 'dev-e2e-1',
           transport: 'tcp' as const
         })),
         sendLanEvent: vi.fn(async () => ({
           success: true as const,
-          targetDeviceId: 'dev-e2e-1',
+          target: 'dev-e2e-1',
           transport: 'tcp' as const
         })),
         getTransportState: vi.fn(async () => ({
@@ -99,18 +102,17 @@ describe('bridge/main runtime e2e flow', () => {
         })),
         closeTransport: vi.fn(async () => ({
           success: true as const,
-          targetDeviceId: 'dev-e2e-1',
+          target: 'dev-e2e-1',
           transport: 'tcp' as const
         })),
         sendMessage: vi.fn(async () => ({
           success: true as const,
-          messageId: 'msg-e2e-1',
-          targetDeviceId: 'dev-e2e-1',
+          target: 'dev-e2e-1',
           transport: 'tcp' as const
         })),
         sendLanEvent: vi.fn(async () => ({
           success: true as const,
-          targetDeviceId: 'dev-e2e-1',
+          target: 'dev-e2e-1',
           transport: 'tcp' as const
         })),
         getTransportState: vi.fn(async () => ({
@@ -175,7 +177,7 @@ describe('bridge/main runtime e2e flow', () => {
     }
     const executeData = executeResponse.data as MethodResultMap['runtime.execute']
 
-    expect(executeData.messages.map((message) => message.type)).toEqual([
+    expect(executeData.messages.map((message) => message.event)).toEqual([
       'runtime.received',
       'runtime.started',
       'runtime.finished'
@@ -187,7 +189,7 @@ describe('bridge/main runtime e2e flow', () => {
   test('does not execute duplicated message id over loopback transport', async () => {
     const openExternal = vi.fn(async () => ({ success: true as const }))
     const runtime = createPluginRuntimeService()
-    runtime.register(createGitHubOpenPlugin({ openExternal }))
+    runtime.register(createOpenUrlRuntimeFixturePlugin({ openExternal }))
     const handlers = createBridgeHandlers({
       runtimeInfoService: createRuntimeInfoService(),
       externalLinkService: { openExternal },
@@ -215,18 +217,17 @@ describe('bridge/main runtime e2e flow', () => {
         })),
         closeTransport: vi.fn(async () => ({
           success: true as const,
-          targetDeviceId: 'dev-e2e-2',
+          target: 'dev-e2e-2',
           transport: 'tcp' as const
         })),
         sendMessage: vi.fn(async () => ({
           success: true as const,
-          messageId: 'msg-e2e-2',
-          targetDeviceId: 'dev-e2e-2',
+          target: 'dev-e2e-2',
           transport: 'tcp' as const
         })),
         sendLanEvent: vi.fn(async () => ({
           success: true as const,
-          targetDeviceId: 'dev-e2e-2',
+          target: 'dev-e2e-2',
           transport: 'tcp' as const
         })),
         getTransportState: vi.fn(async () => ({
@@ -245,18 +246,17 @@ describe('bridge/main runtime e2e flow', () => {
         })),
         closeTransport: vi.fn(async () => ({
           success: true as const,
-          targetDeviceId: 'dev-e2e-2',
+          target: 'dev-e2e-2',
           transport: 'tcp' as const
         })),
         sendMessage: vi.fn(async () => ({
           success: true as const,
-          messageId: 'msg-e2e-2',
-          targetDeviceId: 'dev-e2e-2',
+          target: 'dev-e2e-2',
           transport: 'tcp' as const
         })),
         sendLanEvent: vi.fn(async () => ({
           success: true as const,
-          targetDeviceId: 'dev-e2e-2',
+          target: 'dev-e2e-2',
           transport: 'tcp' as const
         })),
         getTransportState: vi.fn(async () => ({
@@ -277,19 +277,19 @@ describe('bridge/main runtime e2e flow', () => {
     const [mobileTransport, pcTransport] = createLoopbackTransportPair()
 
     pcTransport.onMessage(async (message) => {
-      if (message.type !== 'action.selected') {
+      if (message.event !== 'action.selected') {
         return
       }
 
       await dispatch({
         protocolVersion: BRIDGE_PROTOCOL_VERSION,
-        requestId: `dispatch:${message.messageId}`,
+        requestId: `dispatch:${message.requestId}`,
         method: BRIDGE_METHODS.runtimeExecute,
-        payload: message.payload
+        payload: message.payload as RuntimeExecuteOptions
       })
     })
 
-    const duplicatedMessage = createLegacyMessage('dup-001')
+    const duplicatedMessage = createRuntimeExecuteMessage('dup-001')
 
     await mobileTransport.send(duplicatedMessage)
     await mobileTransport.send(duplicatedMessage)

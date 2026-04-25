@@ -8,6 +8,10 @@ export { PluginHostFacade } from './plugin-host-facade'
 
 const defaultHostFacade = new PluginHostFacade()
 
+export function initializePluginHost(): Promise<void> {
+  return defaultHostFacade.initializeBuiltinPlugins()
+}
+
 export function listBuiltinPlugins(): SynraUiManifestMetadata[] {
   return defaultHostFacade.listBuiltinPlugins()
 }

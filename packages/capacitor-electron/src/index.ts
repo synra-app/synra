@@ -41,7 +41,6 @@ export {
   createPluginCatalogService,
   type PluginCatalogService
 } from './host/services/plugin-catalog.service'
-export { createGitHubOpenPlugin } from './host/plugins/github-open.plugin'
 export {
   createFileService,
   type FileService,

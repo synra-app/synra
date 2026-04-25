@@ -1,4 +1,5 @@
 import { WebPlugin, type ListenerCallback, type PluginListenerHandle } from '@capacitor/core'
+import { isLanWireEventName } from '@synra/protocol'
 import type {
   CloseTransportOptions,
   CloseTransportResult,
@@ -22,7 +23,10 @@ import type {
   TransportErrorEvent,
   TransportOpenedEvent
 } from './definitions'
-import { SYNRA_PROBE_EMBEDDED_IN_DISCOVERY } from './definitions'
+import {
+  DEVICE_CONNECTION_TRANSPORT_ERROR_CODES,
+  SYNRA_PROBE_EMBEDDED_IN_DISCOVERY
+} from './definitions'
 
 type ElectronBridgeTarget = {
   __synraCapElectron?: {
@@ -96,42 +100,53 @@ export class DeviceConnectionElectron extends WebPlugin implements DeviceConnect
         const envelope =
           normalized.payload && typeof normalized.payload === 'object'
             ? (normalized.payload as {
-                messageType?: string
                 payload?: unknown
                 requestId?: string
-                sourceDeviceId?: string
-                targetDeviceId?: string
-                replyToRequestId?: string
+                event?: string
+                from?: string
+                target?: string
+                replyRequestId?: string
               })
             : undefined
-        if (!envelope?.requestId || !envelope.sourceDeviceId || !envelope.targetDeviceId) {
+        const requestId =
+          typeof envelope?.requestId === 'string' && envelope.requestId.length > 0
+            ? envelope.requestId
+            : undefined
+        const from =
+          typeof envelope?.from === 'string' && envelope.from.length > 0
+            ? envelope.from
+            : normalized.from
+        const target =
+          typeof envelope?.target === 'string' && envelope.target.length > 0
+            ? envelope.target
+            : normalized.target
+        if (!requestId || !from || !target) {
           return
         }
         this.notifyListeners('messageReceived', {
-          requestId: envelope.requestId,
-          sourceDeviceId: envelope.sourceDeviceId,
-          targetDeviceId: envelope.targetDeviceId,
-          replyToRequestId: envelope.replyToRequestId,
-          messageId: normalized.messageId,
-          messageType: (normalized.messageType ??
-            envelope?.messageType ??
-            'transport.message.received') as SendMessageOptions['messageType'],
+          requestId,
+          event: envelope?.event ?? normalized.event ?? normalized.type,
+          from,
+          target,
+          replyRequestId: envelope?.replyRequestId ?? normalized.replyRequestId,
           payload: envelope?.payload ?? normalized.payload ?? null,
           timestamp: normalized.timestamp,
           transport: normalized.transport
         })
-      } else if (normalized.type === 'transport.message.ack' && normalized.messageId) {
+      } else if (normalized.type === 'transport.message.ack' && normalized.replyRequestId) {
         const payload =
           normalized.payload && typeof normalized.payload === 'object'
-            ? (normalized.payload as { requestId?: string; targetDeviceId?: string })
+            ? (normalized.payload as { requestId?: string })
             : undefined
-        if (!payload?.requestId || !payload.targetDeviceId) {
+        if (!payload?.requestId || !normalized.target) {
           return
         }
         this.notifyListeners('messageAck', {
           requestId: payload.requestId,
-          targetDeviceId: payload.targetDeviceId,
-          messageId: normalized.messageId,
+          target: normalized.target,
+          event: normalized.event,
+          from: normalized.from,
+          replyRequestId: normalized.replyRequestId,
           timestamp: normalized.timestamp,
           transport: normalized.transport
         })
@@ -177,28 +192,33 @@ export class DeviceConnectionElectron extends WebPlugin implements DeviceConnect
       ) {
         const pl = normalized.payload as {
           requestId?: unknown
-          sourceDeviceId?: unknown
-          targetDeviceId?: unknown
-          replyToRequestId?: unknown
-          eventName?: unknown
-          eventPayload?: unknown
+          event?: unknown
+          from?: unknown
+          target?: unknown
+          replyRequestId?: unknown
+          payload?: unknown
         }
         if (
           typeof pl.requestId !== 'string' ||
-          typeof pl.sourceDeviceId !== 'string' ||
-          typeof pl.targetDeviceId !== 'string'
+          (typeof pl.from !== 'string' && typeof normalized.from !== 'string') ||
+          (typeof pl.target !== 'string' && typeof normalized.target !== 'string')
         ) {
           return
         }
-        const eventName = typeof pl.eventName === 'string' ? pl.eventName : ''
+        const candidateEvent =
+          typeof pl.event === 'string' && pl.event.length > 0 ? pl.event : (normalized.event ?? '')
+        if (!isLanWireEventName(candidateEvent)) {
+          return
+        }
         this.notifyListeners('lanWireEventReceived', {
           requestId: pl.requestId,
-          sourceDeviceId: pl.sourceDeviceId,
-          targetDeviceId: pl.targetDeviceId,
-          replyToRequestId:
-            typeof pl.replyToRequestId === 'string' ? pl.replyToRequestId : undefined,
-          eventName,
-          eventPayload: pl.eventPayload,
+          event: candidateEvent,
+          from: typeof pl.from === 'string' ? pl.from : (normalized.from as string),
+          target: typeof pl.target === 'string' ? pl.target : (normalized.target as string),
+          replyRequestId:
+            typeof pl.replyRequestId === 'string' ? pl.replyRequestId : normalized.replyRequestId,
+          payload: pl.payload,
+          timestamp: normalized.timestamp,
           transport: normalized.transport
         })
       } else if (normalized.type === 'transport.closed') {
@@ -220,7 +240,10 @@ export class DeviceConnectionElectron extends WebPlugin implements DeviceConnect
               : 'Transport error'
         this.notifyListeners('transportError', {
           deviceId: normalized.deviceId,
-          code: normalized.code,
+          code:
+            typeof normalized.code === 'string' && normalized.code.length > 0
+              ? normalized.code
+              : DEVICE_CONNECTION_TRANSPORT_ERROR_CODES.transportIoError,
           message,
           transport: normalized.transport
         })
@@ -254,7 +277,7 @@ export class DeviceConnectionElectron extends WebPlugin implements DeviceConnect
     this.ensureHostEventSubscription()
     const result = await this.invokeBridge('connection.closeTransport', options)
     this.notifyListeners('transportClosed', {
-      deviceId: result.targetDeviceId,
+      deviceId: result.target,
       reason: 'closed-by-client',
       transport: result.transport
     })

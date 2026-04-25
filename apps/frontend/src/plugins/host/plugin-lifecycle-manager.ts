@@ -1,5 +1,6 @@
 import type { SynraUiManifestMetadata } from '@synra/plugin-sdk'
 import type { Router } from 'vue-router'
+import { loadBuiltinSynraPluginStylesOnce } from './builtin-plugin-loaders'
 import type { PluginRuntimeState } from './types'
 import { PluginRegistry } from './plugin-registry'
 import { PluginRouteBinder } from './plugin-route-binder'
@@ -30,6 +31,7 @@ export class PluginLifecycleManager {
       throw new Error(`Plugin '${pluginId}' metadata is not registered.`)
     }
     this.pluginStates.set(pluginId, 'entering')
+    await loadBuiltinSynraPluginStylesOnce(metadata.packageName)
     await plugin.onPluginEnter()
     this.routeBinder.attachRoutes(router, pluginId, metadata.packageName)
     this.pluginStates.set(pluginId, 'active')

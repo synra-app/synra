@@ -7,6 +7,7 @@ import {
   type SynraPairedDeviceRecord,
   type SynraPairedDevicesPayload
 } from '@synra/capacitor-preferences'
+import { isIpv4Address } from './network'
 
 export type { SynraPairedDeviceRecord, SynraPairedDevicesPayload }
 
@@ -39,10 +40,21 @@ export async function listPairedDeviceRecords(): Promise<SynraPairedDeviceRecord
 
 export async function upsertPairedDeviceRecord(record: SynraPairedDeviceRecord): Promise<void> {
   const payload = await loadPairedDevicesPayload()
+  const existing = payload.items.find((item) => item.deviceId === record.deviceId)
+  const incomingHost =
+    typeof record.lastResolvedHost === 'string' ? record.lastResolvedHost.trim() : ''
+  const nextRecord: SynraPairedDeviceRecord =
+    existing && !isIpv4Address(incomingHost)
+      ? {
+          ...record,
+          lastResolvedHost: existing.lastResolvedHost,
+          lastResolvedPort: existing.lastResolvedPort
+        }
+      : record
   const others = payload.items.filter((item) => item.deviceId !== record.deviceId)
   await savePairedDevicesPayload({
     ...payload,
-    items: [...others, record].sort((a, b) => b.pairedAt - a.pairedAt)
+    items: [...others, nextRecord].sort((a, b) => b.pairedAt - a.pairedAt)
   })
 }
 

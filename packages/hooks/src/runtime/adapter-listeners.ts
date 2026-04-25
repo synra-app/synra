@@ -1,5 +1,6 @@
 import { dispatchSynraWireEvent } from '@synra/transport-events'
 import type { DiscoveredDevice } from '@synra/capacitor-lan-discovery'
+import { DEVICE_DISPLAY_NAME_CHANGED_EVENT } from '@synra/protocol'
 import type { Ref } from 'vue'
 import type { RuntimeOpenTransportLink, RuntimePrimaryTransportState } from '../types'
 import type { ConnectionRuntimeAdapter } from './adapter'
@@ -154,7 +155,6 @@ export async function registerAdapterListeners(options: {
       {
         deviceId: event.deviceId ?? '',
         transport: 'ready',
-        app: 'pending',
         host: event.host,
         port: event.port,
         openedAt: Date.now(),
@@ -199,21 +199,21 @@ export async function registerAdapterListeners(options: {
   })
 
   await adapter.addLanWireEventReceivedListener((event) => {
-    openLinksBook.touchLinkActivity(event.sourceDeviceId, Date.now(), 'inbound')
-    lanWireRegistry.emitLanWireEvent(event, event.sourceDeviceId)
+    openLinksBook.touchLinkActivity(event.from, Date.now(), 'inbound')
+    lanWireRegistry.emitLanWireEvent(event, event.from)
     void dispatchSynraWireEvent({
-      eventName: event.eventName,
+      event: event.event,
       requestId: event.requestId,
-      sourceDeviceId: event.sourceDeviceId,
-      targetDeviceId: event.targetDeviceId,
-      replyToRequestId: event.replyToRequestId,
-      payload: event.eventPayload,
+      from: event.from,
+      target: event.target,
+      replyRequestId: event.replyRequestId,
+      payload: event.payload,
       transport: event.transport
     }).catch(() => undefined)
-    if (event.eventName === 'device.displayName.changed' && event.eventPayload !== undefined) {
+    if (event.event === DEVICE_DISPLAY_NAME_CHANGED_EVENT && event.payload !== undefined) {
       const pl =
-        event.eventPayload && typeof event.eventPayload === 'object'
-          ? (event.eventPayload as Record<string, unknown>)
+        event.payload && typeof event.payload === 'object'
+          ? (event.payload as Record<string, unknown>)
           : {}
       const deviceId = typeof pl.deviceId === 'string' ? pl.deviceId : undefined
       const displayName = typeof pl.displayName === 'string' ? pl.displayName : undefined
@@ -228,9 +228,9 @@ export async function registerAdapterListeners(options: {
   })
 
   await adapter.addMessageReceivedListener((event) => {
-    openLinksBook.touchLinkActivity(event.sourceDeviceId, Date.now(), 'inbound')
+    openLinksBook.touchLinkActivity(event.from, Date.now(), 'inbound')
     if (
-      event.messageType === DEVICE_PROFILE_UPDATED_MESSAGE_TYPE &&
+      event.event === DEVICE_PROFILE_UPDATED_MESSAGE_TYPE &&
       isDeviceProfileUpdatedPayload(event.payload)
     ) {
       applyRemoteDeviceProfileName(devices, event.payload.deviceId, event.payload.displayName)
@@ -243,7 +243,7 @@ export async function registerAdapterListeners(options: {
   })
 
   await adapter.addMessageAckListener((event) => {
-    openLinksBook.touchLinkActivity(event.targetDeviceId, Date.now(), 'outbound')
+    openLinksBook.touchLinkActivity(event.target, Date.now(), 'outbound')
   })
 
   await adapter.addTransportErrorListener((event) => {
@@ -292,7 +292,6 @@ export async function registerAdapterListeners(options: {
       {
         deviceId: snapshot.deviceId,
         transport: 'ready',
-        app: 'pending',
         host: snapshot.host,
         port: snapshot.port,
         openedAt: snapshot.openedAt,

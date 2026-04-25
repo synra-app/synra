@@ -1,5 +1,15 @@
 import { BRIDGE_METHODS, BRIDGE_PROTOCOL_VERSION } from '../protocol/constants'
 import type { BridgeRequest, BridgeResponse } from '../protocol/types'
+import {
+  DEVICE_TCP_ACK_EVENT,
+  DEVICE_TCP_CLOSE_EVENT,
+  DEVICE_TCP_CONNECT_ACK_EVENT,
+  DEVICE_TCP_CONNECT_EVENT,
+  DEVICE_TCP_ERROR_EVENT,
+  DEVICE_TCP_HEARTBEAT_EVENT,
+  isLanWireEventName,
+  type LanWireEventName
+} from '@synra/protocol'
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
@@ -256,12 +266,12 @@ export function validateDiscoveryOpenTransportPayload(payload: unknown): payload
 
 export function validateDiscoverySendMessagePayload(payload: unknown): payload is {
   requestId: string
-  sourceDeviceId: string
-  targetDeviceId: string
-  replyToRequestId?: string
-  messageType: string
+  event: string
+  target: string
+  from: string
+  replyRequestId?: string
   payload: unknown
-  messageId?: string
+  timestamp?: number
 } {
   if (!isObject(payload)) {
     return false
@@ -270,14 +280,27 @@ export function validateDiscoverySendMessagePayload(payload: unknown): payload i
   if (typeof payload.requestId !== 'string' || payload.requestId.length === 0) {
     return false
   }
-  if (typeof payload.sourceDeviceId !== 'string' || payload.sourceDeviceId.length === 0) {
+  if (typeof payload.event !== 'string' || payload.event.length === 0) {
     return false
   }
-  if (typeof payload.targetDeviceId !== 'string' || payload.targetDeviceId.length === 0) {
+  if (
+    payload.event === DEVICE_TCP_CONNECT_EVENT ||
+    payload.event === DEVICE_TCP_CONNECT_ACK_EVENT ||
+    payload.event === DEVICE_TCP_ACK_EVENT ||
+    payload.event === DEVICE_TCP_CLOSE_EVENT ||
+    payload.event === DEVICE_TCP_HEARTBEAT_EVENT ||
+    payload.event === DEVICE_TCP_ERROR_EVENT
+  ) {
+    return false
+  }
+  if (typeof payload.target !== 'string' || payload.target.length === 0) {
+    return false
+  }
+  if (typeof payload.from !== 'string' || payload.from.length === 0) {
     return false
   }
 
-  if (typeof payload.messageType !== 'string' || payload.messageType.length === 0) {
+  if (payload.replyRequestId !== undefined && typeof payload.replyRequestId !== 'string') {
     return false
   }
 
@@ -285,7 +308,7 @@ export function validateDiscoverySendMessagePayload(payload: unknown): payload i
     return false
   }
 
-  if (payload.messageId !== undefined && typeof payload.messageId !== 'string') {
+  if (payload.timestamp !== undefined && typeof payload.timestamp !== 'number') {
     return false
   }
 
@@ -294,13 +317,12 @@ export function validateDiscoverySendMessagePayload(payload: unknown): payload i
 
 export function validateDiscoverySendLanEventPayload(payload: unknown): payload is {
   requestId: string
-  sourceDeviceId: string
-  targetDeviceId: string
-  replyToRequestId?: string
-  eventName: string
+  event: LanWireEventName
+  target: string
+  from: string
+  replyRequestId?: string
   payload?: unknown
-  eventId?: string
-  schemaVersion?: number
+  timestamp?: number
 } {
   if (!isObject(payload)) {
     return false
@@ -308,19 +330,19 @@ export function validateDiscoverySendLanEventPayload(payload: unknown): payload 
   if (typeof payload.requestId !== 'string' || payload.requestId.length === 0) {
     return false
   }
-  if (typeof payload.sourceDeviceId !== 'string' || payload.sourceDeviceId.length === 0) {
+  if (typeof payload.event !== 'string' || !isLanWireEventName(payload.event)) {
     return false
   }
-  if (typeof payload.targetDeviceId !== 'string' || payload.targetDeviceId.length === 0) {
+  if (typeof payload.target !== 'string' || payload.target.length === 0) {
     return false
   }
-  if (typeof payload.eventName !== 'string' || payload.eventName.length === 0) {
+  if (typeof payload.from !== 'string' || payload.from.length === 0) {
     return false
   }
-  if (payload.eventId !== undefined && typeof payload.eventId !== 'string') {
+  if (payload.replyRequestId !== undefined && typeof payload.replyRequestId !== 'string') {
     return false
   }
-  if (payload.schemaVersion !== undefined && typeof payload.schemaVersion !== 'number') {
+  if (payload.timestamp !== undefined && typeof payload.timestamp !== 'number') {
     return false
   }
   return true

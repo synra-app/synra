@@ -15,6 +15,7 @@ import type {
   TransportOpenedEvent,
   TransportErrorEvent
 } from '@synra/capacitor-device-connection'
+import { DEVICE_CONNECTION_TRANSPORT_ERROR_CODES } from '@synra/capacitor-device-connection'
 import {
   configureHooksRuntime,
   resetConnectionRuntime,
@@ -62,14 +63,13 @@ function createMockAdapter(): ConnectionRuntimeAdapter {
     async sendMessage(options: SendMessageOptions) {
       messageListener?.({
         requestId: options.requestId,
-        sourceDeviceId: options.sourceDeviceId,
-        targetDeviceId: options.targetDeviceId,
-        replyToRequestId: options.replyToRequestId,
-        messageType: options.messageType,
+        from: options.from,
+        target: options.target,
+        replyRequestId: options.replyRequestId,
+        event: options.event,
         payload: options.payload,
         timestamp: Date.now(),
-        transport: 'tcp',
-        messageId: options.messageId
+        transport: 'tcp'
       })
     },
     async sendLanEvent(_options: SendLanEventOptions) {},
@@ -107,7 +107,7 @@ function createMockAdapter(): ConnectionRuntimeAdapter {
   }
 }
 
-test('useTransport exposes minimal messaging capabilities', async () => {
+test('useTransport exposes generic messaging capabilities', async () => {
   configureHooksRuntime({
     adapterFactory: () => createMockAdapter(),
     resolveSynraConnectType: () => 'paired'
@@ -119,10 +119,21 @@ test('useTransport exposes minimal messaging capabilities', async () => {
   expect(transport.peers.value.length).toBe(1)
 
   const seen: unknown[] = []
-  const cleanup = transport.onMessage((message) => {
-    seen.push(message.payload)
+  const cleanup = transport.onSynraMessage(
+    (message) => {
+      seen.push(message.payload)
+    },
+    { event: 'custom.chat.text' }
+  )
+  await transport.connectToDevice('device-a')
+  await transport.sendMessageToReadyDevice({
+    deviceId: 'device-a',
+    event: 'custom.chat.text',
+    payload: {
+      channel: 'default',
+      body: 'hello'
+    }
   })
-  await transport.sendToDevice('device-a', { payload: 'hello', channel: 'default' })
   cleanup()
   expect(seen.length).toBe(1)
 })
@@ -223,16 +234,24 @@ test('transport error closes primary transport and marks link dead', async () =>
   await transport.ensureReady()
   await transport.startScan()
   await transport.connectToDevice('device-a')
-  expect(transport.transportReadyDeviceIds.value).toContain('device-a')
+  expect(
+    transport.openTransportLinks.value.some(
+      (link) => link.transport === 'ready' && link.deviceId === 'device-a'
+    )
+  ).toBe(true)
 
   transportErrorListener?.({
     deviceId: 'device-a',
-    code: 'SOCKET_CLOSED',
+    code: DEVICE_CONNECTION_TRANSPORT_ERROR_CODES.transportIoError,
     message: 'socket closed',
     transport: 'tcp'
   })
 
-  expect(transport.transportReadyDeviceIds.value).not.toContain('device-a')
+  expect(
+    transport.openTransportLinks.value.some(
+      (link) => link.transport === 'ready' && link.deviceId === 'device-a'
+    )
+  ).toBe(false)
   expect(
     transport.openTransportLinks.value.find((link) => link.deviceId === 'device-a')
   ).toMatchObject({ transport: 'dead' })
@@ -415,9 +434,9 @@ test('transport is not open error marks transport dead and reconnects', async ()
   await expect(
     transport.sendLanEvent({
       requestId: 'r1',
-      sourceDeviceId: 'device-self',
-      targetDeviceId: 'device-a',
-      eventName: 'pairing.request',
+      from: 'device-self',
+      target: 'device-a',
+      event: 'device.pairing.request',
       payload: { requestId: 'r1' }
     })
   ).rejects.toThrow('Transport is not open.')

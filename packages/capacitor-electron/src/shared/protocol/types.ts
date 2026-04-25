@@ -1,8 +1,8 @@
 import type { PluginAction, ShareInput } from '@synra/plugin-sdk'
 import type {
+  LanWireEventName,
   PluginCatalogItem,
   PluginCatalogRequestPayload,
-  SynraMessageType,
   SynraActionReceipt,
   SynraRuntimeMessage
 } from '@synra/protocol'
@@ -191,54 +191,52 @@ export type DeviceTransportOpenResult = {
 }
 
 export type DeviceTransportCloseOptions = {
-  targetDeviceId?: string
+  target?: string
   transport?: ConnectionTransport
 }
 
 export type DeviceTransportCloseResult = {
   success: true
-  targetDeviceId?: string
+  target?: string
   transport?: ConnectionTransport
 }
 
 export type DeviceTransportSendMessageOptions = {
   requestId: string
-  sourceDeviceId: string
-  targetDeviceId: string
-  replyToRequestId?: string
-  messageType: SynraMessageType
+  event: string
+  target: string
+  from: string
+  replyRequestId?: string
   payload: unknown
-  messageId?: string
+  timestamp?: number
   transport?: ConnectionTransport
 }
 
 export type DeviceTransportSendMessageResult = {
   success: true
-  messageId: string
-  targetDeviceId: string
+  target: string
   transport?: ConnectionTransport
 }
 
 export type DeviceTransportSendLanEventOptions = {
   requestId: string
-  sourceDeviceId: string
-  targetDeviceId: string
-  replyToRequestId?: string
-  eventName: string
+  event: LanWireEventName
+  target: string
+  from: string
+  replyRequestId?: string
   payload?: unknown
-  eventId?: string
-  schemaVersion?: number
+  timestamp?: number
   transport?: ConnectionTransport
 }
 
 export type DeviceTransportSendLanEventResult = {
   success: true
-  targetDeviceId: string
+  target: string
   transport?: ConnectionTransport
 }
 
 export type DeviceTransportGetStateOptions = {
-  targetDeviceId?: string
+  target?: string
   transport?: ConnectionTransport
 }
 
@@ -256,10 +254,11 @@ export type DeviceDiscoveryHostEvent = {
     | 'host.retire'
     | 'host.member.offline'
     | 'host.heartbeat.timeout'
-  remote: string
+  event?: string
+  target?: string
+  from?: string
+  replyRequestId?: string
   deviceId?: string
-  messageId?: string
-  messageType?: SynraMessageType
   code?: string
   payload?: unknown
   transport?: ConnectionTransport

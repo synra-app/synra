@@ -76,7 +76,6 @@ test('merge paired fills ip and port from open transport link when storage host 
     {
       deviceId: 'd-android',
       transport: 'ready',
-      app: 'connected',
       host: '192.168.11.4',
       port: 32100,
       openedAt: 1,

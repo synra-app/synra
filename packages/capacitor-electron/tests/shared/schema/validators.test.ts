@@ -4,6 +4,7 @@ import {
   isBridgeResponse,
   isSupportedMethod,
   isSupportedProtocolVersion,
+  validateDiscoverySendLanEventPayload,
   validateResolveActionsPayload,
   validateRuntimeExecutePayload,
   validateExternalOpenPayload,
@@ -12,6 +13,11 @@ import {
   validateReadFilePayload
 } from '../../../src/shared/schema/validators'
 import { BRIDGE_METHODS, BRIDGE_PROTOCOL_VERSION } from '../../../src/shared/protocol/constants'
+import {
+  DEVICE_PAIRING_REQUEST_EVENT,
+  DEVICE_TCP_ACK_EVENT,
+  DEVICE_TCP_CONNECT_EVENT
+} from '@synra/protocol'
 
 describe('shared/schema/validators', () => {
   test('validates bridge request and response shapes', () => {
@@ -69,7 +75,7 @@ describe('shared/schema/validators', () => {
         input: { type: 'url', raw: 'https://github.com/synra' },
         action: {
           actionId: 'a1',
-          pluginId: 'github-open',
+          pluginId: 'test-plugin',
           actionType: 'external.open-url',
           label: 'Open in browser',
           requiresConfirm: true
@@ -97,11 +103,47 @@ describe('shared/schema/validators', () => {
     expect(
       validateDiscoverySendMessagePayload({
         requestId: 'req-1',
-        sourceDeviceId: 'device-a',
-        targetDeviceId: 'device-b',
-        messageType: 'chat',
+        event: 'chat.message',
+        from: 'device-a',
+        target: 'device-b',
         payload: 'hello'
       })
     ).toBe(true)
+    expect(
+      validateDiscoverySendLanEventPayload({
+        requestId: 'req-lan-1',
+        event: DEVICE_PAIRING_REQUEST_EVENT,
+        from: 'device-a',
+        target: 'device-b',
+        payload: { requestId: 'req-lan-1' }
+      })
+    ).toBe(true)
+    expect(
+      validateDiscoverySendLanEventPayload({
+        requestId: 'req-lan-2',
+        event: 'custom.chat.message',
+        from: 'device-a',
+        target: 'device-b',
+        payload: {}
+      })
+    ).toBe(false)
+    expect(
+      validateDiscoverySendMessagePayload({
+        requestId: 'req-2',
+        event: DEVICE_TCP_CONNECT_EVENT,
+        from: 'device-a',
+        target: 'device-b',
+        payload: {}
+      })
+    ).toBe(false)
+    expect(
+      validateDiscoverySendMessagePayload({
+        requestId: 'req-3',
+        event: DEVICE_TCP_ACK_EVENT,
+        from: 'device-a',
+        target: 'device-b',
+        payload: {}
+      })
+    ).toBe(false)
   })
 })

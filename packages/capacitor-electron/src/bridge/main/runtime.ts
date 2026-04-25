@@ -7,7 +7,6 @@ import { createExternalLinkService } from '../../host/services/external-link.ser
 import { createFileService } from '../../host/services/file.service'
 import { createConnectionService } from '../../host/services/connection.service'
 import { createDeviceDiscoveryService } from '../../host/services/device-discovery.service'
-import { createGitHubOpenPlugin } from '../../host/plugins/github-open.plugin'
 import { createPluginCatalogService } from '../../host/services/plugin-catalog.service'
 import { createPluginRuntimeService } from '../../host/services/plugin-runtime.service'
 import { createRuntimeInfoService } from '../../host/services/runtime-info.service'
@@ -62,7 +61,6 @@ export function setupBridgeMainRuntime(
   })
   const connectionService = createConnectionService(deviceDiscoveryService)
   const pluginRuntimeService = createPluginRuntimeService()
-  pluginRuntimeService.register(createGitHubOpenPlugin(externalLinkService))
   const pluginCatalogService = createPluginCatalogService(pluginRuntimeService)
 
   const handlers = createBridgeHandlers({

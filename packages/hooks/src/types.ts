@@ -1,5 +1,5 @@
 import type { SynraLanConnectType } from '@synra/capacitor-device-connection'
-import type { SynraMessageType } from '@synra/protocol'
+import type { LanWireEventName } from '@synra/protocol'
 
 export type RuntimePrimaryTransportState = {
   state: 'idle' | 'connecting' | 'open' | 'closed' | 'error'
@@ -15,20 +15,15 @@ export type RuntimePrimaryTransportState = {
 /** Physical TCP + Synra transport: `ready` means socket is up and usable for frames. */
 export type TransportLinkState = 'idle' | 'handshaking' | 'ready' | 'dead'
 
-/** Application-level link (pairing, gating, UI). Does not imply TCP is open or any specific color. */
-export type AppLinkState = 'disconnected' | 'pending' | 'connected' | 'failed'
-
 export type RuntimeOpenTransportLink = {
   deviceId: string
   transport: TransportLinkState
-  app: AppLinkState
   host?: string
   port?: number
   openedAt?: number
   closedAt?: number
   lastActiveAt?: number
   direction?: 'inbound' | 'outbound'
-  lastAppError?: string
 }
 
 export type RuntimeOpenTransportInput = {
@@ -64,54 +59,68 @@ export type SynraDiscoveryStartOptions = {
 export type SynraConnectionMessage = {
   eventId: string
   requestId: string
-  sourceDeviceId: string
-  targetDeviceId: string
-  replyToRequestId?: string
-  messageType: SynraMessageType
+  event: string
+  target: string
+  from: string
+  replyRequestId?: string
   payload: unknown
-  messageId?: string
   timestamp: number
 }
 
 export type SynraConnectionFilter = {
   requestId?: string
   deviceId?: string
-  messageType?: SynraMessageType
+  event?: string
 }
 
 export type SynraConnectionSendInput = {
   requestId: string
-  sourceDeviceId: string
-  targetDeviceId: string
-  replyToRequestId?: string
-  messageType: SynraMessageType
+  event: string
+  target: string
+  from: string
+  replyRequestId?: string
   payload: unknown
-  messageId?: string
+  timestamp?: number
+}
+
+export type SendMessageToReadyDeviceInput = {
+  deviceId: string
+  event: string
+  payload: unknown
+  from?: string
+  replyRequestId?: string
+  timestamp?: number
+}
+
+export type TransportBroadcastMessageInput = {
+  event: string
+  payload: unknown
+  from?: string
 }
 
 export type SynraLanWireEvent = {
   requestId: string
-  sourceDeviceId: string
-  targetDeviceId: string
-  replyToRequestId?: string
-  eventName: string
+  event: LanWireEventName
+  target: string
+  from: string
+  replyRequestId?: string
   payload: unknown
+  timestamp: number
   transport: 'tcp'
 }
 
 export type SynraLanWireFilter = {
   requestId?: string
   deviceId?: string
-  eventName?: string
+  event?: LanWireEventName
 }
 
 export type SynraLanWireSendInput = {
   requestId: string
-  sourceDeviceId: string
-  targetDeviceId: string
-  replyToRequestId?: string
-  eventName: string
+  event: LanWireEventName
+  target: string
+  from: string
+  replyRequestId?: string
   payload?: unknown
-  eventId?: string
-  schemaVersion?: number
+  timestamp?: number
 }

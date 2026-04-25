@@ -8,10 +8,11 @@ declare global {
       | 'transport.message.received'
       | 'transport.message.ack'
       | 'transport.error'
-    remote: string
+    event?: string
+    target?: string
+    from?: string
+    replyRequestId?: string
     deviceId?: string
-    messageId?: string
-    messageType?: string
     code?: string
     payload?: unknown
   }

@@ -9,8 +9,8 @@ import {
 import { hashDeviceId, localDisplayName } from '../core/device-identity'
 import { pickPrimarySourceHostIp } from '../core/network'
 import {
-  LAN_APP_ID,
-  LAN_PROTOCOL_VERSION,
+  DEVICE_TCP_CONNECT_ACK_EVENT,
+  DEVICE_TCP_CONNECT_EVENT,
   LengthPrefixedJsonCodec,
   type LanFrame
 } from '../protocol/lan-frame.codec'
@@ -94,14 +94,15 @@ async function probeSingle(
       }
       const frames = codec.decodeChunk(chunk)
       for (const frame of frames) {
-        if (frame.type !== 'connectAck' || frame.appId !== LAN_APP_ID) {
+        if (frame.event !== DEVICE_TCP_CONNECT_ACK_EVENT) {
           continue
         }
         const payload = toRecord(frame.payload)
+        if (payload.appId !== 'synra') {
+          continue
+        }
         const peerDeviceId =
-          typeof payload.sourceDeviceId === 'string' && payload.sourceDeviceId.length > 0
-            ? payload.sourceDeviceId
-            : undefined
+          typeof payload.from === 'string' && payload.from.length > 0 ? payload.from : undefined
         const ackDisplayName =
           typeof payload.displayName === 'string' ? payload.displayName.trim() : ''
         if (!ackDisplayName) {
@@ -142,7 +143,8 @@ async function probeSingle(
     socket.on('data', onProbeData)
     socket.connect(port, device.ipAddress, () => {
       const connectPayload: Record<string, unknown> = {
-        sourceDeviceId: options.localDeviceId,
+        appId: 'synra',
+        from: options.localDeviceId,
         probe: true,
         displayName: localDisplayName(),
         ...options.probeConnectWirePayload
@@ -152,15 +154,11 @@ async function probeSingle(
         connectPayload.sourceHostIp = sourceHostIp
       }
       const connect: LanFrame = {
-        version: LAN_PROTOCOL_VERSION,
-        type: 'connect',
         requestId: randomUUID(),
-        sourceDeviceId: options.localDeviceId,
-        targetDeviceId: device.deviceId,
+        event: DEVICE_TCP_CONNECT_EVENT,
+        target: device.deviceId,
+        from: options.localDeviceId,
         timestamp: Date.now(),
-        appId: LAN_APP_ID,
-        protocolVersion: LAN_PROTOCOL_VERSION,
-        capabilities: ['message', 'event'],
         payload: connectPayload
       }
       socket.write(codec.encode(connect))

@@ -17,7 +17,8 @@ export {
   type ScanPhase
 } from './runtime/derive-device-card-badge'
 export type {
-  AppLinkState,
+  SendMessageToReadyDeviceInput,
+  TransportBroadcastMessageInput,
   SynraConnectionFilter,
   SynraConnectionMessage,
   SynraConnectionSendInput,

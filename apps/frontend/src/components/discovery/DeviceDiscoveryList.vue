@@ -99,7 +99,7 @@ function dotClass(tone: 'yellow' | 'green' | 'gray' | undefined): string {
         </div>
       </li>
     </ul>
-    <p v-else class="text-muted-3">No Synra devices yet. Refresh to scan the network.</p>
+    <p v-else class="text-muted-3" />
   </PanelCard>
 
   <DeviceDetailsDialog

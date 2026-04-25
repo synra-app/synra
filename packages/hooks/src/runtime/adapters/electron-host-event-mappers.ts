@@ -1,4 +1,5 @@
 import type {
+  DeviceConnectionTransportErrorCode,
   HostEvent,
   LanWireEventReceivedEvent,
   SendMessageOptions,
@@ -6,6 +7,12 @@ import type {
   TransportOpenedEvent,
   TransportErrorEvent
 } from '@synra/capacitor-device-connection'
+import { DEVICE_CONNECTION_TRANSPORT_ERROR_CODES as TRANSPORT_ERROR_CODES } from '@synra/capacitor-device-connection'
+import { isLanWireEventName } from '@synra/protocol'
+
+function isTransportErrorCode(value: unknown): value is DeviceConnectionTransportErrorCode {
+  return Object.values(TRANSPORT_ERROR_CODES).includes(value as DeviceConnectionTransportErrorCode)
+}
 
 function readReasonFromPayload(payload: unknown): string | undefined {
   if (!payload || typeof payload !== 'object') {
@@ -53,19 +60,11 @@ export function mapTransportOpenedHostEvent(event: HostEvent): TransportOpenedEv
     payload.incomingSynraConnectPayload && typeof payload.incomingSynraConnectPayload === 'object'
       ? (payload.incomingSynraConnectPayload as Record<string, unknown>)
       : undefined
-  const fallbackRemote = typeof event.remote === 'string' ? event.remote : ''
-  const [hostPart, portText] = fallbackRemote.split(':')
-  const parsedRemotePort = Number.parseInt(portText ?? '', 10)
-
   return {
     deviceId: deviceId ?? '',
     direction,
-    host: hostFromPayload ?? (hostPart.length > 0 ? hostPart : undefined),
-    port: Number.isFinite(portFromPayload)
-      ? portFromPayload
-      : Number.isFinite(parsedRemotePort)
-        ? parsedRemotePort
-        : undefined,
+    host: hostFromPayload,
+    port: Number.isFinite(portFromPayload) ? portFromPayload : undefined,
     displayName: displayName && displayName.length > 0 ? displayName : undefined,
     incomingSynraConnectPayload,
     transport: event.transport ?? 'tcp'
@@ -82,22 +81,28 @@ export function mapLanWireEventReceivedHostEvent(
     event.payload && typeof event.payload === 'object'
       ? (event.payload as Record<string, unknown>)
       : {}
-  const eventName = typeof pl.eventName === 'string' ? pl.eventName : ''
   const requestId = typeof pl.requestId === 'string' ? pl.requestId : ''
-  const sourceDeviceId = typeof pl.sourceDeviceId === 'string' ? pl.sourceDeviceId : ''
-  const targetDeviceId = typeof pl.targetDeviceId === 'string' ? pl.targetDeviceId : ''
-  if (!requestId || !sourceDeviceId || !targetDeviceId) {
+  const from =
+    typeof pl.from === 'string' ? pl.from : typeof event.from === 'string' ? event.from : ''
+  const target =
+    typeof pl.target === 'string' ? pl.target : typeof event.target === 'string' ? event.target : ''
+  if (!requestId || !from || !target) {
     return undefined
   }
-  const inner =
-    pl.eventPayload !== undefined ? pl.eventPayload : 'payload' in pl ? pl.payload : undefined
+  const candidateEvent =
+    typeof pl.event === 'string' && pl.event.length > 0 ? pl.event : (event.event ?? '')
+  if (!isLanWireEventName(candidateEvent)) {
+    return undefined
+  }
   return {
     requestId,
-    sourceDeviceId,
-    targetDeviceId,
-    replyToRequestId: typeof pl.replyToRequestId === 'string' ? pl.replyToRequestId : undefined,
-    eventName,
-    eventPayload: inner,
+    from,
+    target,
+    replyRequestId:
+      typeof pl.replyRequestId === 'string' ? pl.replyRequestId : event.replyRequestId,
+    event: candidateEvent,
+    payload: 'payload' in pl ? pl.payload : undefined,
+    timestamp: event.timestamp,
     transport: event.transport ?? 'tcp'
   }
 }
@@ -128,7 +133,7 @@ export function mapTransportErrorHostEvent(event: HostEvent): TransportErrorEven
   if (event.type === 'transport.error') {
     return {
       deviceId: event.deviceId,
-      code: event.code,
+      code: isTransportErrorCode(event.code) ? event.code : TRANSPORT_ERROR_CODES.transportIoError,
       message: normalizeTransportErrorMessage(event.payload),
       transport: event.transport
     }
@@ -136,7 +141,9 @@ export function mapTransportErrorHostEvent(event: HostEvent): TransportErrorEven
   if (event.type === 'host.heartbeat.timeout') {
     return {
       deviceId: event.deviceId,
-      code: event.code ?? 'HOST_HEARTBEAT_TIMEOUT',
+      code: isTransportErrorCode(event.code)
+        ? event.code
+        : TRANSPORT_ERROR_CODES.hostHeartbeatTimeout,
       message: 'Peer heartbeat timeout.',
       transport: event.transport
     }
@@ -146,9 +153,9 @@ export function mapTransportErrorHostEvent(event: HostEvent): TransportErrorEven
 
 export function mapMessageTypeFromHostEvent(
   event: HostEvent
-): SendMessageOptions['messageType'] | undefined {
+): SendMessageOptions['event'] | undefined {
   if (event.type !== 'transport.message.received') {
     return undefined
   }
-  return (event.messageType ?? 'transport.message.received') as SendMessageOptions['messageType']
+  return (event.event ?? 'transport.message.received') as SendMessageOptions['event']
 }

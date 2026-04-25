@@ -48,6 +48,9 @@ const RESOLVED_VIRTUAL_PAGES_ENTRY_ID = '\0virtual:synra-pages-entry'
 const VIRTUAL_UNO_CSS_ID = 'virtual:uno.css'
 const RESOLVED_VIRTUAL_UNO_CSS_ID = '\0virtual:uno.css'
 
+/** Cascade layer for vp-pack CSS so host (unlayered) utilities win over identical plugin selectors. */
+const SYNRA_PLUGIN_PACK_STYLE_LAYER = 'synra-plugin'
+
 function createPagesManifestItems(pageEntries: string[]): PagesManifestItem[] {
   return pageEntries.map((pageEntry) => {
     return {
@@ -170,7 +173,8 @@ function createUnoCssGeneratePlugin(cwd: string, hasUnoConfig: boolean, unoConfi
     const generator = await createGenerator(loaded.config ?? {})
     const result = await generator.generate(mergedSource, { minify: true })
 
-    generatedCss = compressCss(result.css)
+    const compressed = compressCss(result.css)
+    generatedCss = `@layer ${SYNRA_PLUGIN_PACK_STYLE_LAYER}{${compressed}}`
     debugLog('Generated UnoCSS in-memory css', {
       targetCount: scanTargets.length,
       cssLength: generatedCss.length

@@ -6,8 +6,25 @@ import Network
 /// TCP transport + framed JSON protocol (matches Android `DeviceConnectionPlugin`).
 public final class DeviceConnectionPluginCore: NSObject {
     internal let appId = "synra"
-    internal let protocolVersion = "1.0"
+    internal let deviceTcpConnectEvent = "device.tcp.connect"
+    internal let deviceTcpConnectAckEvent = "device.tcp.connect.ack"
+    internal let deviceTcpAckEvent = "device.tcp.ack"
+    internal let deviceTcpCloseEvent = "device.tcp.close"
+    internal let deviceTcpErrorEvent = "device.tcp.error"
+    internal let deviceTcpHeartbeatEvent = "device.tcp.heartbeat"
+    internal let deviceDisplayNameChangedEvent = "device.display-name.changed"
+    internal let devicePairingEventPrefix = "device.pairing."
+    internal let legacyTypeConnect = "connect"
+    internal let legacyTypeConnectAck = "connectAck"
+    internal let legacyTypeAck = "ack"
+    internal let legacyTypeClose = "close"
+    internal let legacyTypeHeartbeat = "heartbeat"
+    internal let legacyTypeError = "error"
+    internal let errorCodeTransportIoError = "TRANSPORT_IO_ERROR"
+    internal let errorCodeConnectInvalid = "CONNECT_INVALID"
+    internal let errorCodeConnectNotEstablished = "CONNECT_NOT_ESTABLISHED"
     private let connectAckTimeoutMs = 6000
+    private let maxFrameBytes = 256 * 1024
     private let unifiedDeviceUuidDefaultsKey = "synra.preferences.synra.device.instance-uuid"
     private let deviceBasicInfoDefaultsKey = "synra.preferences.synra.device.basic-info"
     private let legacyDeviceDisplayNameDefaultsKey = "synra.preferences.synra.device.display-name"
@@ -50,7 +67,7 @@ public final class DeviceConnectionPluginCore: NSObject {
             ])
         }
 
-        closeTransport(targetDeviceId: nil)
+        closeTransport(target: nil)
 
         let dialCanonicalDeviceId = canonicalSynraDeviceId(fromWireSourceDeviceId: deviceId.trimmingCharacters(in: .whitespacesAndNewlines))
 
@@ -70,7 +87,8 @@ public final class DeviceConnectionPluginCore: NSObject {
 
         let connectPayload: Any? = {
             var payload: [String: Any] = [
-                "sourceDeviceId": localDeviceUuid(),
+                "appId": appId,
+                "from": localDeviceUuid(),
                 "probe": false,
                 "displayName": localSynraDisplayName(),
             ]
@@ -88,13 +106,14 @@ public final class DeviceConnectionPluginCore: NSObject {
             switch state {
             case .ready:
                 let frame = self.synraLanFrame(
-                    type: "connect",
+                    type: self.legacyTypeConnect,
                     requestId: connectRequestId,
-                    messageId: nil,
-                    sourceDeviceId: self.localDeviceUuid(),
-                    targetDeviceId: dialCanonicalDeviceId,
-                    replyToRequestId: nil,
+                    event: nil,
+                    from: self.localDeviceUuid(),
+                    target: dialCanonicalDeviceId,
+                    replyRequestId: nil,
                     payload: connectPayload,
+                    timestamp: nil,
                     error: nil
                 )
                 self.sendFrame(frame, through: nwConnection)
@@ -104,21 +123,21 @@ public final class DeviceConnectionPluginCore: NSObject {
                         semaphore.signal()
                         return
                     }
-                    if response["type"] as? String != "connectAck" {
+                    if response["event"] as? String != self.deviceTcpConnectAckEvent {
                         openError = "MISSING_CONNECT_ACK"
                         semaphore.signal()
                         return
                     }
-                    if response["appId"] as? String != self.appId {
+                    let ackPayload = response["payload"] as? [String: Any]
+                    if ackPayload?["appId"] as? String != self.appId {
                         openError = "APP_ID_MISMATCH"
                         semaphore.signal()
                         return
                     }
-                    let ackPayload = response["payload"] as? [String: Any]
                     lastConnectAckPayload = ackPayload
-                    let remoteDeviceId = ackPayload?["sourceDeviceId"] as? String
+                    let remoteDeviceId = ackPayload?["from"] as? String
                     if remoteDeviceId?.isEmpty != false {
-                        openError = "SOURCE_DEVICE_ID_REQUIRED"
+                        openError = "FROM_REQUIRED"
                         semaphore.signal()
                         return
                     }
@@ -127,7 +146,7 @@ public final class DeviceConnectionPluginCore: NSObject {
                     self.outboundTransportState.peerDisplayName =
                         (ackDisplay?.isEmpty == false) ? ackDisplay : nil
                     self.outboundTransportState.state = "open"
-                    // Keep dial-side canonical id (matches discovery / JS `targetDeviceId`), not ack `sourceDeviceId`
+                    // Keep dial-side canonical id (matches discovery / JS `target`), not ack `from`
                     // which may be a raw instance UUID on the peer (e.g. Electron).
                     self.outboundTransportState.openedAt = self.now()
                     opened = true
@@ -171,9 +190,9 @@ public final class DeviceConnectionPluginCore: NSObject {
         return nil
     }
 
-    public func closeTransport(targetDeviceId: String?) -> [String: Any] {
-        if let targetDeviceId,
-           let inboundEntry = inboundConnections.first(where: { $0.value.canonicalDeviceId == targetDeviceId })
+    public func closeTransport(target: String?) -> [String: Any] {
+        if let target,
+           let inboundEntry = inboundConnections.first(where: { $0.value.canonicalDeviceId == target })
         {
             closeSynraInboundConnection(
                 connectionId: inboundEntry.key,
@@ -182,19 +201,20 @@ public final class DeviceConnectionPluginCore: NSObject {
             )
             return [
                 "success": true,
-                "targetDeviceId": targetDeviceId as Any,
+                "target": target as Any,
                 "transport": "tcp",
             ]
         }
         if outboundTransportState.state == "open", let remoteId = outboundTransportState.deviceId, let conn = connection {
             let closeFrame = synraLanFrame(
-                type: "close",
+                type: legacyTypeClose,
                 requestId: UUID().uuidString,
-                messageId: nil,
-                sourceDeviceId: localDeviceUuid(),
-                targetDeviceId: remoteId,
-                replyToRequestId: nil,
+                event: nil,
+                from: localDeviceUuid(),
+                target: remoteId,
+                replyRequestId: nil,
                 payload: nil,
+                timestamp: nil,
                 error: nil
             )
             sendFrame(closeFrame, through: conn)
@@ -205,33 +225,29 @@ public final class DeviceConnectionPluginCore: NSObject {
         outboundTransportState.closedAt = now()
         return [
             "success": true,
-            "targetDeviceId": targetDeviceId as Any,
+            "target": target as Any,
             "transport": "tcp",
         ]
     }
 
     public func sendMessage(
         requestId: String,
-        sourceDeviceId: String,
-        targetDeviceId: String,
-        replyToRequestId: String?,
-        messageType: String,
+        from: String,
+        target: String,
+        replyRequestId: String?,
+        event: String,
         payload: Any,
-        messageId: String?
+        timestamp: Int?
     ) -> [String: Any]? {
-        let targetMessageId = messageId ?? UUID().uuidString
-        let innerPayload: [String: Any] = [
-            "messageType": messageType,
-            "payload": payload,
-        ]
         let messageFrame = synraLanFrame(
             type: "message",
             requestId: requestId,
-            messageId: targetMessageId,
-            sourceDeviceId: sourceDeviceId,
-            targetDeviceId: targetDeviceId,
-            replyToRequestId: replyToRequestId,
-            payload: innerPayload,
+            event: event,
+            from: from,
+            target: target,
+            replyRequestId: replyRequestId,
+            payload: payload,
+            timestamp: timestamp,
             error: nil
         )
         // Prefer the primary outbound transport when it targets this peer. Otherwise a LAN probe
@@ -239,22 +255,20 @@ public final class DeviceConnectionPluginCore: NSObject {
         if outboundTransportState.state == "open",
            let conn = connection,
            let outboundPeer = outboundTransportState.deviceId,
-           outboundPeer == targetDeviceId
+           outboundPeer == target
         {
             sendFrame(messageFrame, through: conn)
             return [
                 "success": true,
-                "messageId": targetMessageId,
-                "targetDeviceId": targetDeviceId,
+                "target": target,
                 "transport": "tcp",
             ]
         }
-        if let inbound = inboundConnections.first(where: { $0.value.canonicalDeviceId == targetDeviceId })?.value {
+        if let inbound = inboundConnections.first(where: { $0.value.canonicalDeviceId == target })?.value {
             sendFrame(messageFrame, through: inbound.connection)
             return [
                 "success": true,
-                "messageId": targetMessageId,
-                "targetDeviceId": targetDeviceId,
+                "target": target,
                 "transport": "tcp",
             ]
         }
@@ -266,61 +280,48 @@ public final class DeviceConnectionPluginCore: NSObject {
         sendFrame(messageFrame, through: conn)
         return [
             "success": true,
-            "messageId": targetMessageId,
-            "targetDeviceId": targetDeviceId,
+            "target": target,
             "transport": "tcp",
         ]
     }
 
     public func sendLanEvent(
         requestId: String,
-        sourceDeviceId: String,
-        targetDeviceId: String,
-        replyToRequestId: String?,
-        eventName: String,
+        from: String,
+        target: String,
+        replyRequestId: String?,
+        event: String,
         payload: Any?,
-        eventId: String?,
-        schemaVersion: Int?
+        timestamp: Int?
     ) -> [String: Any]? {
-        var innerPayload: [String: Any] = [
-            "eventName": eventName,
-        ]
-        if let payload {
-            innerPayload["payload"] = payload
-        }
-        if let eventId, !eventId.isEmpty {
-            innerPayload["eventId"] = eventId
-        }
-        if let schemaVersion {
-            innerPayload["schemaVersion"] = schemaVersion
-        }
         let eventFrame = synraLanFrame(
             type: "event",
             requestId: requestId,
-            messageId: nil,
-            sourceDeviceId: sourceDeviceId,
-            targetDeviceId: targetDeviceId,
-            replyToRequestId: replyToRequestId,
-            payload: innerPayload,
+            event: event,
+            from: from,
+            target: target,
+            replyRequestId: replyRequestId,
+            payload: payload,
+            timestamp: timestamp,
             error: nil
         )
         if outboundTransportState.state == "open",
            let conn = connection,
            let outboundPeer = outboundTransportState.deviceId,
-           outboundPeer == targetDeviceId
+           outboundPeer == target
         {
             sendFrame(eventFrame, through: conn)
             return [
                 "success": true,
-                "targetDeviceId": targetDeviceId,
+                "target": target,
                 "transport": "tcp",
             ]
         }
-        if let inbound = inboundConnections.first(where: { $0.value.canonicalDeviceId == targetDeviceId })?.value {
+        if let inbound = inboundConnections.first(where: { $0.value.canonicalDeviceId == target })?.value {
             sendFrame(eventFrame, through: inbound.connection)
             return [
                 "success": true,
-                "targetDeviceId": targetDeviceId,
+                "target": target,
                 "transport": "tcp",
             ]
         }
@@ -332,15 +333,15 @@ public final class DeviceConnectionPluginCore: NSObject {
         sendFrame(eventFrame, through: conn)
         return [
             "success": true,
-            "targetDeviceId": targetDeviceId,
+            "target": target,
             "transport": "tcp",
         ]
     }
 
-    public func getTransportState(targetDeviceId: String?) -> [String: Any] {
-        if let targetDeviceId, let currentDeviceId = outboundTransportState.deviceId, targetDeviceId != currentDeviceId {
+    public func getTransportState(target: String?) -> [String: Any] {
+        if let target, let currentDeviceId = outboundTransportState.deviceId, target != currentDeviceId {
             return [
-                "deviceId": targetDeviceId,
+                "deviceId": target,
                 "state": "closed",
                 "transport": "tcp",
                 "closedAt": now(),
@@ -478,42 +479,86 @@ public final class DeviceConnectionPluginCore: NSObject {
         return ips.sorted().first
     }
 
+    private func mapWireEventName(_ legacyType: String, appEvent: String?) -> String {
+        if legacyType == legacyTypeConnect { return deviceTcpConnectEvent }
+        if legacyType == legacyTypeConnectAck { return deviceTcpConnectAckEvent }
+        if legacyType == legacyTypeAck { return deviceTcpAckEvent }
+        if legacyType == legacyTypeClose { return deviceTcpCloseEvent }
+        if legacyType == legacyTypeHeartbeat { return deviceTcpHeartbeatEvent }
+        if legacyType == legacyTypeError { return deviceTcpErrorEvent }
+        return appEvent ?? ""
+    }
+
+    internal func isTransportControlEvent(_ wireEvent: String) -> Bool {
+        wireEvent == deviceTcpConnectEvent ||
+            wireEvent == deviceTcpConnectAckEvent ||
+            wireEvent == deviceTcpAckEvent ||
+            wireEvent == deviceTcpCloseEvent ||
+            wireEvent == deviceTcpHeartbeatEvent ||
+            wireEvent == deviceTcpErrorEvent
+    }
+
+    internal func isLanWireEvent(_ wireEvent: String) -> Bool {
+        wireEvent == deviceDisplayNameChangedEvent || wireEvent.hasPrefix(devicePairingEventPrefix)
+    }
+
+    internal func buildTransportErrorEventFromWire(
+        frame: [String: Any],
+        fallbackDeviceId: String?
+    ) -> [String: Any] {
+        let payload = frame["payload"] as? [String: Any]
+        let message =
+            (payload?["message"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        let code =
+            (payload?["code"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        var event: [String: Any] = [
+            "deviceId": fallbackDeviceId as Any,
+            "message": (message?.isEmpty == false) ? message! : "Transport error",
+            "transport": "tcp",
+        ]
+        if let code, !code.isEmpty {
+            event["code"] = code
+        } else {
+            event["code"] = errorCodeTransportIoError
+        }
+        return event
+    }
+
     internal func synraLanFrame(
-        type: String,
+        type legacyType: String,
         requestId: String,
-        messageId: String?,
-        sourceDeviceId: String?,
-        targetDeviceId: String?,
-        replyToRequestId: String?,
+        event: String?,
+        from: String?,
+        target: String?,
+        replyRequestId: String?,
         payload: Any?,
+        timestamp: Int?,
         error: String?
     ) -> [String: Any] {
         var base: [String: Any] = [
-            "version": protocolVersion,
-            "type": type,
+            "event": mapWireEventName(legacyType, appEvent: event),
             "requestId": requestId,
-            "timestamp": now(),
-            "appId": appId,
-            "protocolVersion": protocolVersion,
-            "capabilities": ["message", "event"],
+            "timestamp": timestamp ?? now(),
         ]
-        if let messageId {
-            base["messageId"] = messageId
+        if let from, !from.isEmpty {
+            base["from"] = from
         }
-        if let sourceDeviceId, !sourceDeviceId.isEmpty {
-            base["sourceDeviceId"] = sourceDeviceId
+        if let target, !target.isEmpty {
+            base["target"] = target
         }
-        if let targetDeviceId, !targetDeviceId.isEmpty {
-            base["targetDeviceId"] = targetDeviceId
-        }
-        if let replyToRequestId, !replyToRequestId.isEmpty {
-            base["replyToRequestId"] = replyToRequestId
+        if let replyRequestId, !replyRequestId.isEmpty {
+            base["replyRequestId"] = replyRequestId
         }
         if let payload {
             base["payload"] = payload
         }
         if let error, !error.isEmpty {
-            base["error"] = error
+            var errorPayload = (base["payload"] as? [String: Any]) ?? [:]
+            errorPayload["appId"] = appId
+            errorPayload["code"] = error
+            base["payload"] = errorPayload
         }
         return base
     }
@@ -547,6 +592,10 @@ public final class DeviceConnectionPluginCore: NSObject {
 
             let length = header.withUnsafeBytes { pointer -> UInt32 in
                 pointer.load(as: UInt32.self).bigEndian
+            }
+            if length == 0 || length > UInt32(self.maxFrameBytes) {
+                completion(nil)
+                return
             }
 
             target.receive(minimumIncompleteLength: Int(length), maximumLength: Int(length)) {
@@ -584,7 +633,8 @@ public final class DeviceConnectionPluginCore: NSObject {
                 return
             }
 
-            if frame["type"] as? String == "close" {
+            let wireEvent = frame["event"] as? String ?? ""
+            if wireEvent == self.deviceTcpCloseEvent {
                 self.outboundTransportState.state = "closed"
                 self.outboundTransportState.closedAt = self.now()
                 self.connection?.cancel()
@@ -596,48 +646,61 @@ public final class DeviceConnectionPluginCore: NSObject {
                 ])
                 return
             }
-            if frame["type"] as? String == "message" {
-                let payload = frame["payload"] as? [String: Any]
-                let topRequestId = frame["requestId"] as? String
-                self.onMessageReceived?([
-                    "requestId": (topRequestId ?? payload?["requestId"]) as Any,
-                    "sourceDeviceId": (frame["sourceDeviceId"] as? String ?? payload?["sourceDeviceId"]) as Any,
-                    "targetDeviceId": (frame["targetDeviceId"] as? String ?? payload?["targetDeviceId"]) as Any,
-                    "replyToRequestId": (frame["replyToRequestId"] as? String ?? payload?["replyToRequestId"]) as Any,
-                    "messageId": frame["messageId"] as Any,
-                    "messageType": payload?["messageType"] as? String ?? "transport.message.received",
-                    "payload": payload?["payload"] as Any,
-                    "timestamp": frame["timestamp"] as? Int ?? self.now(),
-                    "transport": "tcp",
-                ])
-            } else if frame["type"] as? String == "ack" {
+            if wireEvent == self.deviceTcpAckEvent {
                 self.onMessageAck?([
-                    "targetDeviceId": frame["targetDeviceId"] as Any ?? self.outboundTransportState.deviceId as Any,
+                    "target": frame["target"] as Any ?? self.outboundTransportState.deviceId as Any,
+                    "event": frame["event"] as Any,
+                    "from": frame["from"] as Any,
+                    "replyRequestId": frame["replyRequestId"] as Any,
                     "requestId": frame["requestId"] as Any,
-                    "messageId": frame["messageId"] as Any,
                     "timestamp": frame["timestamp"] as? Int ?? self.now(),
                     "transport": "tcp",
                 ])
-            } else if frame["type"] as? String == "event" {
-                let pl = frame["payload"] as? [String: Any]
-                let name = pl?["eventName"] as? String ?? ""
-                let topRid = frame["requestId"] as? String
-                self.onLanWireEventReceived?([
-                    "requestId": (topRid ?? pl?["requestId"]) as Any,
-                    "sourceDeviceId": (frame["sourceDeviceId"] as? String ?? pl?["sourceDeviceId"]) as Any,
-                    "targetDeviceId": (frame["targetDeviceId"] as? String ?? pl?["targetDeviceId"]) as Any,
-                    "replyToRequestId": (frame["replyToRequestId"] as? String ?? pl?["replyToRequestId"]) as Any,
-                    "eventName": name,
-                    "eventPayload": pl?["payload"] as Any,
+            } else if wireEvent == self.deviceTcpHeartbeatEvent {
+                // no-op
+            } else if wireEvent == self.deviceTcpErrorEvent {
+                self.onTransportError?(
+                    self.buildTransportErrorEventFromWire(
+                        frame: frame,
+                        fallbackDeviceId: self.outboundTransportState.deviceId
+                    )
+                )
+            } else if !self.isTransportControlEvent(wireEvent) {
+                let topRequestId = frame["requestId"] as? String
+                let eventPayload: [String: Any] = [
+                    "requestId": topRequestId as Any,
+                    "from": frame["from"] as Any,
+                    "target": frame["target"] as Any,
+                    "replyRequestId": frame["replyRequestId"] as Any,
+                    "event": frame["event"] as Any,
+                    "payload": frame["payload"] as Any,
+                    "timestamp": frame["timestamp"] as? Int ?? self.now(),
                     "transport": "tcp",
-                ])
-            } else if frame["type"] as? String == "error" {
-                self.onTransportError?([
-                    "deviceId": self.outboundTransportState.deviceId as Any,
-                    "code": "TRANSPORT_IO_ERROR",
-                    "message": frame["error"] as? String ?? "Unknown transport error",
-                    "transport": "tcp",
-                ])
+                ]
+                if self.isLanWireEvent(wireEvent) {
+                    self.onLanWireEventReceived?(eventPayload)
+                } else {
+                    self.onMessageReceived?(eventPayload)
+                }
+                if let topRequestId, !topRequestId.isEmpty {
+                    let ackTarget =
+                        (frame["target"] as? String)?
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                    self.sendFrame(
+                        self.synraLanFrame(
+                            type: self.legacyTypeAck,
+                            requestId: topRequestId,
+                            event: frame["event"] as? String,
+                            from: self.localDeviceUuid(),
+                            target: (ackTarget?.isEmpty == false) ? ackTarget : self.outboundTransportState.deviceId,
+                            replyRequestId: topRequestId,
+                            payload: nil,
+                            timestamp: nil,
+                            error: nil
+                        ),
+                        through: target
+                    )
+                }
             }
             self.startReceiveLoop(on: target)
         }

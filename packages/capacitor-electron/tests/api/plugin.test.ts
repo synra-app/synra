@@ -60,7 +60,7 @@ describe('api/plugin', () => {
         receipt: {
           ok: true,
           actionId: 'a1',
-          handledBy: 'github-open',
+          handledBy: 'test-plugin',
           durationMs: 1
         }
       } as unknown as MethodResultMap[typeof method]
@@ -73,7 +73,7 @@ describe('api/plugin', () => {
       input: { type: 'url', raw: 'https://github.com/synra' },
       action: {
         actionId: 'a1',
-        pluginId: 'github-open',
+        pluginId: 'test-plugin',
         actionType: 'external.open-url',
         label: 'Open in browser',
         requiresConfirm: true,
@@ -89,9 +89,9 @@ describe('api/plugin', () => {
       return {
         plugins: [
           {
-            pluginId: 'github-open',
+            pluginId: 'test-plugin',
             version: '0.1.0',
-            displayName: 'github-open'
+            displayName: 'test-plugin'
           }
         ],
         generatedAt: Date.now()

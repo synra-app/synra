@@ -1,5 +1,5 @@
 import { type Ref } from 'vue'
-import type { AppLinkState, RuntimeOpenTransportLink } from '../types'
+import type { RuntimeOpenTransportLink } from '../types'
 import {
   MAX_CLOSED_OPEN_TRANSPORT_LINKS,
   OPEN_TRANSPORT_LINKS_REBUILD_DEBOUNCE_MS
@@ -123,45 +123,6 @@ export class OpenTransportLinksBook {
       { immediate: true }
     )
     return snapshot
-  }
-
-  setLinkAppState(
-    deviceId: string,
-    app: AppLinkState,
-    options: { lastAppError?: string; immediate?: boolean } = {}
-  ): void {
-    const current = this.linkByDeviceId.get(deviceId)
-    if (!current || current.transport === 'dead') {
-      return
-    }
-    this.upsertOpenLink(
-      {
-        ...current,
-        app,
-        ...(options.lastAppError !== undefined ? { lastAppError: options.lastAppError } : {}),
-        lastActiveAt: Date.now()
-      },
-      { immediate: Boolean(options.immediate) }
-    )
-  }
-
-  setAppLinkForDevice(
-    deviceId: string,
-    app: AppLinkState,
-    options: { lastAppError?: string } = {}
-  ): void {
-    const trimmed = deviceId.trim()
-    if (!trimmed) {
-      return
-    }
-    for (const link of this.linkByDeviceId.values()) {
-      if (link.transport === 'dead') {
-        continue
-      }
-      if (link.deviceId === trimmed) {
-        this.setLinkAppState(link.deviceId, app, { ...options, immediate: true })
-      }
-    }
   }
 
   touchLinkActivity(

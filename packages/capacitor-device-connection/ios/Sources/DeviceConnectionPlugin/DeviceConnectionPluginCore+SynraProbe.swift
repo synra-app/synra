@@ -52,7 +52,8 @@ extension DeviceConnectionPluginCore {
             switch state {
             case .ready:
                 var probeConnect: [String: Any] = [
-                    "sourceDeviceId": self.localDeviceUuid(),
+                    "appId": self.appId,
+                    "from": self.localDeviceUuid(),
                     "probe": true,
                     "displayName": self.localSynraDisplayName(),
                 ]
@@ -63,13 +64,14 @@ extension DeviceConnectionPluginCore {
                     probeConnect["sourceHostIp"] = selfIp
                 }
                 let connectFrame = self.synraLanFrame(
-                    type: "connect",
+                    type: self.legacyTypeConnect,
                     requestId: connectRequestId,
-                    messageId: nil,
-                    sourceDeviceId: self.localDeviceUuid(),
-                    targetDeviceId: nil,
-                    replyToRequestId: nil,
+                    event: nil,
+                    from: self.localDeviceUuid(),
+                    target: nil,
+                    replyRequestId: nil,
                     payload: probeConnect,
+                    timestamp: nil,
                     error: nil
                 )
                 self.sendFrame(connectFrame, through: connection) {
@@ -81,8 +83,7 @@ extension DeviceConnectionPluginCore {
                     }
                     guard
                         let frame,
-                        frame["type"] as? String == "connectAck",
-                        frame["appId"] as? String == self.appId
+                        frame["event"] as? String == self.deviceTcpConnectAckEvent
                     else {
                         base["error"] = "CONNECT_ACK_INVALID"
                         return
@@ -91,8 +92,12 @@ extension DeviceConnectionPluginCore {
                         base["error"] = "MISSING_ACK_PAYLOAD"
                         return
                     }
+                    guard payload["appId"] as? String == self.appId else {
+                        base["error"] = "APP_ID_MISMATCH"
+                        return
+                    }
                     base["connectAckPayload"] = payload
-                    let remoteRaw = (payload["sourceDeviceId"] as? String)?
+                    let remoteRaw = (payload["from"] as? String)?
                         .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                     guard !remoteRaw.isEmpty else {
                         base["error"] = "MISSING_REMOTE_DEVICE_ID"

@@ -1,6 +1,14 @@
+import {
+  DEVICE_DISPLAY_NAME_CHANGED_EVENT,
+  DEVICE_PAIRING_PEER_RESET_EVENT,
+  DEVICE_PAIRING_REQUEST_EVENT,
+  DEVICE_PAIRING_RESPONSE_EVENT,
+  DEVICE_PAIRING_UNPAIR_REQUIRED_EVENT
+} from './event-names'
+
 /** Wire `LanFrame` type === `event`: payload uses this envelope (JSON). */
 export type LanWireEventEnvelope = {
-  eventName: LanWireEventName
+  event: LanWireEventName
   /** Event-specific body; validated per handler. */
   payload: unknown
   schemaVersion?: number
@@ -8,11 +16,11 @@ export type LanWireEventEnvelope = {
 }
 
 export const LAN_WIRE_EVENT_NAMES = [
-  'device.displayName.changed',
-  'pairing.request',
-  'pairing.response',
-  'pairing.peerReset',
-  'pairing.unpairRequired'
+  DEVICE_DISPLAY_NAME_CHANGED_EVENT,
+  DEVICE_PAIRING_REQUEST_EVENT,
+  DEVICE_PAIRING_RESPONSE_EVENT,
+  DEVICE_PAIRING_PEER_RESET_EVENT,
+  DEVICE_PAIRING_UNPAIR_REQUIRED_EVENT
 ] as const
 
 export type LanWireEventName = (typeof LAN_WIRE_EVENT_NAMES)[number]
@@ -30,8 +38,8 @@ export type LanDeviceDisplayNameChangedPayload = {
 export type LanPairingRequestPayload = {
   /** Opaque token or nonce for matching response. */
   requestId: string
-  sourceDeviceId: string
-  targetDeviceId: string
+  from: string
+  target: string
   initiator: {
     deviceId: string
     name: string
@@ -45,21 +53,21 @@ export type LanPairingRequestPayload = {
 
 export type LanPairingResponsePayload = {
   requestId: string
-  sourceDeviceId: string
-  targetDeviceId: string
-  replyToRequestId?: string
+  from: string
+  target: string
+  replyRequestId?: string
   accepted: boolean
   reason?: string
 }
 
 /** Peer treats us as unpaired (e.g. cleared list); receiver updates local state. */
 export type LanPairingPeerResetPayload = {
-  fromDeviceId: string
+  from: string
   /** Human-readable; optional. */
   reason?: string
 }
 
-/** Ask the receiver to drop local pairing for this active peer link (replaces legacy `custom.pair.unpairRequired`). */
+/** Ask the receiver to drop local pairing for this active peer link. */
 export type LanPairingUnpairRequiredPayload = {
   reason?: string
   mode?: 'fresh' | 'stale'

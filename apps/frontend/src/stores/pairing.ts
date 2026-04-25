@@ -5,8 +5,8 @@ import type { PairInitiatorProfile } from '../lib/pair-protocol'
 
 export type PairingIncoming = {
   requestId: string
-  sourceDeviceId: string
-  targetDeviceId: string
+  from: string
+  target: string
   initiator: PairInitiatorProfile
 }
 
@@ -33,11 +33,7 @@ export const usePairingStore = defineStore('pairing', () => {
     if (!cur) {
       return
     }
-    if (
-      cur.initiator.deviceId === deviceId ||
-      cur.sourceDeviceId === deviceId ||
-      cur.targetDeviceId === deviceId
-    ) {
+    if (cur.initiator.deviceId === deviceId || cur.from === deviceId || cur.target === deviceId) {
       incoming.value = null
     }
   }

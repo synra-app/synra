@@ -89,12 +89,12 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func closeTransport(_ call: CAPPluginCall) {
-        let targetDeviceId = call.getString("targetDeviceId")
+        let target = call.getString("target")
         let result = deviceConnectionSerialQueue.sync {
-            implementation.closeTransport(targetDeviceId: targetDeviceId)
+            implementation.closeTransport(target: target)
         }
         notifyListeners("transportClosed", data: [
-            "deviceId": result["targetDeviceId"] as Any,
+            "deviceId": result["target"] as Any,
             "reason": "closed-by-client",
             "transport": "tcp",
         ])
@@ -104,25 +104,25 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func sendMessage(_ call: CAPPluginCall) {
         guard
             let requestId = call.getString("requestId"),
-            let sourceDeviceId = call.getString("sourceDeviceId"),
-            let targetDeviceId = call.getString("targetDeviceId"),
-            let messageType = call.getString("messageType")
+            let from = call.getString("from"),
+            let target = call.getString("target"),
+            let event = call.getString("event")
         else {
-            call.reject("requestId/sourceDeviceId/targetDeviceId/messageType are required.")
+            call.reject("requestId/from/target/event are required.")
             return
         }
 
         let payload = call.options["payload"] ?? NSNull()
-        let messageId = call.getString("messageId")
+        let timestamp = call.getInt("timestamp")
         let sendResult: [String: Any]? = deviceConnectionSerialQueue.sync {
             implementation.sendMessage(
                 requestId: requestId,
-                sourceDeviceId: sourceDeviceId,
-                targetDeviceId: targetDeviceId,
-                replyToRequestId: call.getString("replyToRequestId"),
-                messageType: messageType,
+                from: from,
+                target: target,
+                replyRequestId: call.getString("replyRequestId"),
+                event: event,
                 payload: payload,
-                messageId: messageId
+                timestamp: timestamp
             )
         }
         guard let result = sendResult else {
@@ -136,27 +136,25 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func sendLanEvent(_ call: CAPPluginCall) {
         guard
             let requestId = call.getString("requestId"),
-            let sourceDeviceId = call.getString("sourceDeviceId"),
-            let targetDeviceId = call.getString("targetDeviceId"),
-            let eventName = call.getString("eventName")
+            let from = call.getString("from"),
+            let target = call.getString("target"),
+            let event = call.getString("event")
         else {
-            call.reject("requestId/sourceDeviceId/targetDeviceId/eventName are required.")
+            call.reject("requestId/from/target/event are required.")
             return
         }
 
         let payload = call.options["payload"] ?? NSNull()
-        let eventId = call.getString("eventId")
-        let schemaVersion = call.getInt("schemaVersion")
+        let timestamp = call.getInt("timestamp")
         let sendResult: [String: Any]? = deviceConnectionSerialQueue.sync {
             implementation.sendLanEvent(
                 requestId: requestId,
-                sourceDeviceId: sourceDeviceId,
-                targetDeviceId: targetDeviceId,
-                replyToRequestId: call.getString("replyToRequestId"),
-                eventName: eventName,
+                from: from,
+                target: target,
+                replyRequestId: call.getString("replyRequestId"),
+                event: event,
                 payload: payload,
-                eventId: eventId,
-                schemaVersion: schemaVersion
+                timestamp: timestamp
             )
         }
         guard let result = sendResult else {
@@ -168,9 +166,9 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func getTransportState(_ call: CAPPluginCall) {
-        let targetDeviceId = call.getString("targetDeviceId")
+        let target = call.getString("target")
         let snapshot = deviceConnectionSerialQueue.sync {
-            implementation.getTransportState(targetDeviceId: targetDeviceId)
+            implementation.getTransportState(target: target)
         }
         call.resolve(snapshot)
     }

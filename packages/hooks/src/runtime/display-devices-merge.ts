@@ -72,7 +72,7 @@ function openLinkAddressForDevice(
 export function mergePairedAndDiscoveredDevices(
   pairedRecords: readonly SynraPairedDeviceRecord[],
   discoveredPeers: readonly DiscoveredDevice[],
-  transportReadyDeviceIds: ReadonlySet<string>,
+  readyDeviceIds: ReadonlySet<string>,
   openTransportLinks: readonly RuntimeOpenTransportLink[]
 ): DisplayDevice[] {
   const pairedIds = new Set(pairedRecords.map((record) => record.deviceId))
@@ -116,7 +116,7 @@ export function mergePairedAndDiscoveredDevices(
         host = ''
         port = undefined
       }
-      const hasTcp = transportReadyDeviceIds.has(record.deviceId)
+      const hasTcp = readyDeviceIds.has(record.deviceId)
       const now = Date.now()
       return {
         deviceId: record.deviceId,

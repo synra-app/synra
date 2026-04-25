@@ -1,4 +1,5 @@
 export * from './lan-events'
+export * from './event-names'
 
 export const PROTOCOL_VERSION = '1.0' as const
 
@@ -109,20 +110,20 @@ export type TransportClosedPayload = {
 
 export type TransportMessageReceivedPayload = {
   requestId: string
-  sourceDeviceId: DeviceId
-  targetDeviceId: DeviceId
-  replyToRequestId?: string
-  messageId?: MessageId
-  messageType: SynraMessageType
+  event: string
+  target: DeviceId
+  from: DeviceId
+  replyRequestId?: string
   payload: unknown
   timestamp: number
-  remote?: string
 }
 
 export type TransportMessageAckPayload = {
   requestId: string
-  targetDeviceId: DeviceId
-  messageId: MessageId
+  target: DeviceId
+  event?: string
+  from?: DeviceId
+  replyRequestId: string
   timestamp: number
 }
 
@@ -229,24 +230,22 @@ export type SynraCrossDeviceMessage<
 > = {
   protocolVersion: typeof PROTOCOL_VERSION
   requestId: string
-  replyToRequestId?: string
-  messageId: MessageId
+  replyRequestId?: string
+  event: string
   traceId: TraceId
-  type: TType
   sentAt: number
   ttlMs: number
-  fromDeviceId: DeviceId
-  toDeviceId: DeviceId
+  from: DeviceId
+  target: DeviceId
   payload: TPayload
 }
 
 export type ProtocolEnvelope<TType extends ProtocolMessageType, TPayload> = {
   protocolVersion: typeof PROTOCOL_VERSION
   requestId: string
-  replyToRequestId?: string
-  messageId: MessageId
+  replyRequestId?: string
+  event: TType
   timestamp: number
-  type: TType
   payload: TPayload
 }
 

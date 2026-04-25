@@ -1,44 +1,60 @@
-import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { deriveDeviceCardBadge, useTransport } from '@synra/plugin-sdk/hooks'
-import type { ChatMessage } from '../src/types/chat'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { usePairedDevices, useTransport } from '@synra/plugin-sdk/hooks'
+import { isObjectPayload, normalizePayloadToText, resolveErrorMessage } from './chatPayload'
+import type { ChatDeviceListItem, ChatMessage } from '../src/types/chat'
+import { CHAT_TEXT_EVENT } from '../src/events'
 
 export function useMessagesPage() {
-  const transport = useTransport()
-  const { peers, transportReadyDeviceIds, loading, error, ensureReady, startScan } = transport
+  const { pairedDevices, reloadPairedRecords } = usePairedDevices()
+  const { sendMessageToReadyDevice, onSynraMessage, ensureReady } = useTransport()
+
   const messageInput = ref('')
-  const messageType = ref('default')
   const selectedDeviceId = ref<string>('')
   const sending = ref(false)
+  const sendError = ref<string | null>(null)
   const messages = ref<ChatMessage[]>([])
 
-  const devices = computed(() => {
-    const scanPhase = loading.value ? 'scanning' : 'idle'
-    return peers.value.map((device) => ({
+  const devices = computed((): ChatDeviceListItem[] =>
+    pairedDevices.value.map((device) => ({
       deviceId: device.deviceId,
       name: device.name,
       ipAddress: device.ipAddress,
-      source: device.source,
-      connectable: device.connectable,
-      connectCheckError: device.connectCheckError,
-      lastSeenAt: device.lastSeenAt,
-      lastSeenLabel: device.lastSeenAt ? new Date(device.lastSeenAt).toLocaleTimeString() : '-',
-      connectionStatus: transportReadyDeviceIds.value.includes(device.deviceId)
-        ? 'connected'
-        : 'idle',
+      linkStatus: device.linkStatus,
+      ready: device.ready,
       isSelected: selectedDeviceId.value === device.deviceId,
-      badge: deriveDeviceCardBadge(device, scanPhase)
+      pairedAtLabel: new Date(device.pairedAt).toLocaleString()
     }))
-  })
+  )
 
   const selectedDevice = computed(
     () => devices.value.find((device) => device.deviceId === selectedDeviceId.value) ?? null
   )
   const selectedDeviceLabel = computed(
-    () => selectedDevice.value?.name ?? selectedDevice.value?.deviceId ?? 'No device selected'
+    () => selectedDevice.value?.name ?? selectedDevice.value?.deviceId ?? '未选择设备'
   )
+  const selectedReady = computed(() => Boolean(selectedDevice.value?.ready))
+  const selectedStatusShort = computed(() => {
+    if (!selectedDevice.value) {
+      return '未选择设备'
+    }
+    if (selectedReady.value) {
+      return '可发送'
+    }
+    return '设备未就绪，请在主程序完成连接'
+  })
+  const selectedStatusLong = computed(() => {
+    if (!selectedDevice.value) {
+      return '请选择左侧设备'
+    }
+    if (selectedReady.value) {
+      return '已连接，可发送消息'
+    }
+    return '设备未就绪：请在主程序连接后再发消息'
+  })
   const canSend = computed(
     () =>
       Boolean(selectedDevice.value?.deviceId) &&
+      selectedReady.value &&
       messageInput.value.trim().length > 0 &&
       !sending.value
   )
@@ -47,27 +63,28 @@ export function useMessagesPage() {
     selectedDeviceId.value = deviceId
   }
 
-  async function connectSelectedDevice(): Promise<void> {
-    if (!selectedDevice.value) {
-      return
-    }
-    await transport.connectToDevice(selectedDevice.value.deviceId)
-  }
+  watch(selectedDeviceId, () => {
+    sendError.value = null
+  })
 
-  async function disconnectSelectedDevice(): Promise<void> {
-    if (!selectedDevice.value) {
-      return
-    }
-    await transport.disconnectDevice(selectedDevice.value.deviceId)
-  }
+  watch(
+    devices,
+    (rows) => {
+      if (rows.length === 0) {
+        selectedDeviceId.value = ''
+        return
+      }
+      const stillExists = rows.some((row) => row.deviceId === selectedDeviceId.value)
+      if (!stillExists) {
+        selectedDeviceId.value = rows[0].deviceId
+      }
+    },
+    { immediate: true }
+  )
 
-  async function reconnectSelectedDevice(): Promise<void> {
-    await disconnectSelectedDevice()
-    await connectSelectedDevice()
-  }
-
-  async function refreshDeviceDiscovery(): Promise<void> {
-    await startScan()
+  async function refreshPairedList(): Promise<void> {
+    await ensureReady()
+    await reloadPairedRecords()
   }
 
   async function onSendMessage(): Promise<void> {
@@ -84,65 +101,79 @@ export function useMessagesPage() {
         deviceId: selectedDevice.value.deviceId,
         direction: 'outgoing',
         text: content,
-        messageType: messageType.value,
         timestamp: createdAt,
         timeLabel: new Date(createdAt).toLocaleTimeString(),
         status: 'sent'
       }
     ]
     sending.value = true
+    sendError.value = null
     try {
-      await transport.sendToDevice(selectedDevice.value.deviceId, {
-        channel: messageType.value,
-        payload: content
+      if (!selectedReady.value) {
+        throw new Error('设备未就绪，请稍后重试。')
+      }
+      await sendMessageToReadyDevice({
+        deviceId: selectedDevice.value.deviceId,
+        event: CHAT_TEXT_EVENT,
+        payload: {
+          channel: 'default',
+          body: content
+        }
       })
       messageInput.value = ''
+    } catch (error) {
+      sendError.value = resolveErrorMessage(error, '发送失败')
+      messages.value = messages.value.filter((row) => row.id !== optimisticId)
     } finally {
       sending.value = false
     }
   }
 
-  const unsubscribe = transport.onMessage((message) => {
-    const receivedAt = message.receivedAt
-    messages.value = [
-      ...messages.value,
-      {
-        id: `incoming-${receivedAt}-${Math.random().toString(16).slice(2, 8)}`,
-        deviceId: message.fromDeviceId,
-        direction: 'incoming',
-        text:
-          typeof message.payload === 'string' ? message.payload : JSON.stringify(message.payload),
-        messageType: message.channel,
-        timestamp: receivedAt,
-        timeLabel: new Date(receivedAt).toLocaleTimeString(),
-        status: 'received'
-      }
-    ]
-  })
+  const unsubscribe = onSynraMessage(
+    (message) => {
+      const outerPayload = isObjectPayload(message.payload) ? message.payload : null
+      const wirePayload =
+        outerPayload && isObjectPayload(outerPayload.payload) ? outerPayload.payload : outerPayload
+      const body = wirePayload && 'body' in wirePayload ? wirePayload.body : message.payload
+      const receivedAt = message.timestamp
+      messages.value = [
+        ...messages.value,
+        {
+          id: `incoming-${receivedAt}-${Math.random().toString(16).slice(2, 8)}`,
+          deviceId: message.from,
+          direction: 'incoming',
+          text: normalizePayloadToText(body),
+          timestamp: receivedAt,
+          timeLabel: new Date(receivedAt).toLocaleTimeString(),
+          status: 'received'
+        }
+      ]
+    },
+    {
+      event: CHAT_TEXT_EVENT
+    }
+  )
 
-  onMounted(async () => {
-    await ensureReady()
-    await refreshDeviceDiscovery()
+  onMounted(() => {
+    void refreshPairedList()
   })
   onUnmounted(() => unsubscribe())
 
   return {
     canSend,
-    connectSelectedDevice,
     devices,
-    disconnectSelectedDevice,
-    error,
-    loading,
-    messages,
     messageInput,
-    messageType,
+    messages,
     onSendMessage,
-    reconnectSelectedDevice,
-    refreshDeviceDiscovery,
+    refreshPairedList,
     selectDevice,
     selectedDevice,
     selectedDeviceId,
     selectedDeviceLabel,
+    selectedReady,
+    selectedStatusLong,
+    selectedStatusShort,
+    sendError,
     sending
   }
 }

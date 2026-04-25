@@ -142,23 +142,32 @@ export function createElectronMainRuntimeAdapter(): ConnectionRuntimeAdapter {
               ? (event.payload as Record<string, unknown>)
               : {}
           const requestId = typeof payload.requestId === 'string' ? payload.requestId : ''
-          const sourceDeviceId =
-            typeof payload.sourceDeviceId === 'string' ? payload.sourceDeviceId : ''
-          const targetDeviceId =
-            typeof payload.targetDeviceId === 'string' ? payload.targetDeviceId : ''
-          if (!requestId || !sourceDeviceId || !targetDeviceId) {
+          const from =
+            typeof payload.from === 'string'
+              ? payload.from
+              : typeof event.from === 'string'
+                ? event.from
+                : ''
+          const target =
+            typeof payload.target === 'string'
+              ? payload.target
+              : typeof event.target === 'string'
+                ? event.target
+                : ''
+          if (!requestId || !from || !target) {
             return
           }
           listener({
             requestId,
-            sourceDeviceId,
-            targetDeviceId,
-            replyToRequestId:
-              typeof payload.replyToRequestId === 'string' ? payload.replyToRequestId : undefined,
-            messageId: event.messageId,
-            messageType:
+            from,
+            target,
+            replyRequestId:
+              typeof payload.replyRequestId === 'string'
+                ? payload.replyRequestId
+                : event.replyRequestId,
+            event:
               mapMessageTypeFromHostEvent(event) ??
-              ('transport.message.received' as SendMessageOptions['messageType']),
+              ('transport.message.received' as SendMessageOptions['event']),
             payload: 'payload' in payload ? payload.payload : event.payload,
             timestamp: event.timestamp,
             transport: event.transport
@@ -167,21 +176,22 @@ export function createElectronMainRuntimeAdapter(): ConnectionRuntimeAdapter {
       }),
     addMessageAckListener: async (listener: (event: MessageAckEvent) => void) =>
       addHostListener((event) => {
-        if (event.type === 'transport.message.ack' && event.messageId) {
+        if (event.type === 'transport.message.ack' && event.replyRequestId) {
           const payload =
             event.payload && typeof event.payload === 'object'
               ? (event.payload as Record<string, unknown>)
               : {}
           const requestId = typeof payload.requestId === 'string' ? payload.requestId : ''
-          const targetDeviceId =
-            typeof payload.targetDeviceId === 'string' ? payload.targetDeviceId : ''
-          if (!requestId || !targetDeviceId) {
+          const target = typeof event.target === 'string' ? event.target : ''
+          if (!requestId || !target) {
             return
           }
           listener({
-            targetDeviceId,
+            target,
+            event: event.event,
+            from: event.from,
+            replyRequestId: event.replyRequestId,
             requestId,
-            messageId: event.messageId,
             timestamp: event.timestamp,
             transport: event.transport
           })

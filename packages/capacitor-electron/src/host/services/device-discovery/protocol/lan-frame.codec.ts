@@ -1,34 +1,37 @@
 import { BridgeError } from '../../../../shared/errors/bridge-error'
 import { BRIDGE_ERROR_CODES } from '../../../../shared/errors/codes'
+import {
+  DEVICE_HOST_RETIRE_EVENT,
+  DEVICE_MEMBER_OFFLINE_EVENT,
+  DEVICE_TCP_ACK_EVENT,
+  DEVICE_TCP_CLOSE_EVENT,
+  DEVICE_TCP_CONNECT_ACK_EVENT,
+  DEVICE_TCP_CONNECT_EVENT,
+  DEVICE_TCP_ERROR_EVENT,
+  DEVICE_TCP_HEARTBEAT_EVENT
+} from '@synra/protocol'
 
-export const LAN_PROTOCOL_VERSION = '1.0'
-export const LAN_APP_ID = 'synra'
 export const MAX_FRAME_BYTES = 256 * 1024
 
+export {
+  DEVICE_HOST_RETIRE_EVENT,
+  DEVICE_MEMBER_OFFLINE_EVENT,
+  DEVICE_TCP_ACK_EVENT,
+  DEVICE_TCP_CLOSE_EVENT,
+  DEVICE_TCP_CONNECT_ACK_EVENT,
+  DEVICE_TCP_CONNECT_EVENT,
+  DEVICE_TCP_ERROR_EVENT,
+  DEVICE_TCP_HEARTBEAT_EVENT
+}
+
 export type LanFrame = {
-  version: string
-  type:
-    | 'connect'
-    | 'connectAck'
-    | 'event'
-    | 'message'
-    | 'ack'
-    | 'close'
-    | 'error'
-    | 'heartbeat'
-    | 'hostRetire'
-    | 'memberOffline'
-  requestId?: string
-  sourceDeviceId?: string
-  targetDeviceId?: string
-  replyToRequestId?: string
-  messageId?: string
-  timestamp: number
-  appId?: string
-  protocolVersion?: string
-  capabilities?: string[]
+  requestId: string
+  event: string
+  target: string
+  from: string
+  replyRequestId?: string
   payload?: unknown
-  error?: string
+  timestamp: number
 }
 
 export interface LanFrameCodec {

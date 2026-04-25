@@ -1,7 +1,7 @@
-/** LAN `eventName` wire payloads for pairing (not `custom.pair.*` message types). */
+/** LAN `event` wire payload parsers for pairing flows. */
 
 export type PairingPeerResetWire = {
-  fromDeviceId: string
+  from: string
   reason: string
 }
 
@@ -20,35 +20,35 @@ function trimNonEmptyString(value: unknown): string | undefined {
 }
 
 /**
- * `pairing.peerReset` — peer cleared pairing locally; payload carries `fromDeviceId`.
+ * `device.pairing.peer-reset` — peer cleared pairing locally; payload carries `from`.
  */
 export function parsePairingPeerResetPayload(payload: unknown): PairingPeerResetWire | null {
   if (typeof payload !== 'object' || payload === null) {
     return null
   }
-  const pl = payload as { fromDeviceId?: unknown; reason?: unknown }
-  const fromDeviceId = trimNonEmptyString(pl.fromDeviceId)
-  if (!fromDeviceId) {
+  const pl = payload as { from?: unknown; reason?: unknown }
+  const from = trimNonEmptyString(pl.from)
+  if (!from) {
     return null
   }
   const reason = trimNonEmptyString(pl.reason) ?? 'Peer cleared this pairing.'
-  return { fromDeviceId, reason }
+  return { from, reason }
 }
 
 /**
- * `pairing.response` — accept/decline; `requestId` may live under `replyToRequestId`.
+ * `device.pairing.response` — accept/decline; `requestId` may live under `replyRequestId`.
  */
 export function parsePairingResponsePayload(payload: unknown): PairingResponseWire | null {
   if (typeof payload !== 'object' || payload === null) {
     return null
   }
   const pl = payload as {
-    replyToRequestId?: unknown
+    replyRequestId?: unknown
     requestId?: unknown
     accepted?: unknown
     reason?: unknown
   }
-  const requestId = trimNonEmptyString(pl.replyToRequestId) ?? trimNonEmptyString(pl.requestId)
+  const requestId = trimNonEmptyString(pl.replyRequestId) ?? trimNonEmptyString(pl.requestId)
   const accepted = pl.accepted
   if (!requestId || typeof accepted !== 'boolean') {
     return null
@@ -58,7 +58,7 @@ export function parsePairingResponsePayload(payload: unknown): PairingResponseWi
 }
 
 /**
- * `pairing.unpairRequired` — optional human-readable `reason` on payload.
+ * `device.pairing.unpair-required` — optional human-readable `reason` on payload.
  */
 export function parsePairingUnpairRequiredReason(payload: unknown, fallback: string): string {
   if (typeof payload !== 'object' || payload === null) {

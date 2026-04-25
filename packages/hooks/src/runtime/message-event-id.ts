@@ -1,17 +1,17 @@
 export function resolveMessageEventId(event: {
   type: string
   requestId?: string
-  sourceDeviceId?: string
-  targetDeviceId?: string
-  messageId?: string
+  from?: string
+  target?: string
+  eventName?: string
   timestamp?: number
 }): string {
   return [
     event.type,
     event.requestId ?? '',
-    event.sourceDeviceId ?? '',
-    event.targetDeviceId ?? '',
-    event.messageId ?? '',
+    event.from ?? '',
+    event.target ?? '',
+    event.eventName ?? '',
     String(event.timestamp ?? Date.now())
   ].join(':')
 }

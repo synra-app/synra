@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'vite-plus/test'
 import type { HostEvent } from '@synra/capacitor-device-connection'
+import { DEVICE_CONNECTION_TRANSPORT_ERROR_CODES } from '@synra/capacitor-device-connection'
+import { DEVICE_PAIRING_REQUEST_EVENT } from '@synra/protocol'
 import {
   mapLanWireEventReceivedHostEvent,
   mapMessageTypeFromHostEvent,
@@ -9,12 +11,11 @@ import {
 } from '../src/runtime/adapters/electron-host-event-mappers'
 
 describe('electron host event mappers', () => {
-  test('maps transport.opened payload and fallback remote', () => {
+  test('maps transport.opened payload', () => {
     const event: HostEvent = {
       id: 1,
       timestamp: Date.now(),
       type: 'transport.opened',
-      remote: '10.0.0.102:32100',
       deviceId: 'device-a',
       payload: {
         deviceId: 'device-a',
@@ -42,49 +43,49 @@ describe('electron host event mappers', () => {
       id: 6,
       timestamp: Date.now(),
       type: 'transport.lan.event.received',
-      remote: '10.0.0.2:32100',
       payload: {
         requestId: 'r1',
-        sourceDeviceId: 'peer-1',
-        targetDeviceId: 'device-self',
-        eventName: 'pairing.request',
-        eventPayload: { requestId: 'r1' }
+        from: 'peer-1',
+        target: 'device-self',
+        event: DEVICE_PAIRING_REQUEST_EVENT,
+        payload: { requestId: 'r1' }
       },
       transport: 'tcp'
     }
     expect(mapLanWireEventReceivedHostEvent(event)).toEqual({
       requestId: 'r1',
-      sourceDeviceId: 'peer-1',
-      targetDeviceId: 'device-self',
-      replyToRequestId: undefined,
-      eventName: 'pairing.request',
-      eventPayload: { requestId: 'r1' },
+      from: 'peer-1',
+      target: 'device-self',
+      replyRequestId: undefined,
+      event: DEVICE_PAIRING_REQUEST_EVENT,
+      payload: { requestId: 'r1' },
+      timestamp: event.timestamp,
       transport: 'tcp'
     })
   })
 
-  test('maps transport.lan.event.received (legacy payload key)', () => {
+  test('maps lan event from root envelope when payload misses from/target', () => {
     const event: HostEvent = {
       id: 7,
       timestamp: Date.now(),
       type: 'transport.lan.event.received',
-      remote: '10.0.0.2:32100',
+      from: 'peer-2',
+      target: 'device-self',
+      event: DEVICE_PAIRING_REQUEST_EVENT,
       payload: {
         requestId: 'r2',
-        sourceDeviceId: 'peer-2',
-        targetDeviceId: 'device-self',
-        eventName: 'pairing.request',
         payload: { requestId: 'r2' }
       },
       transport: 'tcp'
     }
     expect(mapLanWireEventReceivedHostEvent(event)).toEqual({
       requestId: 'r2',
-      sourceDeviceId: 'peer-2',
-      targetDeviceId: 'device-self',
-      replyToRequestId: undefined,
-      eventName: 'pairing.request',
-      eventPayload: { requestId: 'r2' },
+      from: 'peer-2',
+      target: 'device-self',
+      replyRequestId: undefined,
+      event: DEVICE_PAIRING_REQUEST_EVENT,
+      payload: { requestId: 'r2' },
+      timestamp: event.timestamp,
       transport: 'tcp'
     })
   })
@@ -94,7 +95,6 @@ describe('electron host event mappers', () => {
       id: 2,
       timestamp: Date.now(),
       type: 'transport.closed',
-      remote: '10.0.0.102:32100',
       deviceId: 'device-a',
       payload: { reason: 'peer-closed' },
       transport: 'tcp'
@@ -103,7 +103,6 @@ describe('electron host event mappers', () => {
       id: 3,
       timestamp: Date.now(),
       type: 'host.heartbeat.timeout',
-      remote: '10.0.0.102:32100',
       deviceId: 'device-a',
       code: 'INBOUND_HEARTBEAT_TIMEOUT',
       transport: 'tcp'
@@ -122,9 +121,8 @@ describe('electron host event mappers', () => {
       id: 4,
       timestamp: Date.now(),
       type: 'transport.error',
-      remote: '10.0.0.102:32100',
       deviceId: 'device-a',
-      code: 'SOCKET_ERROR',
+      code: DEVICE_CONNECTION_TRANSPORT_ERROR_CODES.transportIoError,
       payload: { message: 'broken pipe' },
       transport: 'tcp'
     }
@@ -132,15 +130,14 @@ describe('electron host event mappers', () => {
       id: 5,
       timestamp: Date.now(),
       type: 'transport.message.received',
-      remote: '10.0.0.102:32100',
       deviceId: 'device-a',
-      messageType: 'custom.chat.text',
+      event: 'custom.chat.text',
       transport: 'tcp'
     }
 
     expect(mapTransportErrorHostEvent(transportError)).toEqual({
       deviceId: 'device-a',
-      code: 'SOCKET_ERROR',
+      code: DEVICE_CONNECTION_TRANSPORT_ERROR_CODES.transportIoError,
       message: 'broken pipe',
       transport: 'tcp'
     })

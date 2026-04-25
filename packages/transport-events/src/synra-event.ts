@@ -2,11 +2,11 @@ import { getSynraRuntimePlatform, type SynraRuntimePlatform } from './runtime-pl
 
 /** Normalized context for a received LAN `event` frame (app layer; not the raw plugin envelope). */
 export type SynraWireEventContext = {
-  eventName: string
+  event: string
   requestId: string
-  sourceDeviceId: string
-  targetDeviceId: string
-  replyToRequestId?: string
+  from: string
+  target: string
+  replyRequestId?: string
   /** Inner wire payload (same role as `SynraLanWireEvent.payload` in hooks). */
   payload: unknown
   transport: string
@@ -19,42 +19,42 @@ export type SynraEventHandlers = Partial<
 }
 
 type Registration = {
-  eventName: string
+  event: string
   handlers: SynraEventHandlers
 }
 
 const registry = new Map<string, Registration>()
 
 export type CreateSynraEventOptions = {
-  eventName: string
+  event: string
   handlers?: SynraEventHandlers
   /** When true (default), register for {@link dispatchSynraWireEvent}. */
   register?: boolean
 }
 
 export type SynraEvent = {
-  readonly eventName: string
+  readonly event: string
   readonly handlers: SynraEventHandlers
   unregister(): void
 }
 
 /**
- * Registers a LAN `eventName` → per-platform handlers (or `unsupported`).
+ * Registers a LAN `event` → per-platform handlers (or `unsupported`).
  * Platform keys align with handle naming: `windows` → implement `handleWindows`, etc.
  */
 export function createSynraEvent(options: CreateSynraEventOptions): SynraEvent {
   const handlers = options.handlers ?? {}
-  const reg: Registration = { eventName: options.eventName, handlers }
+  const reg: Registration = { event: options.event, handlers }
   if (options.register !== false) {
-    registry.set(options.eventName, reg)
+    registry.set(options.event, reg)
   }
   return {
-    eventName: options.eventName,
+    event: options.event,
     handlers,
     unregister() {
-      const current = registry.get(options.eventName)
+      const current = registry.get(options.event)
       if (current === reg) {
-        registry.delete(options.eventName)
+        registry.delete(options.event)
       }
     }
   }
@@ -74,8 +74,8 @@ export function synraHandlersAllPlatforms(
   }
 }
 
-export function unregisterSynraEventByName(eventName: string): void {
-  registry.delete(eventName)
+export function unregisterSynraEventByName(event: string): void {
+  registry.delete(event)
 }
 
 export function clearSynraWireEventRegistryForTests(): void {
@@ -84,10 +84,10 @@ export function clearSynraWireEventRegistryForTests(): void {
 
 /**
  * Dispatches a received wire event to the handler for {@link getSynraRuntimePlatform}.
- * No-op if `eventName` was never registered.
+ * No-op if `event` was never registered.
  */
 export async function dispatchSynraWireEvent(ctx: SynraWireEventContext): Promise<void> {
-  const reg = registry.get(ctx.eventName)
+  const reg = registry.get(ctx.event)
   if (!reg) {
     return
   }

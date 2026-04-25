@@ -35,7 +35,7 @@ export class DeviceConnectionWeb extends WebPlugin implements DeviceConnectionPl
     }
     return {
       success: true,
-      targetDeviceId: this.transportState.deviceId,
+      target: this.transportState.deviceId ?? '',
       transport: 'tcp'
     }
   }

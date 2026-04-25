@@ -20,23 +20,24 @@ export function createLanWireListenersRegistry(): LanWireListenersRegistry {
   function emitLanWireEvent(event: LanWireEventReceivedEvent, deviceId?: string): void {
     const normalized: SynraLanWireEvent = {
       requestId: event.requestId,
-      sourceDeviceId: event.sourceDeviceId,
-      targetDeviceId: event.targetDeviceId,
-      replyToRequestId: event.replyToRequestId,
-      eventName: event.eventName,
-      payload: event.eventPayload,
+      from: event.from,
+      target: event.target,
+      replyRequestId: event.replyRequestId,
+      event: event.event,
+      payload: event.payload,
+      timestamp: event.timestamp,
       transport: event.transport
     }
     for (const listener of listeners) {
       if (listener.filter?.requestId && listener.filter.requestId !== normalized.requestId) {
         continue
       }
-      if (listener.filter?.eventName && listener.filter.eventName !== normalized.eventName) {
+      if (listener.filter?.event && listener.filter.event !== normalized.event) {
         continue
       }
       if (
         listener.filter?.deviceId &&
-        listener.filter.deviceId !== normalized.sourceDeviceId &&
+        listener.filter.deviceId !== normalized.from &&
         listener.filter.deviceId !== deviceId
       ) {
         continue

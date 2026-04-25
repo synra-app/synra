@@ -9,7 +9,7 @@ export function createCapacitorRuntimeAdapter(): ConnectionRuntimeAdapter {
     probeSynraPeers: (options) => DeviceConnection.probeSynraPeers(options),
     openTransport: (options) => DeviceConnection.openTransport(options),
     closeTransport: async (deviceId) => {
-      await DeviceConnection.closeTransport({ targetDeviceId: deviceId })
+      await DeviceConnection.closeTransport({ target: deviceId })
     },
     sendMessage: async (options) => {
       await DeviceConnection.sendMessage(options)
@@ -17,8 +17,7 @@ export function createCapacitorRuntimeAdapter(): ConnectionRuntimeAdapter {
     sendLanEvent: async (options) => {
       await DeviceConnection.sendLanEvent(options)
     },
-    getTransportState: async (deviceId) =>
-      DeviceConnection.getTransportState({ targetDeviceId: deviceId }),
+    getTransportState: async (deviceId) => DeviceConnection.getTransportState({ target: deviceId }),
     addDeviceConnectableUpdatedListener: async (listener) => {
       const forward = (event: { device: Parameters<typeof listener>[0]['device'] }) => {
         listener({ device: event.device })

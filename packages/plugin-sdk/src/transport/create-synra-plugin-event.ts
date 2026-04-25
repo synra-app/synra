@@ -1,18 +1,18 @@
 /**
- * TODO: Prefix `eventName` with `pluginId` (e.g. `chat.send`), wire per-platform ctx handlers
+ * TODO: Prefix `event` with `pluginId` (e.g. `chat.send`), wire per-platform ctx handlers
  * aligned with `SynraRuntimePlatform`, and integrate with the shared `SynraEvent` dispatch
  * registry from `@synra/transport-events`. Not implemented in this iteration.
  */
 export type SynraPluginEventSpec = {
   /** Logical event name within the plugin (before namespacing). */
-  eventName: string
+  event: string
   /** Per-platform or shared handler wiring; shape TBD. */
   handlers?: unknown
 }
 
 export type SynraPluginEvent = {
   readonly pluginId: string
-  readonly eventName: string
+  readonly event: string
   unregister(): void
 }
 
@@ -25,7 +25,7 @@ export function createSynraPluginEvent(
 ): SynraPluginEvent {
   return {
     pluginId,
-    eventName: _spec.eventName,
+    event: _spec.event,
     unregister: () => {
       /* no-op until registry integration */
     }

@@ -1,9 +1,12 @@
 import type { DiscoveredDevice } from '@synra/capacitor-lan-discovery'
-import type { SynraMessageType } from '@synra/protocol'
+import { DEVICE_DISPLAY_NAME_CHANGED_EVENT } from '@synra/protocol'
 import { computed } from 'vue'
 import type {
   SynraConnectionFilter,
+  SynraConnectionSendInput,
   SynraConnectionMessage,
+  SendMessageToReadyDeviceInput,
+  TransportBroadcastMessageInput,
   RuntimeOpenTransportInput,
   SynraLanWireSendInput
 } from '../types'
@@ -11,19 +14,6 @@ import { getConnectionRuntime } from '../runtime/core'
 import { type DeviceProfileUpdatedPayload } from '../runtime/device-profile'
 import { normalizeHost } from '../runtime/host-normalization'
 import { findReadyTransportLinkForDevice } from '../runtime/ready-transport-link'
-
-type SynraTransportOutgoing = {
-  channel?: string
-  payload: unknown
-}
-
-type SynraTransportIncoming = {
-  fromDeviceId?: string
-  requestId?: string
-  channel: string
-  payload: unknown
-  receivedAt: number
-}
 
 export type ConnectToDeviceOptions = Pick<RuntimeOpenTransportInput, 'suppressGlobalError'>
 
@@ -55,50 +45,6 @@ export function useTransport() {
       })
       .filter((device) => device.ipAddress.length > 0)
       .sort((left, right) => right.lastSeenAt - left.lastSeenAt)
-  )
-
-  /** Peers with physical TCP up (Synra transport usable). */
-  const transportReadyDeviceIds = computed(() =>
-    Array.from(
-      runtime.openTransportLinks.value
-        .filter((link) => link.transport === 'ready')
-        .reduce((set, link) => {
-          if (typeof link.deviceId === 'string' && link.deviceId.length > 0) {
-            set.add(link.deviceId)
-          }
-          const linkHost = normalizeHost(link.host)
-          if (linkHost.length > 0) {
-            for (const peer of peers.value) {
-              if (normalizeHost(peer.ipAddress) === linkHost) {
-                set.add(peer.deviceId)
-              }
-            }
-          }
-          return set
-        }, new Set<string>())
-    )
-  )
-
-  /** Peers with application-level link ready (UI green / chat gating). */
-  const appReadyDeviceIds = computed(() =>
-    Array.from(
-      runtime.openTransportLinks.value
-        .filter((link) => link.transport === 'ready' && link.app === 'connected')
-        .reduce((set, link) => {
-          if (typeof link.deviceId === 'string' && link.deviceId.length > 0) {
-            set.add(link.deviceId)
-          }
-          const linkHost = normalizeHost(link.host)
-          if (linkHost.length > 0) {
-            for (const peer of peers.value) {
-              if (normalizeHost(peer.ipAddress) === linkHost) {
-                set.add(peer.deviceId)
-              }
-            }
-          }
-          return set
-        }, new Set<string>())
-    )
   )
 
   const openTransportLinks = computed(() => [...runtime.openTransportLinks.value])
@@ -222,21 +168,19 @@ export function useTransport() {
     return connected?.deviceId
   }
 
-  async function sendToDevice(deviceId: string, message: SynraTransportOutgoing): Promise<void> {
-    const targetDeviceId = await resolveTargetDeviceId(deviceId)
-    if (!targetDeviceId) {
-      throw new Error(`Device ${deviceId} is not connected.`)
+  async function sendMessageToReadyDevice(input: SendMessageToReadyDeviceInput): Promise<void> {
+    const readyLink = findTransportReadyLinkByPeer(input.deviceId)
+    if (!readyLink?.deviceId) {
+      throw new Error(`Device ${input.deviceId} is not ready for sending.`)
     }
-    const requestId = crypto.randomUUID()
     await runtime.sendMessage({
-      requestId,
-      sourceDeviceId: 'local-device',
-      targetDeviceId,
-      messageType: 'custom.chat.text',
-      payload: {
-        channel: message.channel ?? 'default',
-        body: message.payload
-      }
+      requestId: crypto.randomUUID(),
+      from: input.from ?? 'local-device',
+      target: input.deviceId,
+      replyRequestId: input.replyRequestId,
+      event: input.event,
+      payload: input.payload,
+      timestamp: input.timestamp
     })
   }
 
@@ -252,9 +196,9 @@ export function useTransport() {
         runtime
           .sendLanEvent({
             requestId: crypto.randomUUID(),
-            sourceDeviceId: 'local-device',
-            targetDeviceId: link.deviceId,
-            eventName: 'device.displayName.changed',
+            from: 'local-device',
+            target: link.deviceId,
+            event: DEVICE_DISPLAY_NAME_CHANGED_EVENT,
             payload: { deviceId: profile.deviceId, displayName: profile.displayName }
           })
           .catch(() => undefined)
@@ -262,11 +206,21 @@ export function useTransport() {
     )
   }
 
-  async function broadcast(message: SynraTransportOutgoing): Promise<void> {
+  async function broadcastMessage(input: TransportBroadcastMessageInput): Promise<void> {
     const failures: Array<{ deviceId: string; error: unknown }> = []
     const tasks = peers.value.map(async (peer) => {
       try {
-        await sendToDevice(peer.deviceId, message)
+        const targetDeviceId = await resolveTargetDeviceId(peer.deviceId)
+        if (!targetDeviceId) {
+          throw new Error(`Device ${peer.deviceId} is not connected.`)
+        }
+        await runtime.sendMessage({
+          requestId: crypto.randomUUID(),
+          from: input.from ?? 'local-device',
+          target: targetDeviceId,
+          event: input.event,
+          payload: input.payload
+        })
       } catch (error) {
         failures.push({ deviceId: peer.deviceId, error })
       }
@@ -282,23 +236,15 @@ export function useTransport() {
     }
   }
 
-  async function sendConnectionMessage(input: {
-    requestId: string
-    sourceDeviceId: string
-    targetDeviceId: string
-    replyToRequestId?: string
-    messageType: SynraMessageType
-    payload: unknown
-    messageId?: string
-  }): Promise<void> {
+  async function sendConnectionMessage(input: SynraConnectionSendInput): Promise<void> {
     await runtime.sendMessage({
       requestId: input.requestId,
-      sourceDeviceId: input.sourceDeviceId,
-      targetDeviceId: input.targetDeviceId,
-      replyToRequestId: input.replyToRequestId,
-      messageType: input.messageType,
+      from: input.from,
+      target: input.target,
+      replyRequestId: input.replyRequestId,
+      event: input.event,
       payload: input.payload,
-      messageId: input.messageId
+      timestamp: input.timestamp
     })
   }
 
@@ -313,38 +259,8 @@ export function useTransport() {
     return runtime.onMessage(handler, filter)
   }
 
-  function onMessage(
-    handler: (message: SynraTransportIncoming) => void | Promise<void>
-  ): () => void {
-    const unsubscribe = runtime.onMessage((message) => {
-      if (message.messageType !== 'custom.chat.text') {
-        return
-      }
-      const payload =
-        message.payload && typeof message.payload === 'object'
-          ? (message.payload as { channel?: unknown; body?: unknown })
-          : {}
-      const channel = typeof payload.channel === 'string' ? payload.channel : 'default'
-      const body = 'body' in payload ? payload.body : message.payload
-      void Promise.resolve(
-        handler({
-          fromDeviceId: message.sourceDeviceId,
-          requestId: message.requestId,
-          channel,
-          payload: body,
-          receivedAt: message.timestamp
-        })
-      )
-    })
-    return () => {
-      unsubscribe()
-    }
-  }
-
   return {
     peers,
-    transportReadyDeviceIds,
-    appReadyDeviceIds,
     openTransportLinks,
     scanState: runtime.scanState,
     loading: runtime.loading,
@@ -354,12 +270,11 @@ export function useTransport() {
     connectToDevice,
     connectToDeviceAt,
     disconnectDevice,
-    sendToDevice,
+    sendMessageToReadyDevice,
     broadcastDeviceProfileToOpenTransportLinks,
-    broadcast,
+    broadcastMessage,
     sendConnectionMessage,
     sendLanEvent,
-    onMessage,
     onSynraMessage
   }
 }

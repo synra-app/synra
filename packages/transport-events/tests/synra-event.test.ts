@@ -17,16 +17,16 @@ describe('createSynraEvent + dispatchSynraWireEvent', () => {
     clearSynraWireEventRegistryForTests()
     let seen: string | undefined
     createSynraEvent({
-      eventName: 'test.evt',
+      event: 'test.evt',
       handlers: synraHandlersAllPlatforms((ctx) => {
         seen = ctx.requestId
       })
     })
     await dispatchSynraWireEvent({
-      eventName: 'test.evt',
+      event: 'test.evt',
       requestId: 'rid-1',
-      sourceDeviceId: 'a',
-      targetDeviceId: 'b',
+      from: 'a',
+      target: 'b',
       payload: {},
       transport: 'tcp'
     })
@@ -39,10 +39,10 @@ describe('createSynraEvent + dispatchSynraWireEvent', () => {
     clearSynraWireEventRegistryForTests()
     await expect(
       dispatchSynraWireEvent({
-        eventName: 'missing',
+        event: 'missing',
         requestId: 'r',
-        sourceDeviceId: 'a',
-        targetDeviceId: 'b',
+        from: 'a',
+        target: 'b',
         payload: null,
         transport: 'tcp'
       })

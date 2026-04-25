@@ -108,24 +108,24 @@ export function createTransportOperationsModule(options: {
 
   async function sendMessage(input: SynraConnectionSendInput): Promise<void> {
     try {
-      openLinksBook.touchLinkActivity(input.targetDeviceId, Date.now(), 'outbound')
+      openLinksBook.touchLinkActivity(input.target, Date.now(), 'outbound')
       await adapter.sendMessage({
         requestId: input.requestId,
-        sourceDeviceId: input.sourceDeviceId,
-        targetDeviceId: input.targetDeviceId,
-        replyToRequestId: input.replyToRequestId,
-        messageId: input.messageId,
-        messageType: input.messageType,
-        payload: input.payload
+        event: input.event,
+        target: input.target,
+        from: input.from,
+        replyRequestId: input.replyRequestId,
+        payload: input.payload,
+        timestamp: input.timestamp
       })
       error.value = null
     } catch (unknownError) {
       if (isTransportNotOpenFailure(unknownError)) {
         const now = Date.now()
-        openLinksBook.markTransportDead(input.targetDeviceId, now)
+        openLinksBook.markTransportDead(input.target, now)
         if (
           !primaryTransportState.value.deviceId ||
-          primaryTransportState.value.deviceId === input.targetDeviceId
+          primaryTransportState.value.deviceId === input.target
         ) {
           setPrimaryTransportStateWithTransitionLog(
             primaryTransportState,
@@ -148,25 +148,24 @@ export function createTransportOperationsModule(options: {
 
   async function sendLanEvent(input: SynraLanWireSendInput): Promise<void> {
     try {
-      openLinksBook.touchLinkActivity(input.targetDeviceId, Date.now(), 'outbound')
+      openLinksBook.touchLinkActivity(input.target, Date.now(), 'outbound')
       await adapter.sendLanEvent({
         requestId: input.requestId,
-        sourceDeviceId: input.sourceDeviceId,
-        targetDeviceId: input.targetDeviceId,
-        replyToRequestId: input.replyToRequestId,
-        eventName: input.eventName,
+        event: input.event,
+        target: input.target,
+        from: input.from,
+        replyRequestId: input.replyRequestId,
         payload: input.payload,
-        eventId: input.eventId,
-        schemaVersion: input.schemaVersion
+        timestamp: input.timestamp
       })
       error.value = null
     } catch (unknownError) {
       if (isTransportNotOpenFailure(unknownError)) {
         const now = Date.now()
-        openLinksBook.markTransportDead(input.targetDeviceId, now)
+        openLinksBook.markTransportDead(input.target, now)
         if (
           !primaryTransportState.value.deviceId ||
-          primaryTransportState.value.deviceId === input.targetDeviceId
+          primaryTransportState.value.deviceId === input.target
         ) {
           setPrimaryTransportStateWithTransitionLog(
             primaryTransportState,

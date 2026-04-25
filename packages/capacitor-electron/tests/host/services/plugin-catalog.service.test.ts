@@ -14,11 +14,11 @@ describe('host/services/plugin-catalog.service', () => {
         builtin: boolean
       }
     } = {
-      id: 'github-open',
+      id: 'catalog-fixture',
       version: '0.1.0',
       meta: {
-        packageName: 'synra-plugin-github-open',
-        displayName: 'GitHub Open',
+        packageName: 'synra-plugin-catalog-fixture',
+        displayName: 'Catalog Fixture',
         defaultPage: 'home',
         builtin: true
       },
@@ -32,7 +32,7 @@ describe('host/services/plugin-catalog.service', () => {
         return {
           ok: true as const,
           actionId: 'a1',
-          handledBy: 'github-open',
+          handledBy: 'catalog-fixture',
           durationMs: 1
         }
       }
@@ -56,14 +56,14 @@ describe('host/services/plugin-catalog.service', () => {
           packageName: '@synra-plugin/chat'
         },
         {
-          pluginId: 'github-open',
+          pluginId: 'catalog-fixture',
           version: '0.1.0',
-          displayName: 'GitHub Open',
+          displayName: 'Catalog Fixture',
           status: 'installed',
           builtin: true,
           defaultPage: 'home',
           icon: undefined,
-          packageName: 'synra-plugin-github-open'
+          packageName: 'synra-plugin-catalog-fixture'
         }
       ])
     )
