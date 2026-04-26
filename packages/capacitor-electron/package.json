@@ -44,7 +44,8 @@
     "@synra/capacitor-preferences": "workspace:*",
     "@synra/plugin-sdk": "workspace:*",
     "@synra/protocol": "workspace:*",
-    "bonjour-service": "catalog:"
+    "@synra/utils": "workspace:*",
+    "bonjour-service": "catalog:electron"
   },
   "devDependencies": {
     "@types/node": "catalog:types",

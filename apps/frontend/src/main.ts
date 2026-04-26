@@ -1,5 +1,6 @@
 import 'uno.css'
 import './styles/main.scss'
+import { useLogger } from '@synra/hooks'
 import { createPinia } from 'pinia'
 import { createApp, shallowRef } from 'vue'
 import { createRouter, createWebHistory } from 'vue-router'
@@ -26,9 +27,10 @@ app.use(router)
 const pairingProtocolHolder = shallowRef<PairingProtocolContext | null>(null)
 app.provide(PAIRING_PROTOCOL_KEY, pairingProtocolHolder)
 setupSynraRuntime(pinia, pairingProtocolHolder)
+const { tcpLogger } = useLogger()
 
 await initializePluginHost()
 
-console.log('frontend main')
+tcpLogger.info('frontend main')
 
 app.mount('#app')

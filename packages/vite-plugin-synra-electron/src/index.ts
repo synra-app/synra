@@ -2,7 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { access } from 'node:fs/promises'
 import { createInterface, type Interface as ReadlineInterface } from 'node:readline'
 import { setTimeout as delay } from 'node:timers/promises'
-import { styleText } from 'node:util'
+import { createConsola } from 'consola'
 
 type SpawnCommand = {
   command: string
@@ -11,23 +11,8 @@ type SpawnCommand = {
   env?: NodeJS.ProcessEnv
 }
 
-const TAG_STYLES: Readonly<Record<string, Parameters<typeof styleText>[0]>> = {
-  prebuild: 'cyan',
-  frontend: 'green',
-  'electron-build': 'magenta',
-  electron: 'blue',
-  error: 'red',
-  info: 'dim'
-}
-
-const DEFAULT_TAG_STYLES: ReadonlyArray<Parameters<typeof styleText>[0]> = [
-  'cyan',
-  'green',
-  'magenta',
-  'blue',
-  'yellow'
-]
 const LEADING_TAG_RE = /^\s*\[[^\]]+\]\s/
+const devLogger = createConsola({ level: 4 })
 
 function stripLeadingAnsi(text: string): string {
   let cursor = 0
@@ -42,23 +27,21 @@ function stripLeadingAnsi(text: string): string {
   return text.slice(cursor)
 }
 
-function getTagStyle(tag: string): Parameters<typeof styleText>[0] {
-  const mappedStyle = TAG_STYLES[tag]
-  if (mappedStyle) {
-    return mappedStyle
-  }
-
-  const hash = Array.from(tag).reduce((acc, char) => acc + char.charCodeAt(0), 0)
-  return DEFAULT_TAG_STYLES[hash % DEFAULT_TAG_STYLES.length] ?? 'white'
+function resolveTag(tag: string): string {
+  return `synra:dev:${tag}`
 }
 
 function formatTag(tag: string): string {
-  return styleText(getTagStyle(tag), `[${tag}]`)
+  return `[${resolveTag(tag)}]`
 }
 
 function logWithTag(tag: string, message: string, type: 'stdout' | 'stderr' = 'stdout'): void {
-  const stream = type === 'stderr' ? process.stderr : process.stdout
-  stream.write(`${formatTag(tag)} ${message}\n`)
+  const logger = devLogger.withTag(resolveTag(tag))
+  if (type === 'stderr' || tag === 'error') {
+    logger.error(message)
+    return
+  }
+  logger.info(message)
 }
 
 function pipeWithTag(
@@ -73,12 +56,18 @@ function pipeWithTag(
     const text = String(chunk)
     const prefix = `${formatTag(tag)} `
     const lines = text.split(/(\r?\n)/)
+    let hasPrefixedLine = false
     const taggedText = lines
       .map((segment) => {
         if (segment === '\n' || segment === '\r\n' || segment.length === 0) {
           return segment
         }
 
+        if (hasPrefixedLine) {
+          return segment
+        }
+
+        hasPrefixedLine = true
         // Skip adding parent tag if child already emits "[tag]" prefix.
         if (LEADING_TAG_RE.test(stripLeadingAnsi(segment))) {
           return segment

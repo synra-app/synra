@@ -4,6 +4,7 @@ import { createServer, type Server, type Socket } from 'node:net'
 import { networkInterfaces } from 'node:os'
 import { Bonjour, type Service as BonjourService } from 'bonjour-service'
 import { isLanWireEventName } from '@synra/protocol'
+import { createLogger } from '@synra/utils'
 import type {
   DeviceTransportSendLanEventOptions,
   DeviceTransportSnapshot,
@@ -53,6 +54,7 @@ type InboundHostTransportOptions = {
 const UDP_OFFLINE_ANNOUNCEMENT_TYPE = 'offline'
 const DISCOVERY_APP_ID = 'synra'
 const DISCOVERY_PROTOCOL_VERSION = '1.0'
+const tcpLogger = createLogger('tcp')
 
 export interface InboundHostTransport {
   start(): Promise<void>
@@ -194,6 +196,16 @@ export function createInboundHostTransport(
         resolve()
       })
     })
+    if (frame.event !== DEVICE_TCP_HEARTBEAT_EVENT) {
+      tcpLogger.info('send', {
+        event: frame.event,
+        requestId: frame.requestId,
+        from: frame.from,
+        target: frame.target,
+        replyRequestId: frame.replyRequestId,
+        timestamp: frame.timestamp
+      })
+    }
   }
 
   const removeBySocket = (socket: Socket, reason: string) => {
@@ -237,6 +249,16 @@ export function createInboundHostTransport(
 
   // SYNRA-COMM::TCP::RECEIVE::INBOUND_RECV_LOOP
   const handleFrame = async (socket: Socket, frame: LanFrame): Promise<void> => {
+    if (frame.event !== DEVICE_TCP_HEARTBEAT_EVENT) {
+      tcpLogger.info('recv', {
+        event: frame.event,
+        requestId: frame.requestId,
+        from: frame.from,
+        target: frame.target,
+        replyRequestId: frame.replyRequestId,
+        timestamp: frame.timestamp
+      })
+    }
     // SYNRA-COMM::DEVICE_HANDSHAKE::CONNECT::INBOUND_ACCEPT
     if (frame.event === DEVICE_TCP_CONNECT_EVENT) {
       const payload =
@@ -439,14 +461,6 @@ export function createInboundHostTransport(
           return
         }
         for (const frame of codec.decodeChunk(chunk)) {
-          console.info('[tcp-message-recv]', {
-            event: frame.event,
-            requestId: frame.requestId,
-            from: frame.from,
-            target: frame.target,
-            replyRequestId: frame.replyRequestId,
-            timestamp: frame.timestamp
-          })
           void handleFrame(socket, frame).catch((error: unknown) => {
             options.eventBus.publish({
               type: 'transport.error',

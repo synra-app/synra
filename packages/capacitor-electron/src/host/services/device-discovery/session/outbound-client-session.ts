@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { Socket } from 'node:net'
 import { isLanWireEventName } from '@synra/protocol'
+import { createLogger } from '@synra/utils'
 import { BridgeError } from '../../../../shared/errors/bridge-error'
 import { BRIDGE_ERROR_CODES } from '../../../../shared/errors/codes'
 import type {
@@ -75,6 +76,7 @@ type ConnectAckResult = {
   remoteDeviceId?: string
   connectAckPayload?: Record<string, unknown>
 }
+const tcpLogger = createLogger('tcp')
 
 function isUuidLike(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
@@ -143,6 +145,16 @@ export function createOutboundClientTransport(
         resolve()
       })
     })
+    if (frame.event !== DEVICE_TCP_HEARTBEAT_EVENT) {
+      tcpLogger.info('send', {
+        event: frame.event,
+        requestId: frame.requestId,
+        from: frame.from,
+        target: frame.target,
+        replyRequestId: frame.replyRequestId,
+        timestamp: frame.timestamp
+      })
+    }
   }
 
   const isControlEvent = (event: string): boolean =>
@@ -156,6 +168,16 @@ export function createOutboundClientTransport(
 
   // SYNRA-COMM::TCP::RECEIVE::OUTBOUND_RECV_LOOP
   const handleFrame = (frame: LanFrame) => {
+    if (frame.event !== DEVICE_TCP_HEARTBEAT_EVENT) {
+      tcpLogger.info('recv', {
+        event: frame.event,
+        requestId: frame.requestId,
+        from: frame.from,
+        target: frame.target,
+        replyRequestId: frame.replyRequestId,
+        timestamp: frame.timestamp
+      })
+    }
     if (frame.event === DEVICE_TCP_CONNECT_ACK_EVENT && resolveConnect && frame.requestId) {
       const payload =
         frame.payload && typeof frame.payload === 'object'
@@ -265,15 +287,6 @@ export function createOutboundClientTransport(
         return
       }
       for (const frame of codec.decodeChunk(chunk)) {
-        console.info('[tcp-message-recv]', {
-          deviceId: state.deviceId,
-          event: frame.event,
-          requestId: frame.requestId,
-          from: frame.from,
-          target: frame.target,
-          replyRequestId: frame.replyRequestId,
-          timestamp: frame.timestamp
-        })
         handleFrame(frame)
       }
     })

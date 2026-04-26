@@ -1,4 +1,5 @@
 export { useTransport, type ConnectToDeviceOptions } from './hooks/use-transport'
+export { useLogger } from './hooks/use-logger'
 export {
   DEVICE_PROFILE_UPDATED_MESSAGE_TYPE,
   type DeviceProfileUpdatedPayload

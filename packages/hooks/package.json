@@ -33,6 +33,7 @@
     "@synra/capacitor-preferences": "workspace:*",
     "@synra/protocol": "workspace:*",
     "@synra/transport-events": "workspace:*",
+    "@synra/utils": "workspace:*",
     "vue": "catalog:vue"
   },
   "devDependencies": {

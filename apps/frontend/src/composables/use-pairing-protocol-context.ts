@@ -12,7 +12,7 @@ import {
   DEVICE_PAIRING_RESPONSE_EVENT,
   DEVICE_PAIRING_UNPAIR_REQUIRED_EVENT
 } from '@synra/protocol'
-import { setPairAwaitingAccept, setPairedDeviceConnecting } from '@synra/hooks'
+import { setPairAwaitingAccept, setPairedDeviceConnecting, useLogger } from '@synra/hooks'
 import { consumePairingOutbound } from '../lib/pairing-outbound-pending'
 import { removePairedDeviceRecord, upsertPairedDeviceRecord } from '../lib/paired-devices-storage'
 import { isPairRequestPayload, type PairRequestPayload } from '../lib/pair-protocol'
@@ -45,6 +45,7 @@ export function usePairingProtocolContext(): ShallowRef<PairingProtocolContext |
 
 export function createPairingProtocolContext(pinia: Pinia): PairingProtocolContext {
   const pairingStore = usePairingStore(pinia)
+  const { tcpLogger } = useLogger()
 
   async function unpairLocalOnly(deviceId: string, reason: string): Promise<void> {
     pairingStore.clearIncomingIfRelated(deviceId)
@@ -59,6 +60,7 @@ export function createPairingProtocolContext(pinia: Pinia): PairingProtocolConte
     createSynraEvent({
       event: DEVICE_PAIRING_REQUEST_EVENT,
       handlers: synraHandlersAllPlatforms((ctx: SynraWireEventContext) => {
+        tcpLogger.info('recv', ctx)
         const wirePayload = ctx.payload
         if (pairingStore.hasOpenIncoming()) {
           return
@@ -80,6 +82,7 @@ export function createPairingProtocolContext(pinia: Pinia): PairingProtocolConte
     createSynraEvent({
       event: DEVICE_PAIRING_RESPONSE_EVENT,
       handlers: synraHandlersAllPlatforms((ctx: SynraWireEventContext) => {
+        tcpLogger.info('recv', ctx)
         const parsed = parsePairingResponsePayload(ctx.payload)
         if (!parsed) {
           return
@@ -132,6 +135,7 @@ export function createPairingProtocolContext(pinia: Pinia): PairingProtocolConte
     createSynraEvent({
       event: DEVICE_PAIRING_PEER_RESET_EVENT,
       handlers: synraHandlersAllPlatforms(async (ctx: SynraWireEventContext) => {
+        tcpLogger.info('recv', ctx)
         const parsed = parsePairingPeerResetPayload(ctx.payload)
         if (!parsed) {
           return
@@ -143,6 +147,7 @@ export function createPairingProtocolContext(pinia: Pinia): PairingProtocolConte
     createSynraEvent({
       event: DEVICE_PAIRING_UNPAIR_REQUIRED_EVENT,
       handlers: synraHandlersAllPlatforms(async (ctx: SynraWireEventContext) => {
+        tcpLogger.info('recv', ctx)
         const deviceId = ctx.from
         if (!deviceId) {
           return

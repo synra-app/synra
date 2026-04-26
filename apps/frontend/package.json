@@ -22,6 +22,7 @@
     "@synra/protocol": "workspace:*",
     "@synra/transport-events": "workspace:*",
     "pinia": "^3.0.4",
+    "@synra/utils": "workspace:*",
     "vue": "catalog:vue",
     "vue-router": "catalog:vue"
   },

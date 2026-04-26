@@ -1,5 +1,4 @@
 import { join, resolve } from 'node:path'
-import { styleText } from 'node:util'
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { BRIDGE_HOST_EVENT_CHANNEL, setupBridgeMainRuntime } from './bridge/main'
 import type {
@@ -9,6 +8,7 @@ import type {
   DeviceTransportSendLanEventOptions,
   DeviceTransportSendMessageOptions
 } from '@synra/capacitor-electron'
+import { createLogger } from '@synra/utils'
 
 type MainHooksBridge = {
   startDiscovery: (options?: DeviceDiscoveryStartOptions) => Promise<unknown>
@@ -25,13 +25,7 @@ type MainHooksGlobal = typeof globalThis & {
   __synraHooksMainBridge?: MainHooksBridge
 }
 
-const TAG_STYLES: Readonly<Record<string, Parameters<typeof styleText>[0]>> = {
-  'electron-main': 'blue',
-  'renderer:0': 'green',
-  'renderer:1': 'yellow',
-  'renderer:2': 'red',
-  'renderer:3': 'magenta'
-}
+const mainLogger = createLogger('electron-main')
 
 const WINDOW_CONTROL_CHANNELS = {
   minimize: 'synra:window:minimize',
@@ -43,19 +37,6 @@ const WINDOW_CONTROL_CHANNELS = {
 
 let stopDiscoveryOnQuit: (() => Promise<unknown>) | undefined
 let isQuittingAfterCleanup = false
-
-function styleTag(tag: string): string {
-  const style = TAG_STYLES[tag] ?? 'cyan'
-  return styleText(style, `[${tag}]`)
-}
-
-function logWithTag(tag: string, ...args: unknown[]): void {
-  console.log(styleTag(tag), ...args)
-}
-
-function errorWithTag(tag: string, ...args: unknown[]): void {
-  console.error(styleTag(tag), ...args)
-}
 
 function buildWindowState(window: BrowserWindow): { maximized: boolean; focused: boolean } {
   return {
@@ -104,27 +85,23 @@ function createMainWindow(): BrowserWindow {
   }
 
   mainWindow.webContents.on('preload-error', (_event, preloadPath, error) => {
-    errorWithTag('electron-main', 'preload-error:', preloadPath, error)
+    mainLogger.error('preload-error:', preloadPath, error)
   })
 
   mainWindow.webContents.on('did-finish-load', () => {
     void mainWindow.webContents
       .executeJavaScript('Boolean(window.__synraCapElectron && window.__synraCapElectron.invoke)')
       .then((available) => {
-        logWithTag('electron-main', 'bridge available:', available)
-        logWithTag(
-          'electron-main',
-          'renderer load completed in',
-          `${Date.now() - startupBeginAt}ms`
-        )
+        mainLogger.info('bridge available:', available)
+        mainLogger.info('renderer load completed in', `${Date.now() - startupBeginAt}ms`)
       })
       .catch((error) => {
-        errorWithTag('electron-main', 'bridge probe failed:', error)
+        mainLogger.error('bridge probe failed:', error)
       })
   })
 
   mainWindow.once('ready-to-show', () => {
-    logWithTag('electron-main', 'window ready-to-show in', `${Date.now() - startupBeginAt}ms`)
+    mainLogger.success('window ready-to-show in', `${Date.now() - startupBeginAt}ms`)
     if (!mainWindow.isDestroyed()) {
       mainWindow.show()
       emitWindowState(mainWindow)
@@ -134,8 +111,7 @@ function createMainWindow(): BrowserWindow {
   mainWindow.webContents.on(
     'did-fail-load',
     (_event, errorCode, errorDescription, validatedURL) => {
-      errorWithTag(
-        'electron-main',
+      mainLogger.error(
         'did-fail-load:',
         `code=${String(errorCode)}`,
         errorDescription,
@@ -143,10 +119,6 @@ function createMainWindow(): BrowserWindow {
       )
     }
   )
-
-  mainWindow.webContents.on('console-message', (_event, level, message) => {
-    logWithTag(`renderer:${String(level)}`, message)
-  })
 
   registerWindowStateListeners(mainWindow)
 
