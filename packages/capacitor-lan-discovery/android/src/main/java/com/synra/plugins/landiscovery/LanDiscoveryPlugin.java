@@ -6,7 +6,6 @@ import com.getcapacitor.JSObject;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
-import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Enumeration;
@@ -79,7 +78,11 @@ public class LanDiscoveryPlugin {
         return array;
     }
 
-    void mergeCandidateDevices(List<String> ips, Set<String> manualHosts) {
+    void mergeCandidateDevices(
+        List<String> ips,
+        Set<String> manualHosts,
+        Map<String, String> sourceDeviceIdsByHost
+    ) {
         long now = System.currentTimeMillis();
         for (String host : ips) {
             if (host == null) {
@@ -89,7 +92,12 @@ public class LanDiscoveryPlugin {
             if (trimmed.isEmpty()) {
                 continue;
             }
-            String stableId = Objects.requireNonNull(LanDiscoveryIdUtils.canonicalLanDeviceId("synra-candidate:" + trimmed));
+            String sourceDeviceId = sourceDeviceIdsByHost.get(trimmed);
+            String stableId = Objects.requireNonNull(
+                LanDiscoveryIdUtils.canonicalLanDeviceId(
+                    sourceDeviceId != null && !sourceDeviceId.isBlank() ? sourceDeviceId : trimmed
+                )
+            );
             String source = manualHosts.contains(trimmed) ? "manual" : "mdns";
             this.devices.put(stableId, new DeviceRecord(stableId, trimmed, trimmed, source, false, null, null, now, now));
         }
@@ -144,9 +152,8 @@ public class LanDiscoveryPlugin {
                     }
 
                     String ipAddress = address.getHostAddress();
-                    String key = host + ":" + ipAddress;
                     result.add(new DeviceRecord(
-                        hashDeviceId(key),
+                        ipAddress,
                         host + " (" + networkInterface.getName() + ")",
                         ipAddress,
                         "mdns",
@@ -177,19 +184,4 @@ public class LanDiscoveryPlugin {
         }
         return host;
     }
-
-    private static String hashDeviceId(String value) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-1");
-            byte[] bytes = digest.digest(value.getBytes());
-            StringBuilder builder = new StringBuilder();
-            for (int i = 0; i < bytes.length && builder.length() < 12; i += 1) {
-                builder.append(String.format("%02x", bytes[i]));
-            }
-            return "device-" + builder;
-        } catch (Exception ignored) {
-            return "device-" + Math.abs(value.hashCode());
-        }
-    }
-
 }

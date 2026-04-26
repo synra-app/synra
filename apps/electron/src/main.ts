@@ -183,11 +183,11 @@ function registerCapacitorElectronBridge(): void {
     listDiscoveredDevices: () => runtime.deviceDiscoveryService.listDevices(),
     openTransport: (options) => runtime.connectionService.openTransport(options),
     closeTransport: (targetDeviceId) =>
-      runtime.connectionService.closeTransport({ targetDeviceId }),
+      runtime.connectionService.closeTransport({ target: targetDeviceId }),
     sendMessage: (options) => runtime.connectionService.sendMessage(options),
     sendLanEvent: (options) => runtime.connectionService.sendLanEvent(options),
     getTransportState: (targetDeviceId) =>
-      runtime.connectionService.getTransportState({ targetDeviceId }),
+      runtime.connectionService.getTransportState({ target: targetDeviceId }),
     onHostEvent(listener) {
       hostEventListeners.add(listener)
       return () => {

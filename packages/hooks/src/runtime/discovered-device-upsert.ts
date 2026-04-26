@@ -25,8 +25,7 @@ function fallbackDisplayNameForLanDeviceId(deviceId: string): string {
   if (trimmed.length === 0) {
     return 'Synra device'
   }
-  const tail = trimmed.startsWith('device-') ? trimmed.slice('device-'.length) : trimmed
-  const prefix = tail.slice(0, 6)
+  const prefix = trimmed.replace(/-/g, '').slice(0, 6)
   return prefix.length > 0 ? `Peer ${prefix}` : 'Synra device'
 }
 
@@ -38,18 +37,8 @@ function isPlaceholderName(value: string | undefined): boolean {
   return normalized.startsWith('peer ')
 }
 
-/** Prefer `device-` + hex (LAN id) when one side still has a raw instance UUID string. */
 function pickStableLanDeviceId(existing: DiscoveredDevice, incoming: DiscoveredDevice): string {
-  const a = existing.deviceId
-  const b = incoming.deviceId
-  const isLanHashed = (id: string) => id.startsWith('device-') && id.length >= 16
-  if (isLanHashed(a) && !isLanHashed(b)) {
-    return a
-  }
-  if (isLanHashed(b) && !isLanHashed(a)) {
-    return b
-  }
-  return existing.connectable && !incoming.connectable ? a : b
+  return existing.connectable && !incoming.connectable ? existing.deviceId : incoming.deviceId
 }
 
 function pickPreferredName(

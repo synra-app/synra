@@ -2,7 +2,6 @@ import { Capacitor } from '@capacitor/core'
 import type { DiscoveredDevice } from '@synra/capacitor-lan-discovery'
 import { ensureDeviceBasicInfo } from './device-basic-info'
 import { ensureDeviceInstanceUuid } from './device-instance-uuid'
-import { hashDeviceIdFromInstanceUuid } from './hash-device-id'
 import type { PairInitiatorProfile } from './pair-protocol'
 
 export async function buildLocalPairInitiatorProfile(
@@ -10,10 +9,9 @@ export async function buildLocalPairInitiatorProfile(
 ): Promise<PairInitiatorProfile> {
   const instanceUuid = await ensureDeviceInstanceUuid()
   const name = await ensureDeviceBasicInfo(instanceUuid)
-  const deviceId = await hashDeviceIdFromInstanceUuid(instanceUuid)
   const platform = Capacitor.getPlatform()
   return {
-    deviceId,
+    deviceId: instanceUuid,
     name,
     ipAddress: selfOnLan?.ipAddress ?? '',
     port: selfOnLan?.port,

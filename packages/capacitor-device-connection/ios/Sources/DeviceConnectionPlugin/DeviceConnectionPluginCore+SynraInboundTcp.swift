@@ -105,16 +105,20 @@ extension DeviceConnectionPluginCore {
             if wireEvent == self.deviceTcpConnectEvent {
                 let connectPayload = frame["payload"] as? [String: Any]
                 let from = connectPayload?["from"] as? String
+                let target = (frame["target"] as? String)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
                 let peerDisplayName = (connectPayload?["displayName"] as? String)?
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 let appOk = connectPayload?["appId"] as? String == self.appId
-                guard appOk, let from, !from.isEmpty else {
+                let localUuid = self.localDeviceUuid()
+                let targetValid = (target?.isEmpty == false) && target == localUuid
+                guard appOk, let from, !from.isEmpty, targetValid else {
                     self.sendFrame(
                         self.synraLanFrame(
                             type: self.legacyTypeError,
                             requestId: connectRequestId,
                             event: nil,
-                            from: self.localDeviceUuid(),
+                            from: localUuid,
                             target: nil,
                             replyRequestId: nil,
                             payload: nil,
@@ -132,7 +136,7 @@ extension DeviceConnectionPluginCore {
                 }
                 var connectAckPayload: [String: Any] = [
                     "appId": self.appId,
-                    "from": self.localDeviceUuid(),
+                    "from": localUuid,
                     "displayName": self.localSynraDisplayName(),
                 ]
                 if let selfIp = self.primarySourceHostIpv4(), !selfIp.isEmpty {
@@ -148,7 +152,7 @@ extension DeviceConnectionPluginCore {
                         type: self.legacyTypeConnectAck,
                         requestId: connectRequestId,
                         event: nil,
-                        from: self.localDeviceUuid(),
+                        from: localUuid,
                         target: canonicalForAck,
                         replyRequestId: nil,
                         payload: connectAckPayload,

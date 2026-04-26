@@ -121,7 +121,8 @@ export function createDiscoveryModule(options: {
           const targets = probeable.map((row) => ({
             host: row.ipAddress,
             port: row.port ?? fallbackPort,
-            connectWirePayload: probeWire
+            connectWirePayload: probeWire,
+            target: row.deviceId
           }))
           try {
             const { results } = await adapter.probeSynraPeers({

@@ -1,4 +1,3 @@
-import CryptoKit
 import Darwin
 import Foundation
 import Network
@@ -71,6 +70,11 @@ public final class DeviceConnectionPluginCore: NSObject {
         closeTransport(target: nil)
 
         let dialCanonicalDeviceId = canonicalSynraDeviceId(fromWireSourceDeviceId: deviceId.trimmingCharacters(in: .whitespacesAndNewlines))
+        if dialCanonicalDeviceId.isEmpty {
+            outboundTransportState.state = "error"
+            outboundTransportState.lastError = "MISSING_DEVICE_ID"
+            return nil
+        }
 
         outboundTransportState.state = "connecting"
         outboundTransportState.deviceId = dialCanonicalDeviceId
@@ -427,21 +431,8 @@ public final class DeviceConnectionPluginCore: NSObject {
         return created
     }
 
-    internal func hashSynraDeviceId(_ value: String) -> String {
-        let digest = Insecure.SHA1.hash(data: Data(value.utf8))
-        let prefix = digest.map { String(format: "%02x", $0) }.joined().prefix(12)
-        return "device-\(prefix)"
-    }
-
     internal func canonicalSynraDeviceId(fromWireSourceDeviceId raw: String) -> String {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty {
-            return trimmed
-        }
-        if trimmed.hasPrefix("device-"), trimmed.count >= "device-".count + 8 {
-            return trimmed
-        }
-        return hashSynraDeviceId(trimmed)
+        raw.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     internal func fallbackPeerDisplayName(forCanonicalDeviceId id: String) -> String {
@@ -449,8 +440,7 @@ public final class DeviceConnectionPluginCore: NSObject {
         if trimmed.isEmpty {
             return "Synra device"
         }
-        let tail = trimmed.hasPrefix("device-") ? String(trimmed.dropFirst("device-".count)) : trimmed
-        let prefix = String(tail.prefix(6))
+        let prefix = String(trimmed.replacingOccurrences(of: "-", with: "").prefix(6))
         return prefix.isEmpty ? "Synra device" : "Peer \(prefix)"
     }
 

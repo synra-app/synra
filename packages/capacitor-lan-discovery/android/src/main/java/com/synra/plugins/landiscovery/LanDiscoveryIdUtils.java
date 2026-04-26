@@ -1,8 +1,5 @@
 package com.synra.plugins.landiscovery;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-
 final class LanDiscoveryIdUtils {
     private LanDiscoveryIdUtils() {}
 
@@ -34,30 +31,6 @@ final class LanDiscoveryIdUtils {
         if (raw == null) {
             return null;
         }
-        String trimmed = raw.trim();
-        if (trimmed.isEmpty()) {
-            return trimmed;
-        }
-        if (trimmed.startsWith("device-") && trimmed.length() >= "device-".length() + 8) {
-            return trimmed;
-        }
-        return hashDeviceId(trimmed);
-    }
-
-    private static String hashDeviceId(String value) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-1");
-            byte[] bytes = digest.digest(value.getBytes(StandardCharsets.UTF_8));
-            StringBuilder builder = new StringBuilder();
-            for (byte current : bytes) {
-                if (builder.length() >= 12) {
-                    break;
-                }
-                builder.append(String.format("%02x", current));
-            }
-            return "device-" + builder;
-        } catch (Exception ignored) {
-            return "device-" + Math.abs(value.hashCode());
-        }
+        return raw.trim();
     }
 }

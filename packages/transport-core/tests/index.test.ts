@@ -7,18 +7,17 @@ import {
   getRetryDelayMs
 } from '../src/index.ts'
 
-function createLegacyMessage(messageId: string) {
+function createLegacyMessage(requestId: string) {
   return {
     protocolVersion: '1.0' as const,
-    messageId,
-    requestId: `req-${messageId}`,
-    sessionId: 's1',
+    requestId,
+    replyRequestId: undefined,
+    event: 'action.selected' as const,
     traceId: 't1',
-    type: 'action.selected' as const,
     sentAt: Date.now(),
     ttlMs: 15_000,
-    fromDeviceId: 'mobile',
-    toDeviceId: 'pc',
+    from: 'mobile',
+    target: 'pc',
     payload: { actionId: 'a1' }
   }
 }
@@ -44,15 +43,15 @@ test('MessageDeduper no longer matches after expiration', () => {
 
 test('loopback transport delivers message to peer listener', async () => {
   const [sender, receiver] = createLoopbackTransportPair()
-  const seenMessageIds: string[] = []
+  const seenRequestIds: string[] = []
   receiver.onMessage((message) => {
-    seenMessageIds.push(message.messageId)
+    seenRequestIds.push(message.requestId)
   })
 
   const message = createLegacyMessage('m-loop-1')
 
   await sender.send(message)
-  expect(seenMessageIds).toEqual(['m-loop-1'])
+  expect(seenRequestIds).toEqual(['m-loop-1'])
 })
 
 test('loopback transport dedupes repeated message id', async () => {

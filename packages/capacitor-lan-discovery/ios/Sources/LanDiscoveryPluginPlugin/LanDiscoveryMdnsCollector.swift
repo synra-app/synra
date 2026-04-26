@@ -4,6 +4,7 @@ final class MdnsCollector: NSObject, NetServiceBrowserDelegate, NetServiceDelega
     private let browser = NetServiceBrowser()
     private var addresses = Set<String>()
     private var bonjourHostByIp: [String: String] = [:]
+    private var sourceDeviceIdByIp: [String: String] = [:]
     private let accessQueue = DispatchQueue(label: "com.synra.lan-discovery.mdns-collector")
     // NetService must be retained until resolve finishes; otherwise resolution never completes.
     private var pendingResolutions: [NetService] = []
@@ -18,6 +19,7 @@ final class MdnsCollector: NSObject, NetServiceBrowserDelegate, NetServiceDelega
         accessQueue.sync {
             addresses.removeAll()
             bonjourHostByIp.removeAll()
+            sourceDeviceIdByIp.removeAll()
         }
         #if DEBUG
             print("[lan-discovery] mdns browse type=\(serviceType) timeoutMs=\(timeoutMs)")
@@ -35,10 +37,10 @@ final class MdnsCollector: NSObject, NetServiceBrowserDelegate, NetServiceDelega
         pendingResolutions.removeAll()
     }
 
-    func collectedEntries() -> [(ip: String, bonjourName: String?)] {
+    func collectedEntries() -> [(ip: String, bonjourName: String?, sourceDeviceId: String?)] {
         accessQueue.sync {
             addresses.sorted().map { ip in
-                (ip, bonjourHostByIp[ip])
+                (ip, bonjourHostByIp[ip], sourceDeviceIdByIp[ip])
             }
         }
     }
@@ -106,6 +108,7 @@ final class MdnsCollector: NSObject, NetServiceBrowserDelegate, NetServiceDelega
         let rawHost = sender.hostName?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let bonjourLabel = Self.normalizeBonjourHostName(rawHost)
+        let sourceDeviceId = Self.extractSourceDeviceId(sender)
         accessQueue.async { [weak self] in
             guard let self else {
                 return
@@ -119,7 +122,28 @@ final class MdnsCollector: NSObject, NetServiceBrowserDelegate, NetServiceDelega
             } else {
                 self.bonjourHostByIp[chosen] = bonjourLabel
             }
+            if let sourceDeviceId, !sourceDeviceId.isEmpty {
+                self.sourceDeviceIdByIp[chosen] = sourceDeviceId
+            }
         }
+    }
+
+    private static func extractSourceDeviceId(_ service: NetService) -> String? {
+        guard let txtData = service.txtRecordData(),
+              !txtData.isEmpty
+        else {
+            return nil
+        }
+        let dictionary = NetService.dictionary(fromTXTRecord: txtData)
+        guard let raw = dictionary["sourceDeviceId"],
+              !raw.isEmpty,
+              let parsed = String(data: raw, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+              !parsed.isEmpty
+        else {
+            return nil
+        }
+        return parsed
     }
 
     // Human-facing label from Bonjour host: strip trailing dots and `.local`.

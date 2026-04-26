@@ -28,7 +28,10 @@ export function createUdpDiscoveryStrategy(): DiscoveryStrategy {
           }
           // UDP payload may omit displayName (e.g. iOS). Candidates are IPv4 + Synra appId only;
           // discovery requires a non-empty displayName from the Synra TCP connectAck (see probe-runner).
-          devicesByIp.set(normalizedIp, toProbeCandidate(normalizedIp, 'probe'))
+          devicesByIp.set(
+            normalizedIp,
+            toProbeCandidate(normalizedIp, 'probe', undefined, envelope.sourceDeviceId)
+          )
         })
         // SYNRA-COMM::UDP_DISCOVERY::SEND::DISCOVERY_BROADCAST
         socket.bind(() => {
@@ -48,7 +51,9 @@ export function createUdpDiscoveryStrategy(): DiscoveryStrategy {
 
 function parseUdpDiscoveryEnvelope(
   text: string
-): { displayName?: string; appId: string; protocolVersion?: string } | undefined {
+):
+  | { displayName?: string; appId: string; protocolVersion?: string; sourceDeviceId?: string }
+  | undefined {
   const payloadText = resolveUdpDiscoveryPayload(text)
   if (!payloadText) {
     return undefined
@@ -58,6 +63,7 @@ function parseUdpDiscoveryEnvelope(
       appId?: unknown
       protocolVersion?: unknown
       displayName?: unknown
+      sourceDeviceId?: unknown
     }
     if (parsed.appId !== 'synra') {
       return undefined
@@ -66,7 +72,11 @@ function parseUdpDiscoveryEnvelope(
       appId: 'synra',
       protocolVersion:
         typeof parsed.protocolVersion === 'string' ? parsed.protocolVersion : undefined,
-      displayName: typeof parsed.displayName === 'string' ? parsed.displayName : undefined
+      displayName: typeof parsed.displayName === 'string' ? parsed.displayName : undefined,
+      sourceDeviceId:
+        typeof parsed.sourceDeviceId === 'string' && parsed.sourceDeviceId.trim().length > 0
+          ? parsed.sourceDeviceId.trim()
+          : undefined
     }
   } catch {
     return undefined

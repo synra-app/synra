@@ -19,8 +19,17 @@ extension DeviceConnectionPluginCore {
             let portNum = (raw["port"] as? NSNumber)?.uint16Value
                 ?? UInt16(truncatingIfNeeded: (raw["port"] as? Int) ?? Int(synraDefaultTcpPort))
             let wireExtras = (raw["connectWirePayload"] as? [String: Any]) ?? [:]
+            let targetDeviceId =
+                (raw["target"] as? String)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
             results.append(
-                probeSynraOnePeer(host: host, port: portNum, timeoutMs: timeoutMs, wireExtras: wireExtras)
+                probeSynraOnePeer(
+                    host: host,
+                    port: portNum,
+                    timeoutMs: timeoutMs,
+                    wireExtras: wireExtras,
+                    targetDeviceId: targetDeviceId
+                )
             )
         }
         return results
@@ -30,7 +39,8 @@ extension DeviceConnectionPluginCore {
         host: String,
         port: UInt16,
         timeoutMs: Int,
-        wireExtras: [String: Any]
+        wireExtras: [String: Any],
+        targetDeviceId: String?
     ) -> [String: Any] {
         // SYNRA-COMM::DEVICE_HANDSHAKE::CONNECT::PROBE_SINGLE
         var base: [String: Any] = [
@@ -70,7 +80,7 @@ extension DeviceConnectionPluginCore {
                     requestId: connectRequestId,
                     event: nil,
                     from: self.localDeviceUuid(),
-                    target: nil,
+                    target: targetDeviceId,
                     replyRequestId: nil,
                     payload: probeConnect,
                     timestamp: nil,
@@ -105,14 +115,13 @@ extension DeviceConnectionPluginCore {
                         base["error"] = "MISSING_REMOTE_DEVICE_ID"
                         return
                     }
-                    let canonRemote = self.canonicalSynraDeviceId(fromWireSourceDeviceId: remoteRaw)
-                    let canonLocal = self.canonicalSynraDeviceId(fromWireSourceDeviceId: self.localDeviceUuid())
-                    if canonRemote == canonLocal {
+                    let localUuid = self.localDeviceUuid()
+                    if remoteRaw == localUuid {
                         base["error"] = "SELF_DEVICE"
                         return
                     }
                     base["ok"] = true
-                    base["wireSourceDeviceId"] = canonRemote
+                    base["wireSourceDeviceId"] = remoteRaw
                     let ackName = (payload["displayName"] as? String)?
                         .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                     if !ackName.isEmpty {

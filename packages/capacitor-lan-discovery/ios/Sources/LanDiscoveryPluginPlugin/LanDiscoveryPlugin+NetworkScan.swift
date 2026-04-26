@@ -2,15 +2,26 @@ import Foundation
 import Network
 
 extension LanDiscoveryPlugin {
+    struct DiscoveryCandidate {
+        let host: String
+        let sourceDeviceId: String?
+    }
+
     /// IPv4 candidates only (mDNS / UDP / manual). Synra TCP hello is performed by `DeviceConnection.probeSynraPeers` in JS.
-    func populateCandidateDevicesFromIps(ips: [String], port: Int, manualHosts: Set<String>) {
+    func populateCandidateDevices(
+        candidates: [DiscoveryCandidate],
+        port: Int,
+        manualHosts: Set<String>
+    ) {
         let checkedAt = now()
-        for host in ips {
-            let trimmed = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        for candidate in candidates {
+            let trimmed = candidate.host.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else {
                 continue
             }
-            let stableId = hashDeviceId("synra-candidate:\(trimmed)")
+            let sourceDeviceId = candidate.sourceDeviceId?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let stableId = sourceDeviceId?.isEmpty == false ? sourceDeviceId! : trimmed
             let source: String = manualHosts.contains(trimmed) ? "manual" : "mdns"
             devices[stableId] = DeviceRecord(
                 deviceId: stableId,
@@ -92,7 +103,7 @@ extension LanDiscoveryPlugin {
             }
             records.append(
                 DeviceRecord(
-                    deviceId: hashDeviceId("\(host):\(addressValue)"),
+                    deviceId: addressValue,
                     name: "\(host) (\(interfaceName))",
                     ipAddress: addressValue,
                     port: Int(defaultTcpPort),
@@ -115,25 +126,31 @@ extension LanDiscoveryPlugin {
     }
 
     /// Resolves `_synra._tcp` to candidate IPv4 addresses only (not devices until TCP helloAck).
-    func discoverByMdns(serviceType: String, timeoutMs: Int) -> [String] {
+    func discoverByMdns(serviceType: String, timeoutMs: Int) -> [DiscoveryCandidate] {
         let normalized = normalizeMdnsType(serviceType)
 
         // NetServiceBrowser delivers callbacks on the thread that started the search; that thread's
         // run loop must run. Never block it with Thread.sleep (common Capacitor path is main queue).
-        let runBrowse: () -> [String] = {
+        let runBrowse: () -> [DiscoveryCandidate] = {
             let collector = MdnsCollector()
             collector.start(serviceType: normalized, timeoutMs: timeoutMs)
-            return Self.orderedUniqueIpv4Addresses(collector.collectedEntries().map(\.ip))
+            return collector.collectedEntries().compactMap { entry in
+                let host = entry.ip.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !host.isEmpty else {
+                    return nil
+                }
+                return DiscoveryCandidate(host: host, sourceDeviceId: entry.sourceDeviceId)
+            }
         }
 
         if Thread.isMainThread {
             return runBrowse()
         }
-        var ips: [String] = []
+        var candidates: [DiscoveryCandidate] = []
         DispatchQueue.main.sync {
-            ips = runBrowse()
+            candidates = runBrowse()
         }
-        return ips
+        return candidates
     }
 
     func normalizeMdnsType(_ serviceType: String) -> String {
@@ -206,8 +223,8 @@ extension LanDiscoveryPlugin {
         return Array(out)
     }
 
-    func discoverByUdp(timeoutMs: Int) -> [String] {
-        var results = Set<String>()
+    func discoverByUdp(timeoutMs: Int) -> [DiscoveryCandidate] {
+        var results: [String: DiscoveryCandidate] = [:]
         let socketFd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)
         guard socketFd >= 0 else {
             return []
@@ -307,8 +324,9 @@ extension LanDiscoveryPlugin {
                 continue
             }
             let addr = String(cString: addressBuffer)
-            results.insert(addr)
+            let sourceDeviceId = object["sourceDeviceId"] as? String
+            results[addr] = DiscoveryCandidate(host: addr, sourceDeviceId: sourceDeviceId)
         }
-        return Array(results)
+        return Array(results.values)
     }
 }

@@ -16,7 +16,7 @@ import {
   UDP_DISCOVERY_MAGIC,
   UDP_DISCOVERY_PORT
 } from '../core/constants'
-import { hashDeviceId, localDisplayName } from '../core/device-identity'
+import { isWirePeerInMainPairedList, localDisplayName } from '../core/device-identity'
 import { normalizeRemoteIp, peerAddressFromSocket, pickPrimarySourceHostIp } from '../core/network'
 import type { HostEventBus } from '../events/host-event-bus'
 import {
@@ -46,6 +46,8 @@ type InboundHostTransportOptions = {
   eventBus: HostEventBus
   resolveLocalDeviceUuid: () => string
   port?: number
+  enableUdpResponder?: boolean
+  enableBonjour?: boolean
 }
 
 const UDP_OFFLINE_ANNOUNCEMENT_TYPE = 'offline'
@@ -79,19 +81,7 @@ function parseMdnsServiceType(serviceType?: string): { type: string; protocol: '
   return { type: 'synra', protocol: 'tcp' }
 }
 
-/** Stable wire `device-*` key for indexing this peer (connect `sourceDeviceId` may be UUID or wire id). */
-function canonicalPeerWireId(connectSourceDeviceId: string): string {
-  const trimmed = connectSourceDeviceId.trim()
-  if (!trimmed) {
-    return hashDeviceId('unknown')
-  }
-  if (trimmed.startsWith('device-')) {
-    return trimmed
-  }
-  return hashDeviceId(trimmed)
-}
-
-/** Resolve API / frame peer id to an open inbound link key (UUID → hash, or wire id as stored). */
+/** Resolve API / frame peer id to an open inbound link key (UUID identity). */
 function resolvePeerWireIdKey(links: Map<string, InboundTcpLink>, id: string): string | undefined {
   const trimmed = id.trim()
   if (!trimmed) {
@@ -100,9 +90,16 @@ function resolvePeerWireIdKey(links: Map<string, InboundTcpLink>, id: string): s
   if (links.has(trimmed)) {
     return trimmed
   }
-  const hashed = hashDeviceId(trimmed)
-  if (links.has(hashed)) {
-    return hashed
+  return undefined
+}
+
+function parseSynraConnectType(value: unknown): 'fresh' | 'paired' | undefined {
+  if (typeof value !== 'string') {
+    return undefined
+  }
+  const normalized = value.trim().toLowerCase()
+  if (normalized === 'fresh' || normalized === 'paired') {
+    return normalized
   }
   return undefined
 }
@@ -242,6 +239,8 @@ export function createInboundHostTransport(
         frame.payload && typeof frame.payload === 'object'
           ? (frame.payload as Record<string, unknown>)
           : {}
+      const localDeviceUuid = options.resolveLocalDeviceUuid().trim()
+      const targetUuid = typeof frame.target === 'string' ? frame.target.trim() : ''
       const remoteDeviceId =
         typeof payload.from === 'string' && payload.from.trim().length > 0
           ? payload.from.trim()
@@ -254,19 +253,24 @@ export function createInboundHostTransport(
           : undefined
       const incomingSynraConnectPayload: Record<string, unknown> = { ...payload }
       const appOk = payload.appId === 'synra'
-      if (!appOk || !remoteDeviceId) {
+      const targetValid =
+        targetUuid.length > 0 && localDeviceUuid.length > 0 && targetUuid === localDeviceUuid
+      if (!appOk || !remoteDeviceId || !targetValid) {
         await writeFrame(socket, {
           requestId: frame.requestId,
           event: DEVICE_TCP_ERROR_EVENT,
           from: options.resolveLocalDeviceUuid(),
-          target: canonicalPeerWireId(remoteDeviceId || 'unknown'),
+          target: remoteDeviceId || 'unknown',
           timestamp: Date.now(),
           payload: { code: 'CONNECT_INVALID' }
         }).catch(() => undefined)
         socket.end()
         return
       }
-      const peerWireId = canonicalPeerWireId(remoteDeviceId)
+      const peerWireId = remoteDeviceId
+      const hostListsPeerAsPaired = isWirePeerInMainPairedList(remoteDeviceId)
+      const incomingConnectType = parseSynraConnectType(payload.connectType)
+      const ackConnectType: 'fresh' | 'paired' = hostListsPeerAsPaired ? 'paired' : 'fresh'
       options.eventBus.publish({
         type: 'host.member.online',
         payload: {
@@ -289,9 +293,15 @@ export function createInboundHostTransport(
           appId: 'synra',
           from: options.resolveLocalDeviceUuid(),
           sourceHostIp: normalizeRemoteIp(socket.localAddress),
-          displayName: localDisplayName()
+          displayName: localDisplayName(),
+          connectType: ackConnectType,
+          hostListsPeerAsPaired
         }
       })
+      if (!hostListsPeerAsPaired && incomingConnectType === 'paired') {
+        socket.end()
+        return
+      }
       const existing = inboundLinksByPeerWireId.get(peerWireId)
       if (existing && existing.socket !== socket) {
         inboundLinkBySocket.delete(existing.socket)
@@ -488,7 +498,7 @@ export function createInboundHostTransport(
               type: 'host.member.offline',
               payload: {
                 sourceDeviceId: metadata.sourceDeviceId,
-                deviceId: hashDeviceId(metadata.sourceDeviceId),
+                deviceId: metadata.sourceDeviceId,
                 sourceHostIp:
                   typeof metadata.sourceHostIp === 'string' ? metadata.sourceHostIp : undefined
               },
@@ -576,8 +586,12 @@ export function createInboundHostTransport(
   return {
     async start() {
       await startTcpServer()
-      await startUdpResponder()
-      startBonjour()
+      if (options.enableUdpResponder !== false) {
+        await startUdpResponder()
+      }
+      if (options.enableBonjour !== false) {
+        startBonjour()
+      }
     },
     async stop() {
       await broadcastOfflineAnnouncement().catch(() => undefined)

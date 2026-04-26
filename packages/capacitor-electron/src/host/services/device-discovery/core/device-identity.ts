@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -24,18 +24,12 @@ function defaultDeviceNameFromUuid(uuid: string): string {
   return raw.length > 0 ? raw : 'device'
 }
 
-export function hashDeviceId(input: string): string {
-  return `device-${createHash('sha1').update(input).digest('hex').slice(0, 12)}`
-}
-
-/** Whether the Synra preferences store lists the peer (wire `sourceDeviceId`, UUID or `device-*`) as paired. */
+/** Whether the Synra preferences store lists the peer UUID as paired. */
 export function isWirePeerInMainPairedList(remoteWireSourceDeviceId: string): boolean {
   const trimmed = remoteWireSourceDeviceId.trim()
   if (!trimmed) {
     return false
   }
-  const hashed = hashDeviceId(trimmed)
-  const idsToMatch = new Set<string>([hashed, trimmed])
   for (const storePath of resolvePreferencesStorePaths()) {
     const preferencesService = createPreferencesService({ storePath })
     const raw = preferencesService.get(SYNRA_PAIRED_DEVICES_KEY)
@@ -45,7 +39,7 @@ export function isWirePeerInMainPairedList(remoteWireSourceDeviceId: string): bo
     const parsed = parsePairedDevicesPayload(raw)
     for (const item of parsed.items) {
       const id = item.deviceId.trim()
-      if (id.length > 0 && idsToMatch.has(id)) {
+      if (id.length > 0 && id === trimmed) {
         return true
       }
     }

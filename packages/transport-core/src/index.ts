@@ -59,24 +59,24 @@ export function getRetryDelayMs(
 }
 
 export class MessageDeduper {
-  private readonly expiresByMessageId = new Map<string, number>()
+  private readonly expiresByRequestId = new Map<string, number>()
 
   constructor(private readonly dedupeWindowMs: number = 3 * 60 * 1_000) {}
 
-  has(messageId: string, now: number = Date.now()): boolean {
+  has(requestId: string, now: number = Date.now()): boolean {
     this.cleanup(now)
-    return this.expiresByMessageId.has(messageId)
+    return this.expiresByRequestId.has(requestId)
   }
 
-  remember(messageId: string, now: number = Date.now()): void {
+  remember(requestId: string, now: number = Date.now()): void {
     this.cleanup(now)
-    this.expiresByMessageId.set(messageId, now + this.dedupeWindowMs)
+    this.expiresByRequestId.set(requestId, now + this.dedupeWindowMs)
   }
 
   private cleanup(now: number): void {
-    for (const [messageId, expiresAt] of this.expiresByMessageId.entries()) {
+    for (const [requestId, expiresAt] of this.expiresByRequestId.entries()) {
       if (expiresAt <= now) {
-        this.expiresByMessageId.delete(messageId)
+        this.expiresByRequestId.delete(requestId)
       }
     }
   }
@@ -133,11 +133,11 @@ export class LoopbackDeviceTransport implements DeviceTransport {
       )
     }
 
-    if (this.peerTransport.deduper.has(message.messageId)) {
+    if (this.peerTransport.deduper.has(message.requestId)) {
       return
     }
 
-    this.peerTransport.deduper.remember(message.messageId)
+    this.peerTransport.deduper.remember(message.requestId)
     await Promise.resolve(this.peerTransport.messageHandler(message))
   }
 

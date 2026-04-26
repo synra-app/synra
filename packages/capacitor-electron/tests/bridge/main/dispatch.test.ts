@@ -61,18 +61,17 @@ function createHandlers() {
       })),
       closeTransport: vi.fn(async () => ({
         success: true as const,
-        targetDeviceId: 'dev-1',
+        target: 'dev-1',
         transport: 'tcp' as const
       })),
       sendMessage: vi.fn(async () => ({
         success: true as const,
-        messageId: 'msg-1',
-        targetDeviceId: 'dev-1',
+        target: 'dev-1',
         transport: 'tcp' as const
       })),
       sendLanEvent: vi.fn(async () => ({
         success: true as const,
-        targetDeviceId: 'dev-1',
+        target: 'dev-1',
         transport: 'tcp' as const
       })),
       getTransportState: vi.fn(async () => ({
@@ -91,18 +90,17 @@ function createHandlers() {
       })),
       closeTransport: vi.fn(async () => ({
         success: true as const,
-        targetDeviceId: 'dev-1',
+        target: 'dev-1',
         transport: 'tcp' as const
       })),
       sendMessage: vi.fn(async () => ({
         success: true as const,
-        messageId: 'msg-1',
-        targetDeviceId: 'dev-1',
+        target: 'dev-1',
         transport: 'tcp' as const
       })),
       sendLanEvent: vi.fn(async () => ({
         success: true as const,
-        targetDeviceId: 'dev-1',
+        target: 'dev-1',
         transport: 'tcp' as const
       })),
       getTransportState: vi.fn(async () => ({
@@ -214,18 +212,17 @@ describe('bridge/main/dispatch', () => {
         })),
         closeTransport: vi.fn(async () => ({
           success: true as const,
-          targetDeviceId: 'dev-1',
+          target: 'dev-1',
           transport: 'tcp' as const
         })),
         sendMessage: vi.fn(async () => ({
           success: true as const,
-          messageId: 'msg-1',
-          targetDeviceId: 'dev-1',
+          target: 'dev-1',
           transport: 'tcp' as const
         })),
         sendLanEvent: vi.fn(async () => ({
           success: true as const,
-          targetDeviceId: 'dev-1',
+          target: 'dev-1',
           transport: 'tcp' as const
         })),
         getTransportState: vi.fn(async () => ({
@@ -244,18 +241,17 @@ describe('bridge/main/dispatch', () => {
         })),
         closeTransport: vi.fn(async () => ({
           success: true as const,
-          targetDeviceId: 'dev-1',
+          target: 'dev-1',
           transport: 'tcp' as const
         })),
         sendMessage: vi.fn(async () => ({
           success: true as const,
-          messageId: 'msg-1',
-          targetDeviceId: 'dev-1',
+          target: 'dev-1',
           transport: 'tcp' as const
         })),
         sendLanEvent: vi.fn(async () => ({
           success: true as const,
-          targetDeviceId: 'dev-1',
+          target: 'dev-1',
           transport: 'tcp' as const
         })),
         getTransportState: vi.fn(async () => ({

@@ -5,7 +5,6 @@ import { initSynraRuntimePlatform } from '@synra/transport-events'
 import { configureHooksRuntime } from '@synra/hooks'
 import { installElectronCapacitor } from '@synra/capacitor-electron/capacitor'
 import { ensureDeviceInstanceUuid } from '../lib/device-instance-uuid'
-import { hashDeviceIdFromInstanceUuid } from '../lib/hash-device-id'
 import { ensureDeviceBasicInfo } from '../lib/device-basic-info'
 import { isPairedDeviceExcludedFromDiscovery } from '../lib/discovery-paired-exclusion'
 import {
@@ -82,7 +81,17 @@ export function setupSynraRuntime(
       try {
         await ensureDeviceBasicInfo(deviceInstanceUuid)
       } catch {}
-      const localDiscoveryDeviceId = await hashDeviceIdFromInstanceUuid(deviceInstanceUuid)
+      const localDiscoveryDeviceId = deviceInstanceUuid
+      const downgradePairedToFresh = async (deviceId: string): Promise<void> => {
+        if (deviceId.trim().length === 0) {
+          return
+        }
+        if (!(await pairingStore.hasPairedDeviceStrict(deviceId))) {
+          return
+        }
+        await removePairedDeviceRecord(deviceId)
+        pairingStore.bumpPairedList()
+      }
       configureHooksRuntime({
         shouldExcludeDiscoveredDevice: (deviceId) => isPairedDeviceExcludedFromDiscovery(deviceId),
         localDiscoveryDeviceId,
@@ -105,11 +114,19 @@ export function setupSynraRuntime(
           if (ct !== 'fresh' || !event.deviceId) {
             return
           }
-          if (!(await pairingStore.hasPairedDeviceStrict(event.deviceId))) {
+          await downgradePairedToFresh(event.deviceId)
+        },
+        repairStalePairingAfterOutboundUnpairedAck: async (event) => {
+          const wire = event.connectAckPayload
+          const ct =
+            wire && typeof wire.connectType === 'string'
+              ? wire.connectType.trim().toLowerCase()
+              : ''
+          const unpairedHint = wire?.hostListsPeerAsPaired === false
+          if ((ct !== 'fresh' && !unpairedHint) || !event.deviceId) {
             return
           }
-          await removePairedDeviceRecord(event.deviceId)
-          pairingStore.bumpPairedList()
+          await downgradePairedToFresh(event.deviceId)
         }
       })
       await initializeRuntime()

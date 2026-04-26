@@ -60,6 +60,10 @@ export function mapTransportOpenedHostEvent(event: HostEvent): TransportOpenedEv
     payload.incomingSynraConnectPayload && typeof payload.incomingSynraConnectPayload === 'object'
       ? (payload.incomingSynraConnectPayload as Record<string, unknown>)
       : undefined
+  const connectAckPayload =
+    payload.connectAckPayload && typeof payload.connectAckPayload === 'object'
+      ? (payload.connectAckPayload as Record<string, unknown>)
+      : undefined
   return {
     deviceId: deviceId ?? '',
     direction,
@@ -67,6 +71,7 @@ export function mapTransportOpenedHostEvent(event: HostEvent): TransportOpenedEv
     port: Number.isFinite(portFromPayload) ? portFromPayload : undefined,
     displayName: displayName && displayName.length > 0 ? displayName : undefined,
     incomingSynraConnectPayload,
+    connectAckPayload,
     transport: event.transport ?? 'tcp'
   }
 }

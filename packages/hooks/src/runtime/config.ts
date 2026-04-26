@@ -4,7 +4,7 @@ import type { ConnectionRuntimeAdapter } from './adapter'
 export type HooksRuntimeOptions = {
   adapterFactory?: () => ConnectionRuntimeAdapter
   /**
-   * When set, devices with this LAN `deviceId` (hashed instance UUID) are never merged into the
+   * When set, devices with this LAN `deviceId` (instance UUID) are never merged into the
    * discovery list — avoids listing this host as its own peer. IP is not used for this check.
    */
   localDiscoveryDeviceId?: string
@@ -27,6 +27,11 @@ export type HooksRuntimeOptions = {
    * Used to drop stale paired rows and surface the peer in discovery UI.
    */
   repairStalePairingAfterInboundFreshConnect?: (event: TransportOpenedEvent) => void | Promise<void>
+  /**
+   * Outbound transport where peer `connectAck` indicates this host is no longer paired on the peer side.
+   * Used to downgrade local paired rows and keep both sides converged to fresh state.
+   */
+  repairStalePairingAfterOutboundUnpairedAck?: (event: TransportOpenedEvent) => void | Promise<void>
 }
 
 let configuredOptions: HooksRuntimeOptions = {}

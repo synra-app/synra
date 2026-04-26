@@ -1,4 +1,4 @@
-import { WebPlugin } from '@capacitor/core'
+import { WebPlugin, type ListenerCallback, type PluginListenerHandle } from '@capacitor/core'
 import type {
   LanDiscoveryPlugin,
   ListDiscoveredDevicesResult,
@@ -156,5 +156,30 @@ export class LanDiscoveryElectron extends WebPlugin implements LanDiscoveryPlugi
     this.ensureHostEventSubscription()
     const result = await this.invokeBridge('discovery.list', {})
     return toListResult(result)
+  }
+
+  addListener(
+    eventName: 'deviceFound',
+    listenerFunc: (event: { device: ListDiscoveredDevicesResult['devices'][number] }) => void
+  ): Promise<PluginListenerHandle>
+  addListener(
+    eventName: 'deviceUpdated',
+    listenerFunc: (event: { device: ListDiscoveredDevicesResult['devices'][number] }) => void
+  ): Promise<PluginListenerHandle>
+  addListener(
+    eventName: 'deviceLost',
+    listenerFunc: (event: { deviceId: string; ipAddress?: string }) => void
+  ): Promise<PluginListenerHandle>
+  addListener(
+    eventName: 'scanStateChanged',
+    listenerFunc: (event: { state: 'idle' | 'scanning' }) => void
+  ): Promise<PluginListenerHandle>
+  addListener(
+    eventName: 'deviceConnectableUpdated',
+    listenerFunc: (event: { device: ListDiscoveredDevicesResult['devices'][number] }) => void
+  ): Promise<PluginListenerHandle>
+  addListener(eventName: string, listenerFunc: ListenerCallback): Promise<PluginListenerHandle> {
+    this.ensureHostEventSubscription()
+    return super.addListener(eventName, listenerFunc)
   }
 }

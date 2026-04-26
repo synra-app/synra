@@ -34,6 +34,41 @@ describe('electron host event mappers', () => {
       port: 32100,
       displayName: 'Android',
       incomingSynraConnectPayload: undefined,
+      connectAckPayload: undefined,
+      transport: 'tcp'
+    })
+  })
+
+  test('maps transport.opened connectAck payload for outbound', () => {
+    const event: HostEvent = {
+      id: 8,
+      timestamp: Date.now(),
+      type: 'transport.opened',
+      deviceId: 'device-b',
+      payload: {
+        deviceId: 'device-b',
+        direction: 'outbound',
+        connectAckPayload: {
+          appId: 'synra',
+          connectType: 'fresh',
+          hostListsPeerAsPaired: false
+        }
+      },
+      transport: 'tcp'
+    }
+
+    expect(mapTransportOpenedHostEvent(event)).toEqual({
+      deviceId: 'device-b',
+      direction: 'outbound',
+      host: undefined,
+      port: undefined,
+      displayName: undefined,
+      incomingSynraConnectPayload: undefined,
+      connectAckPayload: {
+        appId: 'synra',
+        connectType: 'fresh',
+        hostListsPeerAsPaired: false
+      },
       transport: 'tcp'
     })
   })

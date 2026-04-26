@@ -6,7 +6,7 @@ import {
   DEFAULT_PROBE_TIMEOUT_MS,
   DEFAULT_TCP_PORT
 } from '../core/constants'
-import { hashDeviceId, localDisplayName } from '../core/device-identity'
+import { localDisplayName } from '../core/device-identity'
 import { pickPrimarySourceHostIp } from '../core/network'
 import {
   DEVICE_TCP_CONNECT_ACK_EVENT,
@@ -15,6 +15,10 @@ import {
   type LanFrame
 } from '../protocol/lan-frame.codec'
 import type { ProbeSocketRegistry } from './probe-socket-registry'
+
+function isUuidLike(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+}
 
 export type ProbeOptions = {
   port?: number
@@ -64,6 +68,7 @@ async function probeSingle(
   const socket = new Socket()
   const codec = new LengthPrefixedJsonCodec()
   const registryKey = `${device.ipAddress}:${port}`
+  const targetDeviceUuid = isUuidLike(device.deviceId) ? device.deviceId : undefined
 
   return new Promise<DiscoveredDevice>((resolve) => {
     const end = (
@@ -87,6 +92,10 @@ async function probeSingle(
       })
     }
     const timer = setTimeout(() => end(false, { connectCheckError: 'PROBE_TIMEOUT' }), timeoutMs)
+    if (!targetDeviceUuid) {
+      end(false, { connectCheckError: 'MISSING_TARGET_UUID' })
+      return
+    }
     const onProbeError = () => {
       end(false)
     }
@@ -117,7 +126,7 @@ async function probeSingle(
           options.probeSocketRegistry.register(registryKey, {
             socket,
             codec,
-            deviceId: peerDeviceId ? hashDeviceId(peerDeviceId) : device.deviceId,
+            deviceId: peerDeviceId ?? device.deviceId,
             displayName: ackDisplayName
           })
           socket.on('error', () => {
@@ -126,7 +135,7 @@ async function probeSingle(
           end(
             true,
             {
-              deviceId: peerDeviceId ? hashDeviceId(peerDeviceId) : device.deviceId,
+              deviceId: peerDeviceId ?? device.deviceId,
               name: ackDisplayName,
               port
             },
@@ -135,7 +144,7 @@ async function probeSingle(
           return
         }
         end(true, {
-          deviceId: peerDeviceId ? hashDeviceId(peerDeviceId) : device.deviceId,
+          deviceId: peerDeviceId ?? device.deviceId,
           name: ackDisplayName,
           port
         })
@@ -158,7 +167,7 @@ async function probeSingle(
       const connect: LanFrame = {
         requestId: randomUUID(),
         event: DEVICE_TCP_CONNECT_EVENT,
-        target: device.deviceId,
+        target: targetDeviceUuid,
         from: options.localDeviceId,
         timestamp: Date.now(),
         payload: connectPayload

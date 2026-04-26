@@ -32,35 +32,61 @@ extension LanDiscoveryPlugin {
         let discoveryTimeout = max(200, discoveryTimeoutMs?.intValue ?? defaultDiscoveryTimeoutMs)
         _ = subnetCidrs
 
-        var candidateIps: [String] = []
+        var candidateCandidates: [DiscoveryCandidate] = []
         var manualHosts = Set<String>()
         if includeMdns {
-            candidateIps.append(contentsOf: discoverByMdns(
+            candidateCandidates.append(contentsOf: discoverByMdns(
                 serviceType: mdnsServiceType ?? defaultMdnsServiceType,
                 timeoutMs: discoveryTimeout
             ))
         }
         if isHybrid, enableProbeFallback {
-            candidateIps.append(contentsOf: discoverByUdp(timeoutMs: discoveryTimeout))
+            candidateCandidates.append(contentsOf: discoverByUdp(timeoutMs: discoveryTimeout))
         }
         if includeManual {
             for raw in manualTargets {
                 let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !t.isEmpty {
-                    candidateIps.append(t)
+                    candidateCandidates.append(DiscoveryCandidate(host: t, sourceDeviceId: nil))
                     manualHosts.insert(t)
                 }
             }
         }
 
-        var uniqueCandidates = Self.orderedUniqueIpv4Addresses(candidateIps)
+        var dedupedByHost: [String: DiscoveryCandidate] = [:]
+        for candidate in candidateCandidates {
+            let host = candidate.host.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !host.isEmpty else {
+                continue
+            }
+            if let existing = dedupedByHost[host] {
+                let existingSource = existing.sourceDeviceId?.trimmingCharacters(
+                    in: .whitespacesAndNewlines
+                ) ?? ""
+                let incomingSource = candidate.sourceDeviceId?.trimmingCharacters(
+                    in: .whitespacesAndNewlines
+                ) ?? ""
+                if existingSource.isEmpty, !incomingSource.isEmpty {
+                    dedupedByHost[host] = candidate
+                }
+                continue
+            }
+            dedupedByHost[host] = candidate
+        }
+        var uniqueCandidates = Array(dedupedByHost.values)
         if let cap = maxProbeHosts?.intValue, cap > 0, uniqueCandidates.count > cap {
             uniqueCandidates = Array(uniqueCandidates.prefix(cap))
         }
-        uniqueCandidates = pruneSelfCandidateIps(uniqueCandidates, scanIncludeLoopback: includeLoopback)
+        let filteredHosts = Set(
+            pruneSelfCandidateIps(
+                uniqueCandidates.map(\.host),
+                scanIncludeLoopback: includeLoopback
+            )
+        )
+        uniqueCandidates = uniqueCandidates.filter { filteredHosts.contains($0.host) }
 
         let targetPort = Int(probePort?.uint16Value ?? defaultTcpPort)
-        populateCandidateDevicesFromIps(ips: uniqueCandidates, port: targetPort, manualHosts: manualHosts)
+        populateCandidateDevices(candidates: uniqueCandidates, port: targetPort, manualHosts: manualHosts)
         pruneSelfDevices(scanIncludeLoopback: includeLoopback)
 
         var result = listDevices()

@@ -16,7 +16,7 @@ import type {
   DeviceTransportSnapshot
 } from '../../../../shared/protocol/types'
 import { DEFAULT_ACK_TIMEOUT_MS, DEFAULT_HEARTBEAT_TIMEOUT_MS } from '../core/constants'
-import { hashDeviceId, localDisplayName } from '../core/device-identity'
+import { localDisplayName } from '../core/device-identity'
 import { pickPrimarySourceHostIp } from '../core/network'
 import type { HostEventBus } from '../events/host-event-bus'
 import type { ProbeSocketRegistry } from '../discovery/probe-socket-registry'
@@ -50,7 +50,6 @@ function buildDeviceAliases(deviceId: string | undefined): Set<string> {
   }
   const normalized = deviceId.trim()
   aliases.add(normalized)
-  aliases.add(hashDeviceId(normalized))
   return aliases
 }
 
@@ -74,6 +73,7 @@ export interface OutboundClientTransport {
 type ConnectAckResult = {
   displayName?: string
   remoteDeviceId?: string
+  connectAckPayload?: Record<string, unknown>
 }
 
 export function createOutboundClientTransport(
@@ -111,7 +111,7 @@ export function createOutboundClientTransport(
     if (remoteDeviceAliases.has(normalized)) {
       return true
     }
-    return remoteDeviceAliases.has(hashDeviceId(normalized))
+    return false
   }
 
   const publishTransportError = (code: string, payload: unknown) => {
@@ -165,7 +165,8 @@ export function createOutboundClientTransport(
         typeof payload.from === 'string' && payload.from.length > 0 ? payload.from : undefined
       resolveConnect({
         displayName,
-        remoteDeviceId
+        remoteDeviceId,
+        connectAckPayload: payload
       })
       resolveConnect = undefined
       rejectConnect = undefined
@@ -427,7 +428,8 @@ export function createOutboundClientTransport(
           deviceId: openOptions.deviceId,
           host: openOptions.host,
           port: openOptions.port,
-          displayName: connectAck.displayName
+          displayName: connectAck.displayName,
+          connectAckPayload: connectAck.connectAckPayload
         },
         transport: 'tcp'
       })

@@ -23,6 +23,7 @@ import { getHooksRuntimeOptions } from './config'
 import { setPairAwaitingAccept } from './pair-awaiting-accept'
 import { setPairedDeviceConnecting } from './paired-link-phases'
 import { setPrimaryTransportStateWithTransitionLog } from './primary-transport-state-transition-log'
+import { SYNRA_CONNECT_ACK_HOST_LISTS_PEER_AS_PAIRED } from './synra-connect-ack-app-keys'
 
 function shouldSuppressTransportErrorMessage(message: string | undefined): boolean {
   if (typeof message !== 'string' || message.length === 0) {
@@ -48,6 +49,25 @@ function removeDeviceByIdentity(
       return true
     })
   )
+}
+
+function normalizeConnectType(value: unknown): 'fresh' | 'paired' | undefined {
+  if (typeof value !== 'string') {
+    return undefined
+  }
+  const normalized = value.trim().toLowerCase()
+  if (normalized === 'fresh' || normalized === 'paired') {
+    return normalized
+  }
+  return undefined
+}
+
+function hasValidSynraWireIdentity(payload: Record<string, unknown>): boolean {
+  if (payload.appId !== 'synra') {
+    return false
+  }
+  const from = payload.from
+  return typeof from === 'string' && from.trim().length > 0
 }
 
 export async function registerAdapterListeners(options: {
@@ -115,13 +135,37 @@ export async function registerAdapterListeners(options: {
       }
     }
 
-    const inboundWire = event.incomingSynraConnectPayload
-    const inboundConnectType =
-      inboundWire && typeof inboundWire.connectType === 'string'
-        ? inboundWire.connectType.trim().toLowerCase()
-        : ''
-    if (inferredDirection === 'inbound' && inboundConnectType === 'fresh') {
+    const inboundWire =
+      event.incomingSynraConnectPayload && typeof event.incomingSynraConnectPayload === 'object'
+        ? (event.incomingSynraConnectPayload as Record<string, unknown>)
+        : undefined
+    const inboundConnectType = normalizeConnectType(inboundWire?.connectType)
+    if (
+      inferredDirection === 'inbound' &&
+      openedDeviceId.length > 0 &&
+      inboundConnectType === 'fresh' &&
+      inboundWire &&
+      hasValidSynraWireIdentity(inboundWire)
+    ) {
       const repair = getHooksRuntimeOptions().repairStalePairingAfterInboundFreshConnect
+      if (typeof repair === 'function') {
+        void Promise.resolve(repair(event)).catch(() => undefined)
+      }
+    }
+    const connectAckPayload =
+      event.connectAckPayload && typeof event.connectAckPayload === 'object'
+        ? (event.connectAckPayload as Record<string, unknown>)
+        : undefined
+    const outboundAckConnectType = normalizeConnectType(connectAckPayload?.connectType)
+    const hostListsPeerAsPaired = connectAckPayload?.[SYNRA_CONNECT_ACK_HOST_LISTS_PEER_AS_PAIRED]
+    const shouldRepairAfterOutboundAck =
+      inferredDirection === 'outbound' &&
+      openedDeviceId.length > 0 &&
+      connectAckPayload &&
+      connectAckPayload.appId === 'synra' &&
+      (outboundAckConnectType === 'fresh' || hostListsPeerAsPaired === false)
+    if (shouldRepairAfterOutboundAck) {
+      const repair = getHooksRuntimeOptions().repairStalePairingAfterOutboundUnpairedAck
       if (typeof repair === 'function') {
         void Promise.resolve(repair(event)).catch(() => undefined)
       }

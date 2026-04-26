@@ -1,5 +1,4 @@
 import Foundation
-import CryptoKit
 
 extension LanDiscoveryPlugin {
     func now() -> Int {
@@ -78,21 +77,7 @@ extension LanDiscoveryPlugin {
         return created
     }
 
-    func hashDeviceId(_ value: String) -> String {
-        let digest = Insecure.SHA1.hash(data: Data(value.utf8))
-        let prefix = digest.map { String(format: "%02x", $0) }.joined().prefix(12)
-        return "device-\(prefix)"
-    }
-
-    /// Peers may send raw instance UUID in helloAck; Synra lists + pairing use `device-` + 12 hex (SHA-1 prefix).
     func canonicalLanDeviceId(fromWireSourceDeviceId raw: String) -> String {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty {
-            return trimmed
-        }
-        if trimmed.hasPrefix("device-"), trimmed.count >= "device-".count + 8 {
-            return trimmed
-        }
-        return hashDeviceId(trimmed)
+        raw.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

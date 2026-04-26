@@ -31,6 +31,7 @@ import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.Locale;
 import java.util.UUID;
@@ -68,6 +69,16 @@ public class LanDiscoveryPluginPlugin extends Plugin {
     private NsdManager.RegistrationListener mdnsRegistrationListener;
     private volatile String registeredMdnsServiceName;
 
+    private static final class DiscoveryCandidate {
+        final String host;
+        final String sourceDeviceId;
+
+        DiscoveryCandidate(String host, String sourceDeviceId) {
+            this.host = host;
+            this.sourceDeviceId = sourceDeviceId;
+        }
+    }
+
     @Override
     public void load() {
         super.load();
@@ -92,8 +103,9 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         List<String> subnetCidrs = toStringList(call.getArray("subnetCidrs", new JSArray()));
         WifiManager.MulticastLock discoveryMulticastLock = acquireDiscoveryMulticastLock();
         List<String> combinedTargets;
+        List<DiscoveryCandidate> discoveryTargets;
         try {
-            List<String> discoveryTargets = collectAutoDiscoveryTargets(
+            discoveryTargets = collectAutoDiscoveryTargets(
                 discoveryMode,
                 mdnsServiceType,
                 discoveryTimeoutMs,
@@ -101,12 +113,16 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             );
             Set<String> localAddresses = collectLocalIpv4Addresses(includeLoopback);
             combinedTargets = new ArrayList<>(manualTargets);
-            for (String target : discoveryTargets) {
-                if (localAddresses.contains(target)) {
+            for (DiscoveryCandidate target : discoveryTargets) {
+                if (target == null || target.host == null) {
                     continue;
                 }
-                if (!combinedTargets.contains(target)) {
-                    combinedTargets.add(target);
+                String host = target.host.trim();
+                if (host.isEmpty() || localAddresses.contains(host)) {
+                    continue;
+                }
+                if (!combinedTargets.contains(host)) {
+                    combinedTargets.add(host);
                 }
             }
         } finally {
@@ -147,7 +163,20 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                 manualSet.add(m.trim());
             }
         }
-        implementation.mergeCandidateDevices(toProbe, manualSet);
+        Map<String, String> sourceDeviceIdsByHost = new LinkedHashMap<>();
+        for (DiscoveryCandidate candidate : discoveryTargets) {
+            if (candidate == null || candidate.host == null) {
+                continue;
+            }
+            String host = candidate.host.trim();
+            String sourceDeviceId =
+                candidate.sourceDeviceId == null ? "" : candidate.sourceDeviceId.trim();
+            if (host.isEmpty() || sourceDeviceId.isEmpty()) {
+                continue;
+            }
+            sourceDeviceIdsByHost.put(host, sourceDeviceId);
+        }
+        implementation.mergeCandidateDevices(toProbe, manualSet, sourceDeviceIdsByHost);
         JSObject result = implementation.listDevices();
         result.put("requestId", UUID.randomUUID().toString());
 
@@ -200,7 +229,7 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         return result;
     }
 
-    private List<String> collectAutoDiscoveryTargets(
+    private List<DiscoveryCandidate> collectAutoDiscoveryTargets(
         String discoveryMode,
         String mdnsServiceType,
         int timeoutMs,
@@ -209,18 +238,45 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         String mode = discoveryMode == null ? "hybrid" : discoveryMode;
         boolean shouldRunMdns = "hybrid".equals(mode) || "mdns".equals(mode);
         boolean isHybrid = "hybrid".equals(mode);
-        Set<String> discovered = new LinkedHashSet<>();
+        Map<String, DiscoveryCandidate> discovered = new LinkedHashMap<>();
         if (shouldRunMdns) {
-            discovered.addAll(discoverByMdns(mdnsServiceType, timeoutMs));
+            for (DiscoveryCandidate candidate : discoverByMdns(mdnsServiceType, timeoutMs)) {
+                if (candidate == null || candidate.host == null) {
+                    continue;
+                }
+                String host = candidate.host.trim();
+                if (host.isEmpty()) {
+                    continue;
+                }
+                discovered.put(host, candidate);
+            }
         }
         if (isHybrid && enableProbeFallback) {
-            discovered.addAll(discoverByUdp(timeoutMs));
+            for (DiscoveryCandidate candidate : discoverByUdp(timeoutMs)) {
+                if (candidate == null || candidate.host == null) {
+                    continue;
+                }
+                String host = candidate.host.trim();
+                if (host.isEmpty()) {
+                    continue;
+                }
+                DiscoveryCandidate existing = discovered.get(host);
+                if (existing == null) {
+                    discovered.put(host, candidate);
+                    continue;
+                }
+                String existingSource = existing.sourceDeviceId == null ? "" : existing.sourceDeviceId.trim();
+                String incomingSource = candidate.sourceDeviceId == null ? "" : candidate.sourceDeviceId.trim();
+                if (existingSource.isEmpty() && !incomingSource.isEmpty()) {
+                    discovered.put(host, candidate);
+                }
+            }
         }
-        return new ArrayList<>(discovered);
+        return new ArrayList<>(discovered.values());
     }
 
     @SuppressLint("MissingPermission")
-    private List<String> discoverByMdns(String serviceType, int timeoutMs) {
+    private List<DiscoveryCandidate> discoverByMdns(String serviceType, int timeoutMs) {
         Context context = getContext();
         if (context == null) {
             return List.of();
@@ -230,7 +286,7 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             return List.of();
         }
         String resolvedType = normalizeMdnsType(serviceType);
-        Set<String> discovered = new LinkedHashSet<>();
+        Map<String, DiscoveryCandidate> discovered = new LinkedHashMap<>();
         CountDownLatch latch = new CountDownLatch(1);
         AtomicInteger pendingResolves = new AtomicInteger(0);
         AtomicLong lastResolveAt = new AtomicLong(System.currentTimeMillis());
@@ -277,8 +333,15 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                             }
                             String address = host.getHostAddress();
                             if (address != null && !address.isBlank() && !address.contains(":")) {
+                                String sourceDeviceId = null;
+                                if (serviceInfo.getAttributes() != null) {
+                                    byte[] raw = serviceInfo.getAttributes().get("sourceDeviceId");
+                                    if (raw != null && raw.length > 0) {
+                                        sourceDeviceId = new String(raw, StandardCharsets.UTF_8).trim();
+                                    }
+                                }
                                 synchronized (discovered) {
-                                    discovered.add(address);
+                                    discovered.put(address, new DiscoveryCandidate(address, sourceDeviceId));
                                 }
                             }
                         } finally {
@@ -316,7 +379,7 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             }
         }
         synchronized (discovered) {
-            return new ArrayList<>(discovered);
+            return new ArrayList<>(discovered.values());
         }
     }
 
@@ -354,8 +417,8 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         return result;
     }
 
-    private List<String> discoverByUdp(int timeoutMs) {
-        Set<String> discovered = new LinkedHashSet<>();
+    private List<DiscoveryCandidate> discoverByUdp(int timeoutMs) {
+        Map<String, DiscoveryCandidate> discovered = new LinkedHashMap<>();
         try (DatagramSocket socket = new DatagramSocket()) {
             socket.setBroadcast(true);
             socket.setSoTimeout(200);
@@ -384,7 +447,8 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                     }
                     String address = response.getAddress().getHostAddress();
                     if (address != null && !address.isBlank() && !address.contains(":")) {
-                        discovered.add(address);
+                        String sourceDeviceId = payload.optString("sourceDeviceId", null);
+                        discovered.put(address, new DiscoveryCandidate(address, sourceDeviceId));
                     }
                 } catch (Exception ignored) {
                     // timeout or malformed payload
@@ -392,7 +456,7 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             }
         } catch (Exception ignored) {
         }
-        return new ArrayList<>(discovered);
+        return new ArrayList<>(discovered.values());
     }
 
     private List<InetAddress> collectUdpBroadcastDestinations() {

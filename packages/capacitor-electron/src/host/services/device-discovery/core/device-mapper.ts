@@ -1,5 +1,4 @@
 import type { DiscoveredDevice } from '../../../../shared/protocol/types'
-import { hashDeviceId } from './device-identity'
 
 type DeviceSource = DiscoveredDevice['source']
 
@@ -12,7 +11,7 @@ function createDevice(
 ): DiscoveredDevice {
   const now = Date.now()
   return {
-    deviceId: hashDeviceId(key),
+    deviceId: key.trim(),
     name,
     ipAddress,
     port,
@@ -32,7 +31,12 @@ export function toManualDevices(_targets: string[]): DiscoveredDevice[] {
 export function toProbeCandidate(
   ipAddress: string,
   source: DeviceSource,
-  port?: number
+  port?: number,
+  sourceDeviceUuid?: string
 ): DiscoveredDevice {
-  return createDevice(`candidate:${ipAddress}`, '', ipAddress, source, port)
+  const key = typeof sourceDeviceUuid === 'string' ? sourceDeviceUuid.trim() : ''
+  if (key.length === 0) {
+    return createDevice('', '', ipAddress, source, port)
+  }
+  return createDevice(key, '', ipAddress, source, port)
 }

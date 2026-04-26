@@ -6,7 +6,6 @@ import {
 import { getHooksRuntimeOptions, useTransport } from '@synra/hooks'
 import { ensureDeviceInstanceUuid } from '../lib/device-instance-uuid'
 import { parseDeviceNameFromBasicInfo } from '../lib/device-basic-info'
-import { hashDeviceIdFromInstanceUuid } from '../lib/hash-device-id'
 
 type BasicInfoSaveStatus = 'idle' | 'saving' | 'success' | 'error'
 type BasicInfoLoadStatus = 'idle' | 'loading' | 'ready' | 'error'
@@ -65,7 +64,7 @@ export function useDeviceBasicInfo() {
     if (typeof deviceLanId !== 'string' || deviceLanId.length === 0) {
       try {
         const uuid = await ensureDeviceInstanceUuid()
-        deviceLanId = await hashDeviceIdFromInstanceUuid(uuid)
+        deviceLanId = uuid
       } catch {
         return 1
       }

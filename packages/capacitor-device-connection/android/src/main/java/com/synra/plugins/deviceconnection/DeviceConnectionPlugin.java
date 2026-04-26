@@ -6,7 +6,6 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import android.content.Context;
-import java.util.Locale;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -21,7 +20,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -149,7 +148,7 @@ public class DeviceConnectionPlugin extends Plugin {
                         connectRequestId,
                         null,
                         getOrCreateLocalDeviceUuid(),
-                        canonicalSynraDeviceId(deviceId.trim()),
+                        deviceId.trim(),
                         null,
                         connectPayload,
                         null
@@ -179,8 +178,7 @@ public class DeviceConnectionPlugin extends Plugin {
                 this.primaryOutboundSocket = socket;
                 this.primaryOutboundInput = input;
                 this.primaryOutboundOutput = output;
-                // Match discovery / JS target: canonical dial id, not raw ack from (may be instance UUID).
-                this.currentDeviceId = canonicalSynraDeviceId(deviceId.trim());
+                this.currentDeviceId = deviceId.trim();
                 this.currentHost = host;
                 this.currentPort = port;
                 this.lastOutboundTransportError = null;
@@ -243,8 +241,17 @@ public class DeviceConnectionPlugin extends Plugin {
                         continue;
                     }
                     int port = row.optInt("port", 32100);
+                    String targetDeviceId = row.optString("target", null);
                     JSONObject wireExtras = row.optJSONObject("connectWirePayload");
-                    out.put(probeSynraOneHost(host.trim(), port, Math.max(200, timeoutMs), wireExtras));
+                    out.put(
+                        probeSynraOneHost(
+                            host.trim(),
+                            port,
+                            Math.max(200, timeoutMs),
+                            wireExtras,
+                            targetDeviceId
+                        )
+                    );
                 }
                 JSObject ret = new JSObject();
                 ret.put("results", out);
@@ -255,7 +262,13 @@ public class DeviceConnectionPlugin extends Plugin {
         });
     }
 
-    private JSONObject probeSynraOneHost(String host, int port, int timeoutMs, JSONObject wireExtras)
+    private JSONObject probeSynraOneHost(
+            String host,
+            int port,
+            int timeoutMs,
+            JSONObject wireExtras,
+            String targetDeviceId
+    )
             throws IOException, JSONException {
         // SYNRA-COMM::DEVICE_HANDSHAKE::CONNECT::PROBE_SINGLE
         JSONObject base = new JSONObject();
@@ -288,7 +301,7 @@ public class DeviceConnectionPlugin extends Plugin {
                     connectRequestId,
                     null,
                     getOrCreateLocalDeviceUuid(),
-                    null,
+                    targetDeviceId,
                     null,
                     probePayload,
                     null
@@ -315,14 +328,13 @@ public class DeviceConnectionPlugin extends Plugin {
                 return base;
             }
             String localUuid = getOrCreateLocalDeviceUuid();
-            String canonRemote = canonicalSynraDeviceId(remote.trim());
-            String canonLocal = canonicalSynraDeviceId(localUuid);
-            if (canonRemote.equals(canonLocal)) {
+            String remoteUuid = remote.trim();
+            if (remoteUuid.equals(localUuid)) {
                 base.put("error", "SELF_DEVICE");
                 return base;
             }
             base.put("ok", true);
-            base.put("wireSourceDeviceId", canonRemote);
+            base.put("wireSourceDeviceId", remoteUuid);
             String dn = ackPayload.optString("displayName", "");
             if (!dn.isBlank()) {
                 base.put("displayName", dn.trim());
@@ -341,31 +353,7 @@ public class DeviceConnectionPlugin extends Plugin {
         if (raw == null) {
             return "";
         }
-        String trimmed = raw.trim();
-        if (trimmed.isEmpty()) {
-            return trimmed;
-        }
-        if (trimmed.startsWith("device-") && trimmed.length() >= "device-".length() + 8) {
-            return trimmed;
-        }
-        return hashSynraId(trimmed);
-    }
-
-    private static String hashSynraId(String value) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-1");
-            byte[] bytes = digest.digest(value.getBytes(StandardCharsets.UTF_8));
-            StringBuilder builder = new StringBuilder();
-            for (byte current : bytes) {
-                if (builder.length() >= 12) {
-                    break;
-                }
-                builder.append(String.format(Locale.ROOT, "%02x", current));
-            }
-            return "device-" + builder;
-        } catch (Exception ignored) {
-            return "device-" + Math.abs(value.hashCode());
-        }
+        return raw.trim();
     }
 
     @PluginMethod
@@ -819,19 +807,26 @@ public class DeviceConnectionPlugin extends Plugin {
                         connectRequestId = UUID.randomUUID().toString();
                     }
                     JSONObject payload = inbound.optJSONObject("payload");
+                    String target = inbound.optString("target", null);
+                    String localUuid = getOrCreateLocalDeviceUuid();
+                    boolean targetValid =
+                        target != null &&
+                        !target.isBlank() &&
+                        target.trim().equals(localUuid);
                     String from =
                         payload == null ? null : payload.optString("from", null);
                     if (payload == null ||
                         !APP_ID.equals(payload.optString("appId")) ||
                         from == null ||
-                        from.isBlank()) {
+                        from.isBlank() ||
+                        !targetValid) {
                         writeFrame(
                             output,
                             synraLanFrame(
                                 LEGACY_TYPE_ERROR,
                                 connectRequestId,
                                 null,
-                                getOrCreateLocalDeviceUuid(),
+                                localUuid,
                                 null,
                                 null,
                                 null,
@@ -844,7 +839,7 @@ public class DeviceConnectionPlugin extends Plugin {
                     String canonicalDeviceId = canonicalSynraDeviceId(from.trim());
                     JSONObject ackPayload = new JSONObject();
                     ackPayload.put("appId", APP_ID);
-                    ackPayload.put("from", getOrCreateLocalDeviceUuid());
+                    ackPayload.put("from", localUuid);
                     ackPayload.put("displayName", localSynraDisplayName());
                     String localHost = socket.getLocalAddress() == null
                         ? null
@@ -864,7 +859,7 @@ public class DeviceConnectionPlugin extends Plugin {
                             LEGACY_TYPE_CONNECT_ACK,
                             connectRequestId,
                             null,
-                            getOrCreateLocalDeviceUuid(),
+                            localUuid,
                             canonicalDeviceId,
                             null,
                             ackPayload,
