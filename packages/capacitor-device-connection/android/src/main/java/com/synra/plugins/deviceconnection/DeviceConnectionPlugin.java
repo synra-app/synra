@@ -396,6 +396,16 @@ public class DeviceConnectionPlugin extends Plugin {
             call.reject("requestId/from/target/event are required.");
             return;
         }
+        String incomingFrom = from.trim();
+        if (!isUuidLike(incomingFrom)) {
+            call.reject("from must be UUID.");
+            return;
+        }
+        String localFrom = getOrCreateLocalDeviceUuid().trim();
+        if (!isUuidLike(localFrom)) {
+            call.reject("Local device UUID is unavailable.");
+            return;
+        }
 
         ioExecutor.submit(() -> {
             try {
@@ -412,7 +422,7 @@ public class DeviceConnectionPlugin extends Plugin {
                             "message",
                             requestId,
                             event,
-                            from,
+                            localFrom,
                             target,
                             replyRequestId,
                             payload,
@@ -426,7 +436,7 @@ public class DeviceConnectionPlugin extends Plugin {
                             "message",
                             requestId,
                             event,
-                            from,
+                            localFrom,
                             target,
                             replyRequestId,
                             payload,
@@ -444,7 +454,7 @@ public class DeviceConnectionPlugin extends Plugin {
                             "message",
                             requestId,
                             event,
-                            from,
+                            localFrom,
                             target,
                             replyRequestId,
                             payload,
@@ -487,6 +497,16 @@ public class DeviceConnectionPlugin extends Plugin {
             call.reject("requestId/from/target/event are required.");
             return;
         }
+        String incomingFrom = from.trim();
+        if (!isUuidLike(incomingFrom)) {
+            call.reject("from must be UUID.");
+            return;
+        }
+        String localFrom = getOrCreateLocalDeviceUuid().trim();
+        if (!isUuidLike(localFrom)) {
+            call.reject("Local device UUID is unavailable.");
+            return;
+        }
 
         ioExecutor.submit(() -> {
             try {
@@ -503,7 +523,7 @@ public class DeviceConnectionPlugin extends Plugin {
                             "event",
                             requestId,
                             event,
-                            from,
+                            localFrom,
                             target,
                             replyRequestId,
                             payload,
@@ -517,7 +537,7 @@ public class DeviceConnectionPlugin extends Plugin {
                             "event",
                             requestId,
                             event,
-                            from,
+                            localFrom,
                             target,
                             replyRequestId,
                             payload,
@@ -535,7 +555,7 @@ public class DeviceConnectionPlugin extends Plugin {
                             "event",
                             requestId,
                             event,
-                            from,
+                            localFrom,
                             target,
                             replyRequestId,
                             payload,
@@ -1327,6 +1347,22 @@ public class DeviceConnectionPlugin extends Plugin {
             return raw.substring(0, 6);
         }
         return raw.isEmpty() ? "device" : raw;
+    }
+
+    private static boolean isUuidLike(String value) {
+        if (value == null) {
+            return false;
+        }
+        String trimmed = value.trim();
+        if (trimmed.isEmpty()) {
+            return false;
+        }
+        try {
+            UUID.fromString(trimmed);
+            return true;
+        } catch (IllegalArgumentException error) {
+            return false;
+        }
     }
 
     private String getOrCreateLocalDeviceUuid() {

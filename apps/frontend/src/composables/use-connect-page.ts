@@ -11,6 +11,7 @@ import { storeToRefs } from 'pinia'
 import { computed, onMounted, ref } from 'vue'
 import type { DiscoveredDevice } from '@synra/capacitor-lan-discovery'
 import { buildLocalPairInitiatorProfile } from '../lib/pair-profile'
+import { ensureDeviceInstanceUuid } from '../lib/device-instance-uuid'
 import { isIpv4Address } from '../lib/network'
 import { resolveSelfOnLanForPairing } from '../lib/resolve-self-on-lan-for-pairing'
 import { registerPairingOutbound } from '../lib/pairing-outbound-pending'
@@ -238,10 +239,11 @@ export function useConnectPage() {
       )
       if (openedLink?.deviceId) {
         const requestId = crypto.randomUUID()
+        const localDeviceId = await ensureDeviceInstanceUuid()
         await store
           .sendLanEvent({
             requestId,
-            from: 'local-device',
+            from: localDeviceId,
             target: device.deviceId,
             event: DEVICE_PAIRING_UNPAIR_REQUIRED_EVENT,
             payload: {

@@ -104,6 +104,10 @@ function parseSynraConnectType(value: unknown): 'fresh' | 'paired' | undefined {
   return undefined
 }
 
+function isUuidLike(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+}
+
 export function createInboundHostTransport(
   options: InboundHostTransportOptions
 ): InboundHostTransport {
@@ -626,10 +630,17 @@ export function createInboundHostTransport(
       if (!link || link.socket.destroyed) {
         return false
       }
+      if (!isUuidLike(sendOptions.from.trim())) {
+        throw new Error('Message from must be UUID.')
+      }
+      const localFrom = options.resolveLocalDeviceUuid().trim()
+      if (!isUuidLike(localFrom)) {
+        throw new Error('Local device UUID is unavailable.')
+      }
       await writeFrame(link.socket, {
         requestId: sendOptions.requestId,
         event: sendOptions.event,
-        from: sendOptions.from,
+        from: localFrom,
         target: link.remoteDeviceId,
         replyRequestId: sendOptions.replyRequestId,
         timestamp: sendOptions.timestamp ?? Date.now(),
@@ -644,10 +655,17 @@ export function createInboundHostTransport(
       if (!link || link.socket.destroyed) {
         return false
       }
+      if (!isUuidLike(sendOptions.from.trim())) {
+        throw new Error('Message from must be UUID.')
+      }
+      const localFrom = options.resolveLocalDeviceUuid().trim()
+      if (!isUuidLike(localFrom)) {
+        throw new Error('Local device UUID is unavailable.')
+      }
       await writeFrame(link.socket, {
         requestId: sendOptions.requestId,
         event: sendOptions.event,
-        from: sendOptions.from,
+        from: localFrom,
         target: link.remoteDeviceId,
         replyRequestId: sendOptions.replyRequestId,
         timestamp: sendOptions.timestamp ?? Date.now(),

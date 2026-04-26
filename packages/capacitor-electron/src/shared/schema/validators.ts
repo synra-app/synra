@@ -15,6 +15,10 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
 
+function isUuidLike(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+}
+
 export function isBridgeRequest(value: unknown): value is BridgeRequest {
   if (!isObject(value)) {
     return false
@@ -297,7 +301,7 @@ export function validateDiscoverySendMessagePayload(payload: unknown): payload i
   if (typeof payload.target !== 'string' || payload.target.length === 0) {
     return false
   }
-  if (typeof payload.from !== 'string' || payload.from.length === 0) {
+  if (typeof payload.from !== 'string' || !isUuidLike(payload.from.trim())) {
     return false
   }
 
@@ -338,7 +342,7 @@ export function validateDiscoverySendLanEventPayload(payload: unknown): payload 
   if (typeof payload.target !== 'string' || payload.target.length === 0) {
     return false
   }
-  if (typeof payload.from !== 'string' || payload.from.length === 0) {
+  if (typeof payload.from !== 'string' || !isUuidLike(payload.from.trim())) {
     return false
   }
   if (payload.replyRequestId !== undefined && typeof payload.replyRequestId !== 'string') {

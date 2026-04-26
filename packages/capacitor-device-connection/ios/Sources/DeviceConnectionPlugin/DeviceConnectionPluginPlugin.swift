@@ -111,6 +111,10 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
             call.reject("requestId/from/target/event are required.")
             return
         }
+        guard implementation.isUuidLike(from) else {
+            call.reject("from must be UUID.")
+            return
+        }
 
         let payload = call.options["payload"] ?? NSNull()
         let timestamp = call.getInt("timestamp")
@@ -141,6 +145,10 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
             let event = call.getString("event")
         else {
             call.reject("requestId/from/target/event are required.")
+            return
+        }
+        guard implementation.isUuidLike(from) else {
+            call.reject("from must be UUID.")
             return
         }
 

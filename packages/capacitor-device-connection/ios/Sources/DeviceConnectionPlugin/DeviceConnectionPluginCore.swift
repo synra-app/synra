@@ -246,11 +246,18 @@ public final class DeviceConnectionPluginCore: NSObject {
         timestamp: Int?
     ) -> [String: Any]? {
         // SYNRA-COMM::TCP::SEND::MESSAGE_SEND
+        guard isUuidLike(from) else {
+            return nil
+        }
+        let localFrom = localDeviceUuid().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isUuidLike(localFrom) else {
+            return nil
+        }
         let messageFrame = synraLanFrame(
             type: "message",
             requestId: requestId,
             event: event,
-            from: from,
+            from: localFrom,
             target: target,
             replyRequestId: replyRequestId,
             payload: payload,
@@ -302,11 +309,18 @@ public final class DeviceConnectionPluginCore: NSObject {
         timestamp: Int?
     ) -> [String: Any]? {
         // SYNRA-COMM::TCP::SEND::LAN_EVENT_SEND
+        guard isUuidLike(from) else {
+            return nil
+        }
+        let localFrom = localDeviceUuid().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isUuidLike(localFrom) else {
+            return nil
+        }
         let eventFrame = synraLanFrame(
             type: "event",
             requestId: requestId,
             event: event,
-            from: from,
+            from: localFrom,
             target: target,
             replyRequestId: replyRequestId,
             payload: payload,
@@ -433,6 +447,14 @@ public final class DeviceConnectionPluginCore: NSObject {
 
     internal func canonicalSynraDeviceId(fromWireSourceDeviceId raw: String) -> String {
         raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    internal func isUuidLike(_ value: String) -> Bool {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return false
+        }
+        return UUID(uuidString: trimmed) != nil
     }
 
     internal func fallbackPeerDisplayName(forCanonicalDeviceId id: String) -> String {

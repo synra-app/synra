@@ -19,6 +19,9 @@ import {
   DEVICE_TCP_CONNECT_EVENT
 } from '@synra/protocol'
 
+const UUID_A = '11111111-1111-4111-8111-111111111111'
+const UUID_B = '22222222-2222-4222-8222-222222222222'
+
 describe('shared/schema/validators', () => {
   test('validates bridge request and response shapes', () => {
     expect(
@@ -104,8 +107,8 @@ describe('shared/schema/validators', () => {
       validateDiscoverySendMessagePayload({
         requestId: 'req-1',
         event: 'chat.message',
-        from: 'device-a',
-        target: 'device-b',
+        from: UUID_A,
+        target: UUID_B,
         payload: 'hello'
       })
     ).toBe(true)
@@ -113,8 +116,8 @@ describe('shared/schema/validators', () => {
       validateDiscoverySendLanEventPayload({
         requestId: 'req-lan-1',
         event: DEVICE_PAIRING_REQUEST_EVENT,
-        from: 'device-a',
-        target: 'device-b',
+        from: UUID_A,
+        target: UUID_B,
         payload: { requestId: 'req-lan-1' }
       })
     ).toBe(true)
@@ -122,8 +125,8 @@ describe('shared/schema/validators', () => {
       validateDiscoverySendLanEventPayload({
         requestId: 'req-lan-2',
         event: 'custom.chat.message',
-        from: 'device-a',
-        target: 'device-b',
+        from: UUID_A,
+        target: UUID_B,
         payload: {}
       })
     ).toBe(false)
@@ -131,8 +134,8 @@ describe('shared/schema/validators', () => {
       validateDiscoverySendMessagePayload({
         requestId: 'req-2',
         event: DEVICE_TCP_CONNECT_EVENT,
-        from: 'device-a',
-        target: 'device-b',
+        from: UUID_A,
+        target: UUID_B,
         payload: {}
       })
     ).toBe(false)
@@ -140,8 +143,17 @@ describe('shared/schema/validators', () => {
       validateDiscoverySendMessagePayload({
         requestId: 'req-3',
         event: DEVICE_TCP_ACK_EVENT,
-        from: 'device-a',
-        target: 'device-b',
+        from: UUID_A,
+        target: UUID_B,
+        payload: {}
+      })
+    ).toBe(false)
+    expect(
+      validateDiscoverySendMessagePayload({
+        requestId: 'req-4',
+        event: 'chat.message',
+        from: 'local-device',
+        target: UUID_B,
         payload: {}
       })
     ).toBe(false)

@@ -1,4 +1,5 @@
 import { createServer } from 'node:net'
+import { randomUUID } from 'node:crypto'
 import { afterEach, describe, expect, test } from 'vite-plus/test'
 import type { DeviceDiscoveryHostEvent } from '../../../src/shared/protocol/types'
 import { createHostEventBus } from '../../../src/host/services/device-discovery/events/host-event-bus'
@@ -43,12 +44,12 @@ async function createRuntimePair(): Promise<RuntimePair> {
     enableUdpResponder: false,
     enableBonjour: false,
     eventBus: createHostEventBus((event) => inboundEvents.push(event)),
-    resolveLocalDeviceUuid: () => 'host-00000000-0000-4000-8000-000000000001'
+    resolveLocalDeviceUuid: () => '11111111-1111-4111-8111-111111111111'
   })
   await inbound.start()
   const outbound = createOutboundClientTransport({
     eventBus: createHostEventBus((event) => outboundEvents.push(event)),
-    resolveLocalDeviceUuid: () => 'peer-00000000-0000-4000-8000-00000000abcd'
+    resolveLocalDeviceUuid: () => '22222222-2222-4222-8222-222222222222'
   })
   return { port, inbound, outbound, inboundEvents, outboundEvents }
 }
@@ -67,7 +68,8 @@ afterEach(async () => {
 })
 
 describe('host/services/device-discovery pairing handshake e2e', () => {
-  const hostUuid = 'host-00000000-0000-4000-8000-000000000001'
+  const hostUuid = '11111111-1111-4111-8111-111111111111'
+  const peerUuid = '22222222-2222-4222-8222-222222222222'
 
   test('inbound fresh keeps link and returns fresh connectAck hint', async () => {
     const pair = await createRuntimePair()
@@ -127,5 +129,31 @@ describe('host/services/device-discovery pairing handshake e2e', () => {
 
     const inboundOpened = pair.inboundEvents.find((event) => event.type === 'transport.opened')
     expect(inboundOpened).toBeUndefined()
+  })
+
+  test('host send path always uses local UUID as from', async () => {
+    const pair = await createRuntimePair()
+    runtimePairs.push(pair)
+
+    await pair.outbound.open({
+      deviceId: hostUuid,
+      host: '127.0.0.1',
+      port: pair.port,
+      connectType: 'fresh'
+    })
+
+    await pair.outbound.sendMessage({
+      requestId: randomUUID(),
+      event: 'custom.chat.text',
+      from: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      target: hostUuid,
+      payload: { body: 'hello' }
+    })
+
+    const inboundMessage = pair.inboundEvents.find(
+      (event) => event.type === 'transport.message.received'
+    )
+    expect(inboundMessage).toBeTruthy()
+    expect(inboundMessage?.from).toBe(peerUuid)
   })
 })

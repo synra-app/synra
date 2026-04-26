@@ -10,6 +10,7 @@ import type {
   RuntimeOpenTransportInput,
   SynraLanWireSendInput
 } from '../types'
+import { getHooksRuntimeOptions } from '../runtime/config'
 import { getConnectionRuntime } from '../runtime/core'
 import { type DeviceProfileUpdatedPayload } from '../runtime/device-profile'
 import { normalizeHost } from '../runtime/host-normalization'
@@ -21,6 +22,10 @@ function isTransportLive(link: { transport: string }): boolean {
   return link.transport === 'ready' || link.transport === 'handshaking'
 }
 
+function isUuidLike(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+}
+
 /**
  * Full transport including discovery (`startScan`). Host apps use this for the
  * device screen. Plugins must not call discovery APIs; use `usePairedDevices`
@@ -28,6 +33,25 @@ function isTransportLive(link: { transport: string }): boolean {
  */
 export function useTransport() {
   const runtime = getConnectionRuntime()
+
+  function requireLocalFromUuid(): string {
+    const localUuid = getHooksRuntimeOptions().localDiscoveryDeviceId?.trim() ?? ''
+    if (!isUuidLike(localUuid)) {
+      throw new Error('Local device UUID is unavailable.')
+    }
+    return localUuid
+  }
+
+  function resolveWireFrom(inputFrom?: string): string {
+    if (typeof inputFrom === 'string' && inputFrom.trim().length > 0) {
+      const trimmed = inputFrom.trim()
+      if (!isUuidLike(trimmed)) {
+        throw new Error('Message from must be a UUID.')
+      }
+      return trimmed
+    }
+    return requireLocalFromUuid()
+  }
 
   const peers = computed((): DiscoveredDevice[] =>
     [...runtime.devices.value]
@@ -179,7 +203,7 @@ export function useTransport() {
     }
     await runtime.sendMessage({
       requestId: crypto.randomUUID(),
-      from: input.from ?? 'local-device',
+      from: resolveWireFrom(input.from),
       target: input.deviceId,
       replyRequestId: input.replyRequestId,
       event: input.event,
@@ -200,7 +224,7 @@ export function useTransport() {
         runtime
           .sendLanEvent({
             requestId: crypto.randomUUID(),
-            from: 'local-device',
+            from: requireLocalFromUuid(),
             target: link.deviceId,
             event: DEVICE_DISPLAY_NAME_CHANGED_EVENT,
             payload: { deviceId: profile.deviceId, displayName: profile.displayName }
@@ -220,7 +244,7 @@ export function useTransport() {
         }
         await runtime.sendMessage({
           requestId: crypto.randomUUID(),
-          from: input.from ?? 'local-device',
+          from: resolveWireFrom(input.from),
           target: targetDeviceId,
           event: input.event,
           payload: input.payload

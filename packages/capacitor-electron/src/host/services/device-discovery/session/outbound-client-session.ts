@@ -76,6 +76,10 @@ type ConnectAckResult = {
   connectAckPayload?: Record<string, unknown>
 }
 
+function isUuidLike(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+}
+
 export function createOutboundClientTransport(
   options: OutboundClientTransportOptions
 ): OutboundClientTransport {
@@ -464,10 +468,17 @@ export function createOutboundClientTransport(
       if (state.state !== 'open' || !state.deviceId) {
         throw new BridgeError(BRIDGE_ERROR_CODES.unsupportedOperation, 'Transport is not open.')
       }
+      if (!isUuidLike(sendOptions.from.trim())) {
+        throw new BridgeError(BRIDGE_ERROR_CODES.invalidParams, 'Message from must be UUID.')
+      }
+      const localFrom = options.resolveLocalDeviceUuid().trim()
+      if (!isUuidLike(localFrom)) {
+        throw new BridgeError(BRIDGE_ERROR_CODES.internalError, 'Local device UUID is unavailable.')
+      }
       await writeFrame({
         requestId: sendOptions.requestId,
         event: sendOptions.event,
-        from: sendOptions.from,
+        from: localFrom,
         target: sendOptions.target,
         replyRequestId: sendOptions.replyRequestId,
         timestamp: sendOptions.timestamp ?? Date.now(),
@@ -484,6 +495,13 @@ export function createOutboundClientTransport(
       if (state.state !== 'open' || !state.deviceId) {
         throw new BridgeError(BRIDGE_ERROR_CODES.unsupportedOperation, 'Transport is not open.')
       }
+      if (!isUuidLike(sendOptions.from.trim())) {
+        throw new BridgeError(BRIDGE_ERROR_CODES.invalidParams, 'Message from must be UUID.')
+      }
+      const localFrom = options.resolveLocalDeviceUuid().trim()
+      if (!isUuidLike(localFrom)) {
+        throw new BridgeError(BRIDGE_ERROR_CODES.internalError, 'Local device UUID is unavailable.')
+      }
       const key = `${sendOptions.target}:${sendOptions.requestId}`
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(() => {
@@ -497,7 +515,7 @@ export function createOutboundClientTransport(
         void writeFrame({
           requestId: sendOptions.requestId,
           event: sendOptions.event,
-          from: sendOptions.from,
+          from: localFrom,
           target: sendOptions.target,
           replyRequestId: sendOptions.replyRequestId,
           timestamp: sendOptions.timestamp ?? Date.now(),

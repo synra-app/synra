@@ -24,10 +24,13 @@ import {
 } from '../src/index'
 import type { ConnectionRuntimeAdapter, DeviceLostEvent } from '../src/runtime/adapter'
 
+const LOCAL_UUID = '11111111-1111-4111-8111-111111111111'
+const PEER_UUID = '22222222-2222-4222-8222-222222222222'
+
 function createMockAdapter(): ConnectionRuntimeAdapter {
   const devices: DiscoveredDevice[] = [
     {
-      deviceId: 'device-a',
+      deviceId: PEER_UUID,
       name: 'Device A',
       ipAddress: '127.0.0.1',
       source: 'probe',
@@ -110,7 +113,8 @@ function createMockAdapter(): ConnectionRuntimeAdapter {
 test('useTransport exposes generic messaging capabilities', async () => {
   configureHooksRuntime({
     adapterFactory: () => createMockAdapter(),
-    resolveSynraConnectType: () => 'paired'
+    resolveSynraConnectType: () => 'paired',
+    localDiscoveryDeviceId: LOCAL_UUID
   })
   resetConnectionRuntime()
   const transport = useTransport()
@@ -125,9 +129,9 @@ test('useTransport exposes generic messaging capabilities', async () => {
     },
     { event: 'custom.chat.text' }
   )
-  await transport.connectToDevice('device-a')
+  await transport.connectToDevice(PEER_UUID)
   await transport.sendMessageToReadyDevice({
-    deviceId: 'device-a',
+    deviceId: PEER_UUID,
     event: 'custom.chat.text',
     payload: {
       channel: 'default',
@@ -141,6 +145,27 @@ test('useTransport exposes generic messaging capabilities', async () => {
 test('cleanup runtime options', () => {
   resetHooksRuntimeOptions()
   resetConnectionRuntime()
+})
+
+test('sendMessageToReadyDevice rejects non-uuid from', async () => {
+  configureHooksRuntime({
+    adapterFactory: () => createMockAdapter(),
+    resolveSynraConnectType: () => 'paired',
+    localDiscoveryDeviceId: LOCAL_UUID
+  })
+  resetConnectionRuntime()
+  const transport = useTransport()
+  await transport.ensureReady()
+  await transport.startScan()
+  await transport.connectToDevice(PEER_UUID)
+  await expect(
+    transport.sendMessageToReadyDevice({
+      deviceId: PEER_UUID,
+      event: 'custom.chat.text',
+      payload: { body: 'hello' },
+      from: 'local-device'
+    })
+  ).rejects.toThrow('Message from must be a UUID.')
 })
 
 test('transport error closes primary transport and marks link dead', async () => {
@@ -434,7 +459,7 @@ test('transport is not open error marks transport dead and reconnects', async ()
   await expect(
     transport.sendLanEvent({
       requestId: 'r1',
-      from: 'device-self',
+      from: LOCAL_UUID,
       target: 'device-a',
       event: 'device.pairing.request',
       payload: { requestId: 'r1' }
