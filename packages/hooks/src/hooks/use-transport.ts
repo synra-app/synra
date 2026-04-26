@@ -62,7 +62,7 @@ export function useTransport() {
   }
 
   async function startScan(): Promise<void> {
-    // SYNRA-COMM::UDP_DISCOVERY::CONNECT::UI_START_SCAN
+    // SYNRA-COMM::PLUGIN_BRIDGE::CONNECT::UI_START_SCAN
     // Manual scan can run before connect-page onMounted finishes ensureReady(); without this,
     // discovery.start may run while DeviceConnection has not yet subscribed to onHostEvent
     // (inbound pairing events are then dropped on Electron).

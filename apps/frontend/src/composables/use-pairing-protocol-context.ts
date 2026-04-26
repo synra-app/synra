@@ -14,12 +14,7 @@ import {
 } from '@synra/protocol'
 import { setPairAwaitingAccept, setPairedDeviceConnecting } from '@synra/hooks'
 import { consumePairingOutbound } from '../lib/pairing-outbound-pending'
-import {
-  listPairedDeviceRecords,
-  removePairedDeviceRecord,
-  upsertPairedDeviceRecord
-} from '../lib/paired-devices-storage'
-import { syncPairedDiscoveryExclusionFromRecords } from '../lib/discovery-paired-exclusion'
+import { removePairedDeviceRecord, upsertPairedDeviceRecord } from '../lib/paired-devices-storage'
 import { isPairRequestPayload, type PairRequestPayload } from '../lib/pair-protocol'
 import {
   parsePairingPeerResetPayload,
@@ -54,8 +49,6 @@ export function createPairingProtocolContext(pinia: Pinia): PairingProtocolConte
   async function unpairLocalOnly(deviceId: string, reason: string): Promise<void> {
     pairingStore.clearIncomingIfRelated(deviceId)
     await removePairedDeviceRecord(deviceId)
-    const next = await listPairedDeviceRecords()
-    syncPairedDiscoveryExclusionFromRecords(next)
     pairingStore.bumpPairedList()
     setPairAwaitingAccept(deviceId, false)
     setPairedDeviceConnecting(deviceId, false)

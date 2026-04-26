@@ -99,7 +99,9 @@ function dotClass(tone: 'yellow' | 'green' | 'gray' | undefined): string {
         </div>
       </li>
     </ul>
-    <p v-else class="text-muted-3" />
+    <p v-else class="text-sm text-muted-3">
+      {{ loading ? 'Scanning for devices...' : 'No paired or discovered devices yet.' }}
+    </p>
   </PanelCard>
 
   <DeviceDetailsDialog

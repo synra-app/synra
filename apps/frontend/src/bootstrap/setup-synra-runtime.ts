@@ -7,12 +7,8 @@ import { installElectronCapacitor } from '@synra/capacitor-electron/capacitor'
 import { ensureDeviceInstanceUuid } from '../lib/device-instance-uuid'
 import { hashDeviceIdFromInstanceUuid } from '../lib/hash-device-id'
 import { ensureDeviceBasicInfo } from '../lib/device-basic-info'
+import { isPairedDeviceExcludedFromDiscovery } from '../lib/discovery-paired-exclusion'
 import {
-  isPairedDeviceExcludedFromDiscovery,
-  syncPairedDiscoveryExclusionFromRecords
-} from '../lib/discovery-paired-exclusion'
-import {
-  listPairedDeviceRecords,
   patchPairedDeviceDisplayName,
   removePairedDeviceRecord,
   repairPairedDevicesPersistenceIfNeeded
@@ -38,12 +34,12 @@ export function setupSynraRuntime(
   installElectronCapacitor({ capacitor: Capacitor })
   initSynraRuntimePlatform()
 
-  void repairPairedDevicesPersistenceIfNeeded()
-    .then(async () => {
-      const records = await listPairedDeviceRecords()
-      syncPairedDiscoveryExclusionFromRecords(records)
-    })
-    .catch(() => undefined)
+  const pairingStore = usePairingStore(pinia)
+  const ensurePairedRecordsReady = async (): Promise<void> => {
+    await repairPairedDevicesPersistenceIfNeeded().catch(() => undefined)
+    // SYNRA-COMM::PLUGIN_BRIDGE::CONNECT::LOAD_PAIRED_RECORDS
+    await pairingStore.refreshPairedRecords()
+  }
 
   const lanDiscoveryStore = useLanDiscoveryStore(pinia)
   const INITIAL_SCAN_RETRY_DELAY_MS = 2500
@@ -81,8 +77,8 @@ export function setupSynraRuntime(
 
   void initializeRuntime()
     .catch(() => undefined)
-    .then(() => ensureDeviceInstanceUuid())
-    .then(async (deviceInstanceUuid) => {
+    .then(() => Promise.all([ensureDeviceInstanceUuid(), ensurePairedRecordsReady()]))
+    .then(async ([deviceInstanceUuid]) => {
       try {
         await ensureDeviceBasicInfo(deviceInstanceUuid)
       } catch {}
@@ -93,13 +89,12 @@ export function setupSynraRuntime(
         onRemoteDeviceProfile: (deviceId, displayName) => {
           void patchPairedDeviceDisplayName(deviceId, displayName).then((ok) => {
             if (ok) {
-              usePairingStore(pinia).bumpPairedList()
+              pairingStore.bumpPairedList()
             }
           })
         },
         resolveSynraConnectType: async (deviceId) => {
-          const items = await listPairedDeviceRecords()
-          return items.some((row) => row.deviceId === deviceId) ? 'paired' : 'fresh'
+          return (await pairingStore.hasPairedDeviceStrict(deviceId)) ? 'paired' : 'fresh'
         },
         repairStalePairingAfterInboundFreshConnect: async (event) => {
           const wire = event.incomingSynraConnectPayload
@@ -110,13 +105,11 @@ export function setupSynraRuntime(
           if (ct !== 'fresh' || !event.deviceId) {
             return
           }
-          const items = await listPairedDeviceRecords()
-          if (!items.some((row) => row.deviceId === event.deviceId)) {
+          if (!(await pairingStore.hasPairedDeviceStrict(event.deviceId))) {
             return
           }
           await removePairedDeviceRecord(event.deviceId)
-          syncPairedDiscoveryExclusionFromRecords(await listPairedDeviceRecords())
-          usePairingStore(pinia).bumpPairedList()
+          pairingStore.bumpPairedList()
         }
       })
       await initializeRuntime()

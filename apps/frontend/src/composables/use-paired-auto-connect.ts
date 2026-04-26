@@ -1,8 +1,6 @@
 import type { Pinia } from 'pinia'
 import { storeToRefs } from 'pinia'
 import { computed, watch } from 'vue'
-import { pairedDevicesStorageEpoch } from '@synra/hooks'
-import { listPairedDeviceRecords } from '../lib/paired-devices-storage'
 import { tryOpenTransportForPairedRecord } from '../lib/connect-paired-record'
 import { PairedReconnectScheduler } from '../lib/paired-reconnect-scheduler'
 import { useLanDiscoveryStore } from '../stores/lan-discovery'
@@ -17,7 +15,7 @@ export function registerPairedAutoConnect(pinia: Pinia): void {
   const store = useLanDiscoveryStore(pinia)
   const pairingStore = usePairingStore(pinia)
   const { peers, openTransportLinks } = storeToRefs(store)
-  const { pairedListEpoch } = storeToRefs(pairingStore)
+  const { pairedRecords } = storeToRefs(pairingStore)
   const reconStore = usePairedReconnectStore(pinia)
   const readyDeviceIds = computed(
     () =>
@@ -33,11 +31,12 @@ export function registerPairedAutoConnect(pinia: Pinia): void {
       )
   )
 
+  const pairedDeviceIds = computed(() => pairedRecords.value.map((row) => row.deviceId))
+
   const scheduler = new PairedReconnectScheduler({
     isTransportReady: (deviceId) => readyDeviceIds.value.has(deviceId),
     tryConnect: async (deviceId) => {
-      const records = await listPairedDeviceRecords()
-      const record = records.find((row) => row.deviceId === deviceId)
+      const record = pairedRecords.value.find((row) => row.deviceId === deviceId)
       if (!record) {
         return false
       }
@@ -63,10 +62,9 @@ export function registerPairedAutoConnect(pinia: Pinia): void {
   let lastReady: Set<string> | null = null
   let lastPaired: Set<string> = new Set()
 
-  async function runTransportPairedSync(): Promise<void> {
+  function runTransportPairedSync(): void {
     const now = new Set(readyDeviceIds.value)
-    const records = await listPairedDeviceRecords()
-    const paired = new Set(records.map((row) => row.deviceId))
+    const paired = new Set(pairedDeviceIds.value)
     const sched = reconStore.getScheduler()
     if (!sched) {
       return
@@ -101,9 +99,9 @@ export function registerPairedAutoConnect(pinia: Pinia): void {
   }
 
   watch(
-    [readyDeviceIds, pairedListEpoch, pairedDevicesStorageEpoch],
+    [readyDeviceIds, pairedDeviceIds],
     () => {
-      void runTransportPairedSync()
+      runTransportPairedSync()
     },
     { flush: 'post', immediate: true }
   )

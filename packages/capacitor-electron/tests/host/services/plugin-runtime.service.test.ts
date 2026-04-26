@@ -78,7 +78,7 @@ describe('host/services/plugin-runtime.service', () => {
   test('executes selected action and emits runtime lifecycle messages', async () => {
     const runtime = createPluginRuntimeService()
     runtime.register(createTestPlugin())
-    const seenTypes: string[] = []
+    const seenEvents: string[] = []
 
     const result = await runtime.executeSelected({
       requestId: 'req-exec-1',
@@ -87,12 +87,12 @@ describe('host/services/plugin-runtime.service', () => {
       input: { type: 'url', raw: 'https://github.com/synra' },
       action: buildAction(),
       emitMessage: (message) => {
-        seenTypes.push(message.type)
+        seenEvents.push(message.event)
       }
     })
 
     expect(result.receipt.ok).toBe(true)
-    expect(seenTypes).toEqual(['runtime.received', 'runtime.started', 'runtime.finished'])
+    expect(seenEvents).toEqual(['runtime.received', 'runtime.started', 'runtime.finished'])
   })
 
   test('returns failed finished status when plugin execution fails', async () => {
@@ -109,8 +109,8 @@ describe('host/services/plugin-runtime.service', () => {
 
     expect(result.receipt.ok).toBe(false)
     const finalMessage = result.messages[result.messages.length - 1]
-    expect(finalMessage?.type).toBe('runtime.finished')
-    if (finalMessage?.type === 'runtime.finished') {
+    expect(finalMessage?.event).toBe('runtime.finished')
+    if (finalMessage?.event === 'runtime.finished') {
       expect(finalMessage.payload.status).toBe('failed')
     }
   })

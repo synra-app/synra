@@ -2,25 +2,19 @@ import {
   getPairAwaitingAcceptDeviceIds,
   getPairedLinkPhases,
   mergePairedAndDiscoveredDevices,
-  pairedDevicesStorageEpoch,
   setPairAwaitingAccept,
   setPairedDeviceConnecting,
   type DisplayDevice
 } from '@synra/hooks'
 import { DEVICE_PAIRING_REQUEST_EVENT, DEVICE_PAIRING_UNPAIR_REQUIRED_EVENT } from '@synra/protocol'
 import { storeToRefs } from 'pinia'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import type { DiscoveredDevice } from '@synra/capacitor-lan-discovery'
 import { buildLocalPairInitiatorProfile } from '../lib/pair-profile'
 import { isIpv4Address } from '../lib/network'
 import { resolveSelfOnLanForPairing } from '../lib/resolve-self-on-lan-for-pairing'
 import { registerPairingOutbound } from '../lib/pairing-outbound-pending'
-import { syncPairedDiscoveryExclusionFromRecords } from '../lib/discovery-paired-exclusion'
-import {
-  listPairedDeviceRecords,
-  removePairedDeviceRecord,
-  type SynraPairedDeviceRecord
-} from '../lib/paired-devices-storage'
+import { removePairedDeviceRecord } from '../lib/paired-devices-storage'
 import { tryOpenTransportForPairedRecord } from '../lib/connect-paired-record'
 import { useLanDiscoveryStore } from '../stores/lan-discovery'
 import { usePairedReconnectStore } from '../stores/paired-reconnect'
@@ -46,12 +40,11 @@ export function useConnectPage() {
   const pairingStore = usePairingStore()
   const pairingProtocol = usePairingProtocolContext()
   const { scanState, peers, openTransportLinks, loading, error } = storeToRefs(store)
-  const { pairedListEpoch, feedbackMessage } = storeToRefs(pairingStore)
+  const { feedbackMessage, pairedRecords, pairedRecordsReady } = storeToRefs(pairingStore)
   const reconStore = usePairedReconnectStore()
   const { reconnectGaveUpByDeviceId } = storeToRefs(reconStore)
 
   const pendingDeviceActionIds = ref<string[]>([])
-  const pairedRecords = ref<SynraPairedDeviceRecord[]>([])
 
   function isDeviceActionPending(deviceId: string): boolean {
     return pendingDeviceActionIds.value.includes(deviceId)
@@ -65,17 +58,6 @@ export function useConnectPage() {
 
   function removePendingDeviceAction(deviceId: string): void {
     pendingDeviceActionIds.value = pendingDeviceActionIds.value.filter((id) => id !== deviceId)
-  }
-
-  async function refreshPairedRecords(): Promise<void> {
-    try {
-      const records = await listPairedDeviceRecords()
-      pairedRecords.value = records
-      syncPairedDiscoveryExclusionFromRecords(records)
-    } catch {
-      // Keep current paired rows on transient storage failures so paired devices remain visible.
-      syncPairedDiscoveryExclusionFromRecords(pairedRecords.value)
-    }
   }
 
   const discoveredIpv4Peers = computed(() =>
@@ -104,6 +86,7 @@ export function useConnectPage() {
       openTransportLinks.value
     )
   )
+  const listLoading = computed(() => loading.value || !pairedRecordsReady.value)
 
   function deriveDeviceTone(input: {
     isPending: boolean
@@ -150,7 +133,7 @@ export function useConnectPage() {
   })
 
   async function onScanDiscovery(): Promise<void> {
-    // SYNRA-COMM::PLUGIN_BRIDGE::CONNECT::PAGE_TRIGGER_SCAN
+    // SYNRA-COMM::PLUGIN_BRIDGE::CONNECT::UI_START_SCAN
     await store.ensureReady()
     await store.startScan()
   }
@@ -274,8 +257,6 @@ export function useConnectPage() {
       } else {
         pairingStore.clearIncomingIfRelated(device.deviceId)
         await removePairedDeviceRecord(device.deviceId)
-        const next = await listPairedDeviceRecords()
-        syncPairedDiscoveryExclusionFromRecords(next)
         pairingStore.bumpPairedList()
         setPairedDeviceConnecting(device.deviceId, false)
         pairingStore.pushFeedback(localUnpairReason)
@@ -293,8 +274,7 @@ export function useConnectPage() {
     }
     reconStore.clearGaveUp(deviceId)
     const sched = reconStore.getScheduler()
-    const records = await listPairedDeviceRecords()
-    const record = records.find((row) => row.deviceId === deviceId)
+    const record = pairedRecords.value.find((row) => row.deviceId === deviceId)
     if (!record) {
       return
     }
@@ -318,18 +298,10 @@ export function useConnectPage() {
   }
 
   onMounted(() => {
-    // Paired devices are local persisted data; always load them immediately on page mount,
-    // independent from transport/runtime readiness.
-    void refreshPairedRecords()
+    if (!pairedRecordsReady.value) {
+      void pairingStore.refreshPairedRecords()
+    }
     void store.ensureReady().catch(() => undefined)
-  })
-
-  watch(pairedListEpoch, () => {
-    void refreshPairedRecords()
-  })
-
-  watch(pairedDevicesStorageEpoch, () => {
-    void refreshPairedRecords()
   })
 
   return {
@@ -337,7 +309,7 @@ export function useConnectPage() {
     error,
     feedbackMessage,
     linkToneByDeviceId,
-    loading,
+    loading: listLoading,
     onConnect,
     onDisconnect,
     onManualPairedReconnect,

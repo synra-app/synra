@@ -1,5 +1,10 @@
 import type { PluginAction, ShareInput, SynraActionPlugin } from '@synra/plugin-sdk'
-import type { SynraActionReceipt, SynraErrorCode, SynraRuntimeMessage } from '@synra/protocol'
+import {
+  PROTOCOL_VERSION,
+  type SynraActionReceipt,
+  type SynraErrorCode,
+  type SynraRuntimeMessage
+} from '@synra/protocol'
 import type {
   ResolveRuntimeActionsResult,
   RuntimeActionCandidate,
@@ -29,22 +34,22 @@ export type PluginRuntimeService = {
   executeSelected(options: ExecuteSelectedOptions): Promise<RuntimeExecuteResult>
 }
 
+type RuntimeLifecycleMessage = Exclude<SynraRuntimeMessage, { event: 'runtime.request' }>
+type RuntimeLifecycleEvent = RuntimeLifecycleMessage['event']
+type RuntimeLifecycleMessageByEvent = {
+  [E in RuntimeLifecycleEvent]: Extract<RuntimeLifecycleMessage, { event: E }>
+}
+type RuntimeLifecycleInputByEvent = {
+  [E in RuntimeLifecycleEvent]: Omit<RuntimeLifecycleMessageByEvent[E], 'protocolVersion'>
+}
+
 type PluginRuntimeServiceOptions = {
   now?: () => number
 }
 
-const RUNTIME_PROTOCOL_VERSION = '1.0' as const
-
 function createMessageId(traceId: string, stage: string): string {
   const randomPart = Math.random().toString(16).slice(2)
   return `${traceId}:${stage}:${randomPart}`
-}
-
-function createRuntimeMessage(input: Record<string, unknown>): SynraRuntimeMessage {
-  return {
-    ...input,
-    protocolVersion: RUNTIME_PROTOCOL_VERSION
-  } as SynraRuntimeMessage
 }
 
 function withTimeout<T>(task: Promise<T>, timeoutMs: number): Promise<T> {
@@ -152,9 +157,10 @@ export function createPluginRuntimeService(
       const plugin = pluginRegistry.get(options.action.pluginId)
 
       const received = createRuntimeMessage({
-        messageId: createMessageId(traceId, 'received'),
+        requestId: createMessageId(traceId, 'received'),
+        replyRequestId: options.requestId,
         timestamp: now(),
-        type: 'runtime.received',
+        event: 'runtime.received',
         payload: {
           acknowledgedAt: now()
         }
@@ -163,9 +169,10 @@ export function createPluginRuntimeService(
 
       if (!plugin) {
         const runtimeError = createRuntimeMessage({
-          messageId: createMessageId(traceId, 'error'),
+          requestId: createMessageId(traceId, 'error'),
+          replyRequestId: options.requestId,
           timestamp: now(),
-          type: 'runtime.error',
+          event: 'runtime.error',
           payload: {
             code: 'PLUGIN_NOT_FOUND',
             message: `Plugin '${options.action.pluginId}' is not registered.`,
@@ -186,9 +193,10 @@ export function createPluginRuntimeService(
       }
 
       const started = createRuntimeMessage({
-        messageId: createMessageId(traceId, 'started'),
+        requestId: createMessageId(traceId, 'started'),
+        replyRequestId: options.requestId,
         timestamp: now(),
-        type: 'runtime.started',
+        event: 'runtime.started',
         payload: {
           startedAt: now()
         }
@@ -205,9 +213,10 @@ export function createPluginRuntimeService(
           options.timeoutMs ?? 10_000
         )
         const finished = createRuntimeMessage({
-          messageId: createMessageId(traceId, 'finished'),
+          requestId: createMessageId(traceId, 'finished'),
+          replyRequestId: options.requestId,
           timestamp: now(),
-          type: 'runtime.finished',
+          event: 'runtime.finished',
           payload: {
             status: receipt.ok ? 'success' : 'failed',
             finishedAt: now(),
@@ -242,9 +251,10 @@ export function createPluginRuntimeService(
             : 'Plugin execution failed.'
 
         const finished = createRuntimeMessage({
-          messageId: createMessageId(traceId, 'finished'),
+          requestId: createMessageId(traceId, 'finished'),
+          replyRequestId: options.requestId,
           timestamp: now(),
-          type: 'runtime.finished',
+          event: 'runtime.finished',
           payload: {
             status: 'failed',
             finishedAt: now(),
@@ -263,4 +273,13 @@ export function createPluginRuntimeService(
       }
     }
   }
+}
+
+function createRuntimeMessage<E extends RuntimeLifecycleEvent>(
+  input: RuntimeLifecycleInputByEvent[E]
+): RuntimeLifecycleMessageByEvent[E] {
+  return {
+    ...input,
+    protocolVersion: PROTOCOL_VERSION
+  } as RuntimeLifecycleMessageByEvent[E]
 }
