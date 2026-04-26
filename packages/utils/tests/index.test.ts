@@ -1,29 +1,11 @@
 import { beforeEach, describe, expect, test, vi } from 'vite-plus/test'
+import { Capacitor } from '@capacitor/core'
 import { createLogger } from '../src/index.ts'
 
 describe('createLogger', () => {
-  const runtime = globalThis as typeof globalThis & {
-    window?: unknown
-    navigator?: { userAgent?: string }
-  }
-  const originalWindow = runtime.window
-  const originalNavigatorDescriptor = Object.getOwnPropertyDescriptor(runtime, 'navigator')
-
   beforeEach(() => {
     vi.restoreAllMocks()
-    if (originalWindow === undefined) {
-      delete runtime.window
-    } else {
-      runtime.window = originalWindow
-    }
-    if (originalNavigatorDescriptor) {
-      Object.defineProperty(runtime, 'navigator', originalNavigatorDescriptor)
-    } else {
-      Object.defineProperty(runtime, 'navigator', {
-        configurable: true,
-        value: undefined
-      })
-    }
+    vi.spyOn(Capacitor, 'getPlatform').mockReturnValue('web')
   })
 
   test('returns logger methods', () => {
@@ -47,11 +29,7 @@ describe('createLogger', () => {
   })
 
   test('prints plain text in mobile runtime', () => {
-    runtime.window = {}
-    Object.defineProperty(runtime, 'navigator', {
-      configurable: true,
-      value: { userAgent: 'Mozilla/5.0 (Linux; Android 14)' }
-    })
+    vi.spyOn(Capacitor, 'getPlatform').mockReturnValue('android')
     const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
 
     const logger = createLogger('tcp')
@@ -60,5 +38,25 @@ describe('createLogger', () => {
     expect(infoSpy).toHaveBeenCalledWith(
       '[synra:tcp] recv {"requestId":"1","payload":{"nested":true}}'
     )
+  })
+
+  test('serializes problematic objects without [object Object]', () => {
+    vi.spyOn(Capacitor, 'getPlatform').mockReturnValue('android')
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+    const payload: Record<string, unknown> = {}
+    Object.defineProperty(payload, 'broken', {
+      enumerable: true,
+      get() {
+        throw new Error('boom')
+      }
+    })
+
+    const logger = createLogger('tcp')
+    logger.info('recv', payload)
+
+    const message = infoSpy.mock.calls[0]?.[0]
+    expect(typeof message).toBe('string')
+    expect(message).not.toContain('[object Object]')
+    expect(message).toContain('"broken":"[Thrown: boom]"')
   })
 })

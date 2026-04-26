@@ -644,6 +644,9 @@ importers:
 
   packages/utils:
     dependencies:
+      '@capacitor/core':
+        specifier: catalog:capacitor
+        version: 8.3.1
       consola:
         specifier: catalog:cli
         version: 3.4.2

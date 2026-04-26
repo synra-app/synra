@@ -1,4 +1,5 @@
 import { createConsola } from 'consola'
+import { Capacitor } from '@capacitor/core'
 
 type LoggerMethod = (...args: unknown[]) => void
 
@@ -15,29 +16,60 @@ const baseLogger = createConsola({
 
 const MOBILE_PLATFORMS = new Set(['android', 'ios'])
 
-type RuntimeGlobal = typeof globalThis & {
-  window?: unknown
-  navigator?: {
-    userAgent?: string
-  }
-  Capacitor?: {
-    getPlatform?: () => string
+function isMobileRuntime(): boolean {
+  try {
+    const platform = Capacitor.getPlatform()
+    return MOBILE_PLATFORMS.has(platform)
+  } catch {
+    return false
   }
 }
 
-function isMobileRuntime(): boolean {
-  const runtime = globalThis as RuntimeGlobal
-  const platform = runtime.Capacitor?.getPlatform?.()
-  if (typeof platform === 'string' && MOBILE_PLATFORMS.has(platform)) {
-    return true
+function toSerializableValue(input: unknown, visited: WeakSet<object>): unknown {
+  if (input instanceof Error) {
+    return {
+      name: input.name,
+      message: input.message,
+      stack: input.stack
+    }
   }
 
-  if (typeof runtime.window === 'undefined') {
-    return false
+  if (typeof input === 'bigint') {
+    return input.toString()
   }
 
-  const userAgent = runtime.navigator?.userAgent?.toLowerCase() ?? ''
-  return userAgent.includes('android') || userAgent.includes('iphone') || userAgent.includes('ipad')
+  if (typeof input === 'symbol' || typeof input === 'function' || typeof input === 'undefined') {
+    return String(input)
+  }
+
+  if (input === null || typeof input !== 'object') {
+    return input
+  }
+
+  if (visited.has(input)) {
+    return '[Circular]'
+  }
+  visited.add(input)
+
+  if (Array.isArray(input)) {
+    return input.map((item) => toSerializableValue(item, visited))
+  }
+
+  if (input instanceof Date) {
+    return Number.isNaN(input.getTime()) ? 'Invalid Date' : input.toISOString()
+  }
+
+  const result: Record<string, unknown> = {}
+  for (const key of Object.keys(input)) {
+    try {
+      const value = (input as Record<string, unknown>)[key]
+      result[key] = toSerializableValue(value, visited)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      result[key] = `[Thrown: ${message}]`
+    }
+  }
+  return result
 }
 
 function normalizeUnknown(input: unknown): string {
@@ -58,30 +90,13 @@ function normalizeUnknown(input: unknown): string {
     return String(input)
   }
 
-  const visited = new WeakSet<object>()
   try {
-    const encoded = JSON.stringify(input, (_key, value: unknown) => {
-      if (value instanceof Error) {
-        return {
-          name: value.name,
-          message: value.message,
-          stack: value.stack
-        }
-      }
-      if (typeof value === 'bigint') {
-        return value.toString()
-      }
-      if (typeof value === 'object' && value !== null) {
-        if (visited.has(value)) {
-          return '[Circular]'
-        }
-        visited.add(value)
-      }
-      return value
-    })
-    return encoded ?? Object.prototype.toString.call(input)
+    const visited = new WeakSet<object>()
+    const serializable = toSerializableValue(input, visited)
+    const encoded = JSON.stringify(serializable)
+    return encoded ?? String(serializable)
   } catch {
-    return Object.prototype.toString.call(input)
+    return '[Unserializable]'
   }
 }
 
@@ -91,6 +106,10 @@ function formatConsoleMessage(fullTag: string, args: unknown[]): string {
     return `[${fullTag}]`
   }
   return `[${fullTag}] ${body}`
+}
+
+function formatLoggerBody(args: unknown[]): string {
+  return args.map((arg) => normalizeUnknown(arg)).join(' ')
 }
 
 /**
@@ -117,9 +136,17 @@ export function createLogger(tag: string): LoggerInstance {
 
   const logger = baseLogger.withTag(fullTag)
   return {
-    info: logger.info.bind(logger),
-    success: logger.success.bind(logger),
-    warn: logger.warn.bind(logger),
-    error: logger.error.bind(logger)
+    info: (...args) => {
+      logger.info(formatLoggerBody(args))
+    },
+    success: (...args) => {
+      logger.success(formatLoggerBody(args))
+    },
+    warn: (...args) => {
+      logger.warn(formatLoggerBody(args))
+    },
+    error: (...args) => {
+      logger.error(formatLoggerBody(args))
+    }
   }
 }

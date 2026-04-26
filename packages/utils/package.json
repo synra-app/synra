@@ -35,6 +35,7 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
+    "@capacitor/core": "catalog:capacitor",
     "consola": "catalog:cli"
   },
   "devDependencies": {
