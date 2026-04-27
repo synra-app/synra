@@ -1,4 +1,4 @@
-import { defineConfig, presetIcons, presetWind3 } from 'unocss'
+import { defineConfig, mergeConfigs, presetIcons, presetWind3, type UserConfig } from 'unocss'
 
 const breakpoints = {
   xs: '320px',
@@ -10,7 +10,7 @@ const breakpoints = {
   '3xl': '1920px'
 }
 
-export const synraUnoConfig = defineConfig({
+const synraUnoConfigValue: UserConfig = defineConfig({
   theme: {
     colors: {
       primary: '#7c8cff',
@@ -41,3 +41,7 @@ export const synraUnoConfig = defineConfig({
   ],
   presets: [presetWind3(), presetIcons()]
 })
+
+export function defineSynraConfig(userConfig: UserConfig = {}): UserConfig {
+  return mergeConfigs([synraUnoConfigValue, userConfig])
+}
