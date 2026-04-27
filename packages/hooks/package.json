@@ -1,6 +1,6 @@
 {
   "name": "@synra/hooks",
-  "version": "0.0.0",
+  "version": "0.0.3",
   "description": "Unified runtime-driven hooks for Synra.",
   "license": "MIT",
   "files": [

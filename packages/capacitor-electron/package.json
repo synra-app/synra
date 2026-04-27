@@ -1,6 +1,6 @@
 {
   "name": "@synra/capacitor-electron",
-  "version": "0.0.0",
+  "version": "0.0.3",
   "description": "A starter for creating a TypeScript package.",
   "homepage": "https://github.com/author/library#readme",
   "bugs": {
