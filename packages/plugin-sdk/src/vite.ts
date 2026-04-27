@@ -30,19 +30,6 @@ type PagesManifestItem = {
   file: string
 }
 
-const SYNRA_PLUGIN_SDK_DEBUG = process.env.SYNRA_PLUGIN_SDK_DEBUG !== '0'
-
-function debugLog(message: string, meta?: unknown): void {
-  if (!SYNRA_PLUGIN_SDK_DEBUG) {
-    return
-  }
-  if (meta === undefined) {
-    console.info(`[synra-plugin-sdk/vite] ${message}`)
-    return
-  }
-  console.info(`[synra-plugin-sdk/vite] ${message}`, meta)
-}
-
 const VIRTUAL_PAGES_ENTRY_NAME = 'ui/__synra_pages__'
 const VIRTUAL_PAGES_ENTRY_ID = 'virtual:synra-pages-entry'
 const RESOLVED_VIRTUAL_PAGES_ENTRY_ID = '\0virtual:synra-pages-entry'
@@ -147,10 +134,6 @@ function createVirtualPagesEntryPlugin(cwd: string, pageEntries: string[], hasUn
     name: 'synra-pages-entry',
     resolveId(id: string) {
       if (id === VIRTUAL_PAGES_ENTRY_ID) {
-        debugLog('Resolved virtual pages entry id', {
-          id,
-          resolved: RESOLVED_VIRTUAL_PAGES_ENTRY_ID
-        })
         return RESOLVED_VIRTUAL_PAGES_ENTRY_ID
       }
       if (id.startsWith('./pages/')) {
@@ -160,10 +143,6 @@ function createVirtualPagesEntryPlugin(cwd: string, pageEntries: string[], hasUn
     },
     load(id: string) {
       if (id === RESOLVED_VIRTUAL_PAGES_ENTRY_ID) {
-        debugLog('Loaded virtual pages entry module', {
-          pageCount: pageEntries.length,
-          hasUnoConfig
-        })
         return `${source}\n`
       }
       return null
@@ -222,10 +201,6 @@ function createUnoCssGeneratePlugin(cwd: string, hasUnoConfig: boolean, unoConfi
 
     const compressed = compressCss(result.css)
     generatedCss = `@layer ${SYNRA_PLUGIN_PACK_STYLE_LAYER}{${compressed}}`
-    debugLog('Generated UnoCSS in-memory css', {
-      targetCount: scanTargets.length,
-      cssLength: generatedCss.length
-    })
     return generatedCss
   }
 
@@ -233,7 +208,6 @@ function createUnoCssGeneratePlugin(cwd: string, hasUnoConfig: boolean, unoConfi
     name: 'synra-unocss-generate',
     async resolveId(id: string) {
       if (id === VIRTUAL_UNO_CSS_ID) {
-        debugLog('Resolved virtual UnoCSS id', { id, resolved: RESOLVED_VIRTUAL_UNO_CSS_ID })
         return RESOLVED_VIRTUAL_UNO_CSS_ID
       }
       return null
@@ -291,11 +265,6 @@ export function synraVitePluginConfig(): UserConfig {
   const pageManifestItems = createPagesManifestItems(pageEntries)
   const unoConfigPath = normalizeEntryPath(resolve(cwd, 'uno.config.ts'))
   const hasUnoConfig = existsSync(unoConfigPath)
-  debugLog('Created synra vite plugin config', {
-    cwd,
-    pageEntries,
-    hasUnoConfig
-  })
 
   return {
     fmt: {
