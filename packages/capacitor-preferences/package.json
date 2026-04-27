@@ -1,6 +1,6 @@
 {
   "name": "@synra/capacitor-preferences",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Lightweight Capacitor key-value preferences (get/set/remove) with Electron support.",
   "keywords": [
     "capacitor",

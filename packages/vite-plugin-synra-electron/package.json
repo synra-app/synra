@@ -1,6 +1,6 @@
 {
   "name": "vite-plugin-synra-electron",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Synra development plugin for Electron + frontend hot workflow.",
   "license": "MIT",
   "files": [
