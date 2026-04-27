@@ -137,10 +137,10 @@ export type DeviceDiscoveryStartOptions = {
   subnetCidrs?: string[]
   maxProbeHosts?: number
   concurrency?: number
-  discoveryTimeoutMs?: number
+  /** Single wall-clock budget (ms) for strategy browse + Synra TCP probe. */
+  scanBudgetMs?: number
   reset?: boolean
   port?: number
-  timeoutMs?: number
   /** Merged into each Synra TCP probe `connect` payload during this discovery run. */
   probeConnectWirePayload?: Record<string, unknown>
 }

@@ -3,7 +3,6 @@ import Foundation
 final class MdnsCollector: NSObject, NetServiceBrowserDelegate, NetServiceDelegate {
     private let browser = NetServiceBrowser()
     private var addresses = Set<String>()
-    private var bonjourHostByIp: [String: String] = [:]
     private var sourceDeviceIdByIp: [String: String] = [:]
     private let accessQueue = DispatchQueue(label: "com.synra.lan-discovery.mdns-collector")
     // NetService must be retained until resolve finishes; otherwise resolution never completes.
@@ -18,17 +17,16 @@ final class MdnsCollector: NSObject, NetServiceBrowserDelegate, NetServiceDelega
     func start(serviceType: String, timeoutMs: Int) {
         accessQueue.sync {
             addresses.removeAll()
-            bonjourHostByIp.removeAll()
             sourceDeviceIdByIp.removeAll()
         }
         #if DEBUG
             print("[lan-discovery] mdns browse type=\(serviceType) timeoutMs=\(timeoutMs)")
         #endif
         let browseSeconds = Double(max(timeoutMs, 200)) / 1000.0
-        let resolveTimeout = max(3, Int(browseSeconds.rounded(.up)) + 2)
-        lastResolveTimeout = resolveTimeout
-        // Run loop must cover browse time plus in-flight resolves (can finish after last didFind).
-        let totalRunSeconds = browseSeconds + Double(resolveTimeout) + 0.5
+        let resolveGraceMs = 150
+        let resolveTimeoutSec = max(1, Int(ceil(Double(resolveGraceMs) / 1000.0)))
+        lastResolveTimeout = resolveTimeoutSec
+        let totalRunSeconds = browseSeconds + Double(resolveGraceMs) / 1000.0 + 0.05
         browser.searchForServices(ofType: serviceType, inDomain: "local.")
         // Pump the current run loop so NetServiceBrowser / NetService delegate callbacks fire.
         let limitDate = Date().addingTimeInterval(totalRunSeconds)
@@ -37,10 +35,11 @@ final class MdnsCollector: NSObject, NetServiceBrowserDelegate, NetServiceDelega
         pendingResolutions.removeAll()
     }
 
-    func collectedEntries() -> [(ip: String, bonjourName: String?, sourceDeviceId: String?)] {
+    /// IPv4 + optional `sourceDeviceId` from TXT (no display strings; SYNRA-COMM::UDP_DISCOVERY::CONNECT::DISCOVERY_SCAN).
+    func collectedEntries() -> [(ip: String, sourceDeviceId: String?)] {
         accessQueue.sync {
             addresses.sorted().map { ip in
-                (ip, bonjourHostByIp[ip], sourceDeviceIdByIp[ip])
+                (ip, sourceDeviceIdByIp[ip])
             }
         }
     }
@@ -105,23 +104,12 @@ final class MdnsCollector: NSObject, NetServiceBrowserDelegate, NetServiceDelega
         guard let chosen else {
             return
         }
-        let rawHost = sender.hostName?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let bonjourLabel = Self.normalizeBonjourHostName(rawHost)
         let sourceDeviceId = Self.extractSourceDeviceId(sender)
         accessQueue.async { [weak self] in
             guard let self else {
                 return
             }
             self.addresses.insert(chosen)
-            guard let bonjourLabel, !bonjourLabel.isEmpty else {
-                return
-            }
-            if let existing = self.bonjourHostByIp[chosen], !existing.isEmpty {
-                self.bonjourHostByIp[chosen] = Self.preferBonjourLabel(existing, bonjourLabel)
-            } else {
-                self.bonjourHostByIp[chosen] = bonjourLabel
-            }
             if let sourceDeviceId, !sourceDeviceId.isEmpty {
                 self.sourceDeviceIdByIp[chosen] = sourceDeviceId
             }
@@ -144,32 +132,6 @@ final class MdnsCollector: NSObject, NetServiceBrowserDelegate, NetServiceDelega
             return nil
         }
         return parsed
-    }
-
-    // Human-facing label from Bonjour host: strip trailing dots and `.local`.
-    private static func normalizeBonjourHostName(_ raw: String) -> String? {
-        var trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        while trimmed.hasSuffix(".") {
-            trimmed = String(trimmed.dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-        if trimmed.isEmpty {
-            return nil
-        }
-        let lower = trimmed.lowercased()
-        if lower.hasSuffix(".local"), trimmed.count >= 6 {
-            trimmed = String(trimmed.dropLast(6)).trimmingCharacters(in: .whitespacesAndNewlines)
-            while trimmed.hasSuffix(".") {
-                trimmed = String(trimmed.dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
-            }
-        }
-        return trimmed.isEmpty ? nil : trimmed
-    }
-
-    private static func preferBonjourLabel(_ a: String, _ b: String) -> String {
-        if a.count != b.count {
-            return a.count >= b.count ? a : b
-        }
-        return a <= b ? a : b
     }
 
     private static func pickPreferredIpv4(_ candidates: [String]) -> String? {

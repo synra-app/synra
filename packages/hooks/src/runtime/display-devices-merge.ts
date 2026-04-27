@@ -1,6 +1,8 @@
 import type { DiscoveredDevice } from '@synra/capacitor-lan-discovery'
 import type { SynraPairedDeviceRecord } from '@synra/capacitor-preferences'
 import type { RuntimeOpenTransportLink } from '../types'
+import { DEFAULT_SYNRA_TCP_PORT } from './constants'
+import { shouldExposeDiscoveredDevice } from './discovery-exposure'
 import { normalizeHost, normalizeHostKey } from './host-normalization'
 
 export type DisplayDevice = DiscoveredDevice & {
@@ -8,13 +10,11 @@ export type DisplayDevice = DiscoveredDevice & {
   pairedAt?: number
 }
 
-const DEFAULT_LAN_PORT = 32100
-
 function discoveredPort(device: DiscoveredDevice): number {
   if (typeof device.port === 'number' && device.port > 0) {
     return device.port
   }
-  return DEFAULT_LAN_PORT
+  return DEFAULT_SYNRA_TCP_PORT
 }
 
 function buildLiveByHostKey(devices: readonly DiscoveredDevice[]): Map<string, DiscoveredDevice> {
@@ -57,7 +57,7 @@ function openLinkAddressForDevice(
     }
     return {
       host,
-      port: typeof link.port === 'number' && link.port > 0 ? link.port : DEFAULT_LAN_PORT
+      port: typeof link.port === 'number' && link.port > 0 ? link.port : DEFAULT_SYNRA_TCP_PORT
     }
   }
   return undefined
@@ -86,7 +86,7 @@ export function mergePairedAndDiscoveredDevices(
       if (!liveById.get(record.deviceId)) {
         const key = normalizeHostKey(
           record.lastResolvedHost,
-          record.lastResolvedPort ?? DEFAULT_LAN_PORT
+          record.lastResolvedPort ?? DEFAULT_SYNRA_TCP_PORT
         )
         if (key.length > 0) {
           const byHost = liveByHostKey.get(key)
@@ -108,7 +108,7 @@ export function mergePairedAndDiscoveredDevices(
         port =
           typeof record.lastResolvedPort === 'number' && record.lastResolvedPort > 0
             ? record.lastResolvedPort
-            : (fromLink?.port ?? DEFAULT_LAN_PORT)
+            : (fromLink?.port ?? DEFAULT_SYNRA_TCP_PORT)
       } else if (fromLink) {
         host = fromLink.host
         port = fromLink.port
@@ -134,6 +134,7 @@ export function mergePairedAndDiscoveredDevices(
     })
 
   const unpaired = discoveredPeers
+    .filter((device) => shouldExposeDiscoveredDevice(device))
     .filter(
       (device) => !pairedIds.has(device.deviceId) && !consumedDiscoveredIds.has(device.deviceId)
     )

@@ -5,7 +5,11 @@ import type {
 } from '@synra/capacitor-lan-discovery'
 import type { SynraProbeResult } from '@synra/capacitor-device-connection'
 import { SYNRA_PROBE_EMBEDDED_IN_DISCOVERY } from '@synra/capacitor-device-connection'
-import { unknownToErrorMessage } from '@synra/protocol'
+import {
+  DEFAULT_SYNRA_SCAN_BUDGET_MS,
+  synraDiscoveryTimeoutsFromBudget,
+  unknownToErrorMessage
+} from '@synra/protocol'
 import type { Ref } from 'vue'
 import type { RuntimeOpenTransportLink, SynraDiscoveryStartOptions } from '../types'
 import type { ConnectionRuntimeAdapter } from './adapter'
@@ -14,7 +18,6 @@ import {
   filterAdmittedDiscoveredDevices,
   shouldKeepDiscoveredDeviceId
 } from './discovery-admission'
-import { shouldExposeDiscoveredDevice } from './discovery-exposure'
 import { sortDevices } from './device-sort'
 import { normalizeHost } from './host-normalization'
 import {
@@ -28,7 +31,7 @@ function defaultSynraPort(options: SynraDiscoveryStartOptions): number {
 }
 
 function mergeDiscoveredWithSynraProbes(
-  candidates: DiscoveredDevice[],
+  allRows: DiscoveredDevice[],
   probes: SynraProbeResult[],
   fallbackPort: number
 ): DiscoveredDevice[] {
@@ -38,14 +41,15 @@ function mergeDiscoveredWithSynraProbes(
   }
   const now = Date.now()
   const merged: DiscoveredDevice[] = []
-  for (const row of candidates) {
+  for (const row of allRows) {
     const key = normalizeHost(row.ipAddress)
     const probe = byHost.get(key)
     if (!probe) {
+      merged.push(row)
       continue
     }
     if (!probe.ok) {
-      if (probe.error === SYNRA_PROBE_EMBEDDED_IN_DISCOVERY && shouldExposeDiscoveredDevice(row)) {
+      if (probe.error === SYNRA_PROBE_EMBEDDED_IN_DISCOVERY) {
         merged.push(row)
       }
       continue
@@ -93,11 +97,14 @@ export function createDiscoveryModule(options: {
     loading.value = true
     try {
       const defaultProbeWire = { connectType: 'fresh' } as Record<string, unknown>
+      const scanBudgetMs = discoveryOptions.scanBudgetMs ?? DEFAULT_SYNRA_SCAN_BUDGET_MS
+      const { probeTimeoutMs } = synraDiscoveryTimeoutsFromBudget(scanBudgetMs)
       const result = await adapter.startDiscovery({
         discoveryMode: 'hybrid',
         includeLoopback: false,
         enableProbeFallback: true,
         ...discoveryOptions,
+        scanBudgetMs,
         probeConnectWirePayload: discoveryOptions.probeConnectWirePayload ?? defaultProbeWire
       })
       scanState.value = result.state
@@ -127,9 +134,9 @@ export function createDiscoveryModule(options: {
           try {
             const { results } = await adapter.probeSynraPeers({
               targets,
-              timeoutMs: discoveryOptions.timeoutMs ?? 1500
+              timeoutMs: probeTimeoutMs
             })
-            scanRows = mergeDiscoveredWithSynraProbes(probeable, results, fallbackPort)
+            scanRows = mergeDiscoveredWithSynraProbes(preProbeRows, results, fallbackPort)
             await applyHostPairingHintsFromDiscovery(
               results
                 .filter((row) => row.ok && row.wireSourceDeviceId)
@@ -139,12 +146,10 @@ export function createDiscoveryModule(options: {
                 }))
             )
           } catch {
-            // Restore LAN candidates when the whole probe call fails; single-target failures
-            // are represented per-result in mergeDiscoveredWithSynraProbes.
             scanRows = preProbeRows
           }
         } else {
-          scanRows = []
+          scanRows = preProbeRows
         }
       }
       scanRows = mergeReadyLinksIntoDiscovered(scanRows, liveLinks, fallbackPort)

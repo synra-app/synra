@@ -98,7 +98,7 @@ describe('shared/schema/validators', () => {
         subnetCidrs: ['192.168.1.0/24'],
         maxProbeHosts: 64,
         concurrency: 16,
-        discoveryTimeoutMs: 2000,
+        scanBudgetMs: 2000,
         reset: false
       })
     ).toBe(true)

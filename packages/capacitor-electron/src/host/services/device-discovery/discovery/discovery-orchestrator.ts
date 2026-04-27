@@ -1,18 +1,15 @@
 import { randomUUID } from 'node:crypto'
+import { DEFAULT_SYNRA_SCAN_BUDGET_MS, synraDiscoveryTimeoutsFromBudget } from '@synra/protocol'
 import type {
   DeviceDiscoveryStartOptions,
-  DeviceDiscoveryStartResult
+  DeviceDiscoveryStartResult,
+  DiscoveredDevice
 } from '../../../../shared/protocol/types'
-import {
-  DEFAULT_DISCOVERY_TIMEOUT_MS,
-  DEFAULT_PROBE_CONCURRENCY,
-  DEFAULT_PROBE_TIMEOUT_MS,
-  DEFAULT_TCP_PORT
-} from '../core/constants'
+import { DEFAULT_PROBE_CONCURRENCY, DEFAULT_TCP_PORT } from '../core/constants'
 import { collectLocalIpSet } from '../core/network'
 import type { DeviceRegistry } from '../state/device-registry'
 import type { DiscoveryStrategy } from './discovery-strategy'
-import { probeDevices } from './probe-runner'
+import { isUuidLike, probeDevices } from './probe-runner'
 import type { ProbeSocketRegistry } from './probe-socket-registry'
 
 type DiscoveryState = 'idle' | 'scanning'
@@ -28,6 +25,16 @@ type DiscoveryOrchestratorOptions = {
   strategies: DiscoveryStrategy[]
   resolveLocalDeviceUuid: () => string
   probeSocketRegistry?: ProbeSocketRegistry
+}
+
+function canTrustLanIdentityWithoutTcp(device: DiscoveredDevice): boolean {
+  if (!isUuidLike(device.deviceId)) {
+    return false
+  }
+  if (device.source === 'manual') {
+    return false
+  }
+  return device.source === 'mdns' || device.source === 'probe'
 }
 
 export function createDiscoveryOrchestrator(
@@ -48,10 +55,11 @@ export function createDiscoveryOrchestrator(
         options.registry.reset()
       }
       state = 'scanning'
-      const timeoutMs =
-        startOptions.discoveryTimeoutMs && startOptions.discoveryTimeoutMs > 0
-          ? startOptions.discoveryTimeoutMs
-          : DEFAULT_DISCOVERY_TIMEOUT_MS
+      const budget =
+        startOptions.scanBudgetMs && startOptions.scanBudgetMs > 0
+          ? startOptions.scanBudgetMs
+          : DEFAULT_SYNRA_SCAN_BUDGET_MS
+      const { discoveryTimeoutMs, probeTimeoutMs } = synraDiscoveryTimeoutsFromBudget(budget)
       const enableProbeFallback = startOptions.enableProbeFallback !== false
       const shouldUseMdns = mode === 'mdns' || mode === 'hybrid'
       const shouldUseUdp = mode === 'subnet' || (mode === 'hybrid' && enableProbeFallback)
@@ -69,7 +77,7 @@ export function createDiscoveryOrchestrator(
         activeStrategies.map(async (strategy) => {
           const rows = await strategy.discover({
             options: startOptions,
-            timeoutMs,
+            timeoutMs: discoveryTimeoutMs,
             localDeviceUuid: options.resolveLocalDeviceUuid()
           })
           return { strategy: strategy.kind, rows }
@@ -80,13 +88,32 @@ export function createDiscoveryOrchestrator(
 
       const probePort = startOptions.port ?? DEFAULT_TCP_PORT
       const probeInputs = options.registry.list()
-      const probed = await probeDevices(probeInputs, {
+      const tcpProbeTargets = probeInputs.filter((d) => !canTrustLanIdentityWithoutTcp(d))
+      const trustedLan = probeInputs.filter(canTrustLanIdentityWithoutTcp)
+      const probed = await probeDevices(tcpProbeTargets, {
         localDeviceId: options.resolveLocalDeviceUuid(),
         port: probePort,
-        timeoutMs: startOptions.timeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS,
+        timeoutMs: probeTimeoutMs,
         concurrency: startOptions.concurrency ?? DEFAULT_PROBE_CONCURRENCY,
         probeConnectWirePayload: startOptions.probeConnectWirePayload,
         probeSocketRegistry: options.probeSocketRegistry
+      })
+      const now = Date.now()
+      const trustedAccepted: DiscoveredDevice[] = trustedLan.map((device) => {
+        const name =
+          typeof device.name === 'string' && device.name.trim().length > 0
+            ? device.name.trim()
+            : device.ipAddress
+        return {
+          ...device,
+          name,
+          port: device.port ?? probePort,
+          source: 'probe' as const,
+          connectable: true,
+          connectCheckAt: now,
+          connectCheckError: undefined,
+          lastSeenAt: now
+        }
       })
       options.registry.reset()
       const accepted = probed
@@ -103,7 +130,7 @@ export function createDiscoveryOrchestrator(
               : device.deviceId
           return { ...device, name, source: 'probe' as const }
         })
-      options.registry.merge(accepted)
+      options.registry.merge([...accepted, ...trustedAccepted])
       const keepProbeSockets = new Set(accepted.map((d) => `${d.ipAddress}:${probePort}`))
       options.probeSocketRegistry?.closeStale(keepProbeSockets)
 

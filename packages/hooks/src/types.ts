@@ -48,10 +48,12 @@ export type SynraDiscoveryStartOptions = {
   subnetCidrs?: string[]
   maxProbeHosts?: number
   concurrency?: number
-  discoveryTimeoutMs?: number
+  /**
+   * Single wall-clock budget (ms) for LAN discovery: native mDNS/UDP slice + Synra TCP probe slice (Capacitor merges in one native pass; Electron host splits the same budget).
+   */
+  scanBudgetMs?: number
   reset?: boolean
   port?: number
-  timeoutMs?: number
   /** Merged into each Synra probe `connect` payload (Capacitor + Electron discovery). */
   probeConnectWirePayload?: Record<string, unknown>
 }

@@ -27,16 +27,18 @@ export function toManualDevices(_targets: string[]): DiscoveredDevice[] {
   return []
 }
 
-/** mDNS/UDP yield IPv4 candidates only; name is filled by TCP probe (helloAck). */
+/** mDNS/UDP yield IPv4 candidates only; name is usually filled by TCP probe unless `displayNameHint` is set. */
 export function toProbeCandidate(
   ipAddress: string,
   source: DeviceSource,
   port?: number,
-  sourceDeviceUuid?: string
+  sourceDeviceUuid?: string,
+  displayNameHint?: string
 ): DiscoveredDevice {
   const key = typeof sourceDeviceUuid === 'string' ? sourceDeviceUuid.trim() : ''
   if (key.length === 0) {
     return createDevice('', '', ipAddress, source, port)
   }
-  return createDevice(key, '', ipAddress, source, port)
+  const hint = typeof displayNameHint === 'string' ? displayNameHint.trim() : ''
+  return createDevice(key, hint, ipAddress, source, port)
 }

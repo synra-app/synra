@@ -1,5 +1,6 @@
 export * from './lan-events'
 export * from './event-names'
+export * from './discovery-timing'
 
 export const PROTOCOL_VERSION = '1.0' as const
 

@@ -20,6 +20,17 @@ import java.util.UUID;
 public class LanDiscoveryPlugin {
     private static final int DEFAULT_SCAN_WINDOW_MS = 15000;
 
+    /** Per-host metadata from mDNS/UDP (Synra TXT / JSON); no display strings. */
+    public static final class DiscoveryHint {
+        public final String sourceDeviceId;
+        public final int synraPort;
+
+        public DiscoveryHint(String sourceDeviceId, int synraPort) {
+            this.sourceDeviceId = sourceDeviceId;
+            this.synraPort = synraPort;
+        }
+    }
+
     private String state = "idle";
     private Long startedAt = null;
     private int scanWindowMs = DEFAULT_SCAN_WINDOW_MS;
@@ -81,7 +92,7 @@ public class LanDiscoveryPlugin {
     void mergeCandidateDevices(
         List<String> ips,
         Set<String> manualHosts,
-        Map<String, String> sourceDeviceIdsByHost
+        Map<String, DiscoveryHint> hintsByHost
     ) {
         long now = System.currentTimeMillis();
         for (String host : ips) {
@@ -92,14 +103,80 @@ public class LanDiscoveryPlugin {
             if (trimmed.isEmpty()) {
                 continue;
             }
-            String sourceDeviceId = sourceDeviceIdsByHost.get(trimmed);
+            DiscoveryHint hint = hintsByHost.get(trimmed);
+            String sourceDeviceId = hint != null && hint.sourceDeviceId != null ? hint.sourceDeviceId.trim() : "";
             String stableId = Objects.requireNonNull(
                 LanDiscoveryIdUtils.canonicalLanDeviceId(
-                    sourceDeviceId != null && !sourceDeviceId.isBlank() ? sourceDeviceId : trimmed
+                    !sourceDeviceId.isEmpty() ? sourceDeviceId : trimmed
                 )
             );
             String source = manualHosts.contains(trimmed) ? "manual" : "mdns";
-            this.devices.put(stableId, new DeviceRecord(stableId, trimmed, trimmed, source, false, null, null, now, now));
+            boolean trustedLanIdentity =
+                !manualHosts.contains(trimmed) && !sourceDeviceId.isEmpty();
+            String name = trimmed;
+            int synraPort = hint != null && hint.synraPort > 0 ? hint.synraPort : 0;
+            this.devices.put(
+                stableId,
+                new DeviceRecord(
+                    stableId,
+                    name,
+                    trimmed,
+                    synraPort,
+                    source,
+                    trustedLanIdentity,
+                    trustedLanIdentity ? Long.valueOf(now) : null,
+                    null,
+                    now,
+                    now
+                )
+            );
+        }
+    }
+
+    /**
+     * SYNRA-COMM::DEVICE_HANDSHAKE::CONNECT::PROBE_BATCH — apply native probe rows to the device map.
+     */
+    public synchronized void applySynraProbeJsonResults(org.json.JSONArray results, int fallbackPort, long now) {
+        if (results == null) {
+            return;
+        }
+        for (int i = 0; i < results.length(); i += 1) {
+            org.json.JSONObject row = results.optJSONObject(i);
+            if (row == null) {
+                continue;
+            }
+            String host = row.optString("host", "").trim();
+            if (host.isEmpty()) {
+                continue;
+            }
+            boolean ok = row.optBoolean("ok", false);
+            if (!ok) {
+                continue;
+            }
+            String wireId = row.optString("wireSourceDeviceId", "").trim();
+            if (wireId.isEmpty()) {
+                continue;
+            }
+            String stableId = Objects.requireNonNull(LanDiscoveryIdUtils.canonicalLanDeviceId(wireId));
+            int port = row.optInt("port", fallbackPort);
+            if (port <= 0) {
+                port = fallbackPort;
+            }
+            this.devices.put(
+                stableId,
+                new DeviceRecord(
+                    stableId,
+                    host,
+                    host,
+                    port,
+                    "probe",
+                    true,
+                    Long.valueOf(now),
+                    null,
+                    now,
+                    now
+                )
+            );
         }
     }
 
@@ -125,7 +202,6 @@ public class LanDiscoveryPlugin {
 
     private List<DeviceRecord> collectInterfaceDevices(boolean includeLoopback) {
         List<DeviceRecord> result = new ArrayList<>();
-        String host = safeHostName();
         try {
             Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
             if (interfaces == null) {
@@ -152,16 +228,18 @@ public class LanDiscoveryPlugin {
                     }
 
                     String ipAddress = address.getHostAddress();
+                    long t = System.currentTimeMillis();
                     result.add(new DeviceRecord(
                         ipAddress,
-                        host + " (" + networkInterface.getName() + ")",
                         ipAddress,
+                        ipAddress,
+                        0,
                         "mdns",
                         false,
                         null,
                         null,
-                        System.currentTimeMillis(),
-                        System.currentTimeMillis()
+                        t,
+                        t
                     ));
                 }
             }
@@ -172,16 +250,4 @@ public class LanDiscoveryPlugin {
         return result;
     }
 
-    private static String safeHostName() {
-        String host = "android-host";
-        try {
-            String value = InetAddress.getLocalHost().getHostName();
-            if (value != null && !value.isBlank()) {
-                host = value;
-            }
-        } catch (Exception ignored) {
-            // keep fallback
-        }
-        return host;
-    }
 }

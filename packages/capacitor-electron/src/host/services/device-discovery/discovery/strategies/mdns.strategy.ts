@@ -40,13 +40,14 @@ export function createMdnsDiscoveryStrategy(): DiscoveryStrategy {
       const pushCandidate = (
         candidate: string | undefined,
         port?: number,
-        sourceDeviceUuid?: string
+        sourceDeviceUuid?: string,
+        displayNameHint?: string
       ) => {
         const normalizedIp = normalizeRemoteIp(candidate)
         if (normalizedIp && !normalizedIp.includes(':')) {
           devicesByIp.set(
             normalizedIp,
-            toProbeCandidate(normalizedIp, 'mdns', port, sourceDeviceUuid)
+            toProbeCandidate(normalizedIp, 'mdns', port, sourceDeviceUuid, displayNameHint)
           )
           return
         }
@@ -64,7 +65,10 @@ export function createMdnsDiscoveryStrategy(): DiscoveryStrategy {
             .then((resolved) => {
               const ip = normalizeRemoteIp(resolved.address)
               if (ip && !ip.includes(':')) {
-                devicesByIp.set(ip, toProbeCandidate(ip, 'mdns', port, sourceDeviceUuid))
+                devicesByIp.set(
+                  ip,
+                  toProbeCandidate(ip, 'mdns', port, sourceDeviceUuid, displayNameHint)
+                )
               }
             })
             .catch(() => undefined)
@@ -91,8 +95,12 @@ export function createMdnsDiscoveryStrategy(): DiscoveryStrategy {
           service.txt.sourceDeviceId.trim().length > 0
             ? service.txt.sourceDeviceId.trim()
             : undefined
+        const displayNameHint =
+          typeof service.name === 'string' && service.name.trim().length > 0
+            ? service.name.trim()
+            : undefined
         for (const candidate of candidates) {
-          pushCandidate(candidate, service.port, sourceDeviceUuid)
+          pushCandidate(candidate, service.port, sourceDeviceUuid, displayNameHint)
         }
       }
       browser.on('up', onUp)

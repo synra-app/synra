@@ -8,7 +8,13 @@ extension DeviceConnectionPluginCore {
         timeoutMs: Int
     ) -> [[String: Any]] {
         // SYNRA-COMM::DEVICE_HANDSHAKE::CONNECT::PROBE_BATCH
-        var results: [[String: Any]] = []
+        struct Row {
+            let host: String
+            let port: UInt16
+            let wireExtras: [String: Any]
+            let targetDeviceId: String?
+        }
+        var rows: [Row] = []
         for raw in targets {
             guard
                 let host = (raw["host"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -22,17 +28,54 @@ extension DeviceConnectionPluginCore {
             let targetDeviceId =
                 (raw["target"] as? String)?
                     .trimmingCharacters(in: .whitespacesAndNewlines)
-            results.append(
-                probeSynraOnePeer(
-                    host: host,
-                    port: portNum,
-                    timeoutMs: timeoutMs,
-                    wireExtras: wireExtras,
-                    targetDeviceId: targetDeviceId
-                )
+            rows.append(
+                Row(host: host, port: portNum, wireExtras: wireExtras, targetDeviceId: targetDeviceId)
             )
         }
-        return results
+        let n = rows.count
+        if n == 0 {
+            return []
+        }
+        if n == 1 {
+            let r = rows[0]
+            return [
+                probeSynraOnePeer(
+                    host: r.host,
+                    port: r.port,
+                    timeoutMs: timeoutMs,
+                    wireExtras: r.wireExtras,
+                    targetDeviceId: r.targetDeviceId
+                ),
+            ]
+        }
+        let poolSize = min(synraProbeMaxConcurrency, max(1, n))
+        var slots: [[String: Any]] = Array(repeating: [:], count: n)
+        let group = DispatchGroup()
+        let gate = DispatchSemaphore(value: poolSize)
+        let slotLock = NSLock()
+        for i in 0..<n {
+            let row = rows[i]
+            group.enter()
+            gate.wait()
+            DispatchQueue.global(qos: .userInitiated).async { [row] in
+                defer {
+                    gate.signal()
+                    group.leave()
+                }
+                let one = self.probeSynraOnePeer(
+                    host: row.host,
+                    port: row.port,
+                    timeoutMs: timeoutMs,
+                    wireExtras: row.wireExtras,
+                    targetDeviceId: row.targetDeviceId
+                )
+                slotLock.lock()
+                slots[i] = one
+                slotLock.unlock()
+            }
+        }
+        group.wait()
+        return slots
     }
 
     private func probeSynraOnePeer(

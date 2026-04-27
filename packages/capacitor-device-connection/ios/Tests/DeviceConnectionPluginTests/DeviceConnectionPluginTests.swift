@@ -42,4 +42,29 @@ final class DeviceConnectionPluginTests: XCTestCase {
         XCTAssertTrue(core.isDevicePairingEvent("device.pairing.request"))
         XCTAssertFalse(core.isDevicePairingEvent("custom.chat.text"))
     }
+
+    /// Ensures probe connect frames carry `target` when provided (bridge must forward `target` from JS like Android).
+    func testSynraLanFrameIncludesTargetForProbeConnect() {
+        let core = DeviceConnectionPluginCore()
+        let peerTarget = "40a39cb9-4fce-41da-8ae2-c8d8ce5aa438"
+        let payload: [String: Any] = [
+            "appId": core.appId,
+            "from": "7eb638c0-6315-4b1f-9dfb-a72cda17ba11",
+            "probe": true,
+            "displayName": "test",
+        ]
+        let frame = core.synraLanFrame(
+            type: core.legacyTypeConnect,
+            requestId: "req-probe-1",
+            event: nil,
+            from: "7eb638c0-6315-4b1f-9dfb-a72cda17ba11",
+            target: peerTarget,
+            replyRequestId: nil,
+            payload: payload,
+            timestamp: 1,
+            error: nil
+        )
+        XCTAssertEqual(frame["target"] as? String, peerTarget)
+        XCTAssertEqual(frame["event"] as? String, core.deviceTcpConnectEvent)
+    }
 }

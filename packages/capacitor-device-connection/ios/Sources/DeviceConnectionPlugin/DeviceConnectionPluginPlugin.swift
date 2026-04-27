@@ -208,6 +208,12 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
             if let wire = obj["connectWirePayload"] as? [String: Any] {
                 row["connectWirePayload"] = wire
             }
+            if let targetRaw = obj["target"] as? String {
+                let trimmed = targetRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    row["target"] = trimmed
+                }
+            }
             targets.append(row)
         }
         guard !targets.isEmpty else {
@@ -218,5 +224,18 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
             implementation.probeSynraPeersJson(targets: targets, timeoutMs: timeoutMs)
         }
         call.resolve(["results": rows])
+    }
+
+    /// Same-process blocking probe for LanDiscovery merge (SYNRA-COMM::DEVICE_HANDSHAKE::CONNECT::PROBE_BATCH).
+    @objc public func synra_blockingProbeForLanDiscovery(
+        _ targets: [[String: Any]],
+        _ timeoutMs: Int
+    ) -> [[String: Any]] {
+        deviceConnectionSerialQueue.sync {
+            implementation.probeSynraPeersJson(
+                targets: targets,
+                timeoutMs: max(200, timeoutMs)
+            )
+        }
     }
 }

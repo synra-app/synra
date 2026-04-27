@@ -43,14 +43,25 @@ export async function upsertPairedDeviceRecord(record: SynraPairedDeviceRecord):
   const existing = payload.items.find((item) => item.deviceId === record.deviceId)
   const incomingHost =
     typeof record.lastResolvedHost === 'string' ? record.lastResolvedHost.trim() : ''
-  const nextRecord: SynraPairedDeviceRecord =
-    existing && !isIpv4Address(incomingHost)
-      ? {
-          ...record,
-          lastResolvedHost: existing.lastResolvedHost,
-          lastResolvedPort: existing.lastResolvedPort
-        }
-      : record
+  const incomingName = typeof record.displayName === 'string' ? record.displayName.trim() : ''
+
+  let nextRecord: SynraPairedDeviceRecord
+  if (!existing) {
+    nextRecord = record
+  } else if (isIpv4Address(incomingHost)) {
+    nextRecord = {
+      ...record,
+      displayName: incomingName.length > 0 ? incomingName : existing.displayName
+    }
+  } else {
+    nextRecord = {
+      ...existing,
+      ...record,
+      displayName: incomingName.length > 0 ? incomingName : existing.displayName,
+      lastResolvedHost: existing.lastResolvedHost,
+      lastResolvedPort: existing.lastResolvedPort
+    }
+  }
   const others = payload.items.filter((item) => item.deviceId !== record.deviceId)
   await savePairedDevicesPayload({
     ...payload,

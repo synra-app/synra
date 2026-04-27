@@ -24,13 +24,23 @@ import { setPairAwaitingAccept } from './pair-awaiting-accept'
 import { setPairedDeviceConnecting } from './paired-link-phases'
 import { setPrimaryTransportStateWithTransitionLog } from './primary-transport-state-transition-log'
 import { SYNRA_CONNECT_ACK_HOST_LISTS_PEER_AS_PAIRED } from './synra-connect-ack-app-keys'
+import {
+  pairingWireEventNeedsDiscoveryResync,
+  scheduleReUpsertDiscoveredPeerAfterDispatch
+} from './peer-discovery-after-pairing-wire'
 
 function shouldSuppressTransportErrorMessage(message: string | undefined): boolean {
   if (typeof message !== 'string' || message.length === 0) {
     return false
   }
   const normalized = message.toLowerCase()
-  return normalized.includes('econnrefused')
+  return (
+    normalized.includes('econnrefused') ||
+    normalized.includes('econnreset') ||
+    normalized.includes('epipe') ||
+    normalized.includes('econnaborted') ||
+    normalized.includes('socket hang up')
+  )
 }
 
 function removeDeviceByIdentity(
@@ -245,7 +255,7 @@ export async function registerAdapterListeners(options: {
   await adapter.addLanWireEventReceivedListener((event) => {
     openLinksBook.touchLinkActivity(event.from, Date.now(), 'inbound')
     lanWireRegistry.emitLanWireEvent(event, event.from)
-    void dispatchSynraWireEvent({
+    const dispatchPromise = dispatchSynraWireEvent({
       event: event.event,
       requestId: event.requestId,
       from: event.from,
@@ -253,7 +263,19 @@ export async function registerAdapterListeners(options: {
       replyRequestId: event.replyRequestId,
       payload: event.payload,
       transport: event.transport
-    }).catch(() => undefined)
+    })
+    void dispatchPromise.catch(() => undefined)
+    // SYNRA-COMM::PLUGIN_BRIDGE::RECEIVE::PAIRING_DISCOVERY_RESYNC_AFTER_WIRE
+    if (pairingWireEventNeedsDiscoveryResync(event.event)) {
+      const peerId = typeof event.from === 'string' ? event.from.trim() : ''
+      if (peerId) {
+        scheduleReUpsertDiscoveredPeerAfterDispatch(dispatchPromise, {
+          peerId,
+          openLinksBook,
+          devices
+        })
+      }
+    }
     if (event.event === DEVICE_DISPLAY_NAME_CHANGED_EVENT && event.payload !== undefined) {
       const pl =
         event.payload && typeof event.payload === 'object'

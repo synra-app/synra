@@ -230,16 +230,18 @@ extension DeviceConnectionPluginCore {
                 // SYNRA-COMM::TCP::ACK::MESSAGE_ACK_AUTO
                 if let requestId = topRid, !requestId.isEmpty {
                     let ackRid = topRid ?? UUID().uuidString
-                    let ackTargetRaw =
-                        (frame["target"] as? String)?
-                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                    let trimmedFrom =
+                        (frame["from"] as? String)?
+                            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    let ackTargetResolved =
+                        !trimmedFrom.isEmpty ? trimmedFrom : (current.canonicalDeviceId ?? "")
                     self.sendFrame(
                         self.synraLanFrame(
                             type: self.legacyTypeAck,
                             requestId: ackRid,
                             event: frame["event"] as? String,
                             from: self.localDeviceUuid(),
-                            target: (ackTargetRaw?.isEmpty == false) ? ackTargetRaw : current.canonicalDeviceId,
+                            target: ackTargetResolved.isEmpty ? current.canonicalDeviceId : ackTargetResolved,
                             replyRequestId: requestId,
                             payload: nil,
                             timestamp: nil,

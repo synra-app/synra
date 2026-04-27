@@ -13,6 +13,7 @@ import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -32,9 +33,10 @@ import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
-import java.util.Locale;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -47,6 +49,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public class LanDiscoveryPluginPlugin extends Plugin {
     private static final int DEFAULT_TCP_PORT = 32100;
     private static final int DEFAULT_DISCOVERY_TIMEOUT_MS = 1500;
+    private static final int DEFAULT_SYNRA_SCAN_BUDGET_MS = 2200;
     private static final int UDP_DISCOVERY_PORT = 32101;
     private static final String UDP_DISCOVERY_MAGIC = "SYNRA_DISCOVERY_V1";
     private static final String UDP_OFFLINE_TYPE = "offline";
@@ -55,8 +58,6 @@ public class LanDiscoveryPluginPlugin extends Plugin {
     private static final String PROTOCOL_VERSION = "1.0";
     private static final String INSTANCE_PREFS_NAME = "synra_preferences_store";
     private static final String INSTANCE_UUID_KEY = "synra.preferences.synra.device.instance-uuid";
-    private static final String DEVICE_BASIC_INFO_KEY = "synra.preferences.synra.device.basic-info";
-    private static final String LEGACY_DEVICE_DISPLAY_NAME_KEY = "synra.preferences.synra.device.display-name";
     private static final String LEGACY_LAN_PREFS = "synra_lan_discovery";
     private static final String LEGACY_LAN_KEY = "device_uuid";
     private static final String LEGACY_DC_PREFS = "synra_device_connection";
@@ -66,16 +67,19 @@ public class LanDiscoveryPluginPlugin extends Plugin {
     private DatagramSocket udpResponderSocket;
     private final AtomicBoolean udpResponderScheduled = new AtomicBoolean(false);
     private ExecutorService discoveryExecutor;
+    private ExecutorService hybridScanExecutor;
     private NsdManager.RegistrationListener mdnsRegistrationListener;
     private volatile String registeredMdnsServiceName;
 
     private static final class DiscoveryCandidate {
         final String host;
         final String sourceDeviceId;
+        final int synraPort;
 
-        DiscoveryCandidate(String host, String sourceDeviceId) {
+        DiscoveryCandidate(String host, String sourceDeviceId, int synraPort) {
             this.host = host;
             this.sourceDeviceId = sourceDeviceId;
+            this.synraPort = synraPort;
         }
     }
 
@@ -83,7 +87,31 @@ public class LanDiscoveryPluginPlugin extends Plugin {
     public void load() {
         super.load();
         this.discoveryExecutor = Executors.newSingleThreadExecutor();
+        this.hybridScanExecutor = Executors.newFixedThreadPool(2);
         ensureDiscoveryTransportsStarted();
+    }
+
+    private static int[] synraTimeoutsFromBudget(int budgetMs) {
+        int budget = Math.max(600, budgetMs);
+        int probeTimeoutMs = Math.min(900, Math.max(350, (int) Math.floor(budget * 0.38)));
+        int discoveryTimeoutMs = Math.max(200, budget - probeTimeoutMs - 80);
+        return new int[] { discoveryTimeoutMs, probeTimeoutMs };
+    }
+
+    private JSONArray invokeDeviceConnectionProbeBlocking(JSONArray targets, int probeTimeoutMs) {
+        try {
+            com.getcapacitor.PluginHandle handle = getBridge().getPlugin("DeviceConnection");
+            if (handle == null || handle.getInstance() == null) {
+                return new JSONArray();
+            }
+            Object inst = handle.getInstance();
+            java.lang.reflect.Method method =
+                inst.getClass().getMethod("probeSynraPeersBlocking", JSONArray.class, int.class);
+            Object out = method.invoke(inst, targets, probeTimeoutMs);
+            return out instanceof JSONArray ? (JSONArray) out : new JSONArray();
+        } catch (Exception ignored) {
+            return new JSONArray();
+        }
     }
 
     @PluginMethod
@@ -94,13 +122,16 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         boolean enableProbeFallback = call.getBoolean("enableProbeFallback", true);
         String discoveryMode = call.getString("discoveryMode", "hybrid");
         boolean reset = call.getBoolean("reset", true);
-        // Rescan does not stop background transports; the device map is cleared in `implementation.startDiscovery` when reset.
         Integer scanWindowMs = call.getInt("scanWindowMs", null);
-        int discoveryTimeoutMs = call.getInt("discoveryTimeoutMs", DEFAULT_DISCOVERY_TIMEOUT_MS);
+        int scanBudgetMs = call.getInt("scanBudgetMs", DEFAULT_SYNRA_SCAN_BUDGET_MS);
+        int[] split = synraTimeoutsFromBudget(scanBudgetMs);
+        int discoveryTimeoutMs = split[0];
+        int probeTimeoutMs = split[1];
         String mdnsServiceType = call.getString("mdnsServiceType", DEFAULT_MDNS_SERVICE_TYPE);
         Integer maxProbeHosts = call.getInt("maxProbeHosts", null);
         List<String> manualTargets = toStringList(call.getArray("manualTargets", new JSArray()));
         List<String> subnetCidrs = toStringList(call.getArray("subnetCidrs", new JSArray()));
+        int synraPortFromCall = call.getInt("port", DEFAULT_TCP_PORT);
         WifiManager.MulticastLock discoveryMulticastLock = acquireDiscoveryMulticastLock();
         List<String> combinedTargets;
         List<DiscoveryCandidate> discoveryTargets;
@@ -141,7 +172,7 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         );
 
         Set<String> localAddresses = collectLocalIpv4Addresses(includeLoopback);
-        List<String> toProbe = new ArrayList<>();
+        LinkedHashSet<String> toProbeSet = new LinkedHashSet<>();
         for (String target : combinedTargets) {
             if (target == null) {
                 continue;
@@ -150,10 +181,9 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             if (trimmed.isEmpty() || localAddresses.contains(trimmed)) {
                 continue;
             }
-            if (!toProbe.contains(trimmed)) {
-                toProbe.add(trimmed);
-            }
+            toProbeSet.add(trimmed);
         }
+        List<String> toProbe = new ArrayList<>(toProbeSet);
         if (maxProbeHosts != null && maxProbeHosts > 0 && toProbe.size() > maxProbeHosts) {
             toProbe = new ArrayList<>(toProbe.subList(0, maxProbeHosts));
         }
@@ -163,20 +193,76 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                 manualSet.add(m.trim());
             }
         }
-        Map<String, String> sourceDeviceIdsByHost = new LinkedHashMap<>();
+        Map<String, LanDiscoveryPlugin.DiscoveryHint> hintsByHost = new LinkedHashMap<>();
         for (DiscoveryCandidate candidate : discoveryTargets) {
             if (candidate == null || candidate.host == null) {
                 continue;
             }
             String host = candidate.host.trim();
-            String sourceDeviceId =
-                candidate.sourceDeviceId == null ? "" : candidate.sourceDeviceId.trim();
-            if (host.isEmpty() || sourceDeviceId.isEmpty()) {
+            if (host.isEmpty()) {
                 continue;
             }
-            sourceDeviceIdsByHost.put(host, sourceDeviceId);
+            String sid = candidate.sourceDeviceId == null ? "" : candidate.sourceDeviceId.trim();
+            int sp = candidate.synraPort;
+            LanDiscoveryPlugin.DiscoveryHint existing = hintsByHost.get(host);
+            if (existing == null) {
+                hintsByHost.put(host, new LanDiscoveryPlugin.DiscoveryHint(sid, sp));
+            } else {
+                String mergedSid = !existing.sourceDeviceId.isEmpty() ? existing.sourceDeviceId : sid;
+                int mergedPort = existing.synraPort > 0 ? existing.synraPort : sp;
+                hintsByHost.put(host, new LanDiscoveryPlugin.DiscoveryHint(mergedSid, mergedPort));
+            }
         }
-        implementation.mergeCandidateDevices(toProbe, manualSet, sourceDeviceIdsByHost);
+        implementation.mergeCandidateDevices(toProbe, manualSet, hintsByHost);
+
+        JSONArray probeJson = new JSONArray();
+        JSObject wireJs = call.getObject("probeConnectWirePayload", new JSObject());
+        JSONObject wireJson = wireJs;
+        for (String host : toProbe) {
+            LanDiscoveryPlugin.DiscoveryHint hint = hintsByHost.get(host);
+            JSONObject row = new JSONObject();
+            try {
+                row.put("host", host);
+                int rowPort = synraPortFromCall;
+                if (hint != null && hint.synraPort > 0) {
+                    rowPort = hint.synraPort;
+                }
+                row.put("port", rowPort);
+                row.put("connectWirePayload", wireJson);
+                String stable =
+                    hint != null && !hint.sourceDeviceId.isEmpty()
+                        ? hint.sourceDeviceId.trim()
+                        : Objects.requireNonNull(LanDiscoveryIdUtils.canonicalLanDeviceId(host));
+                row.put("target", stable);
+                probeJson.put(row);
+            } catch (JSONException ignored) {
+            }
+        }
+        if (probeJson.length() > 0) {
+            JSONArray results = invokeDeviceConnectionProbeBlocking(probeJson, probeTimeoutMs);
+            long nowMs = System.currentTimeMillis();
+            implementation.applySynraProbeJsonResults(results, synraPortFromCall, nowMs);
+            for (int i = 0; i < results.length(); i += 1) {
+                JSONObject r = results.optJSONObject(i);
+                if (r == null || !r.optBoolean("ok", false)) {
+                    continue;
+                }
+                JSObject dev = new JSObject();
+                dev.put("deviceId", r.optString("wireSourceDeviceId", ""));
+                dev.put("name", r.optString("host", ""));
+                dev.put("ipAddress", r.optString("host", ""));
+                dev.put("port", r.optInt("port", synraPortFromCall));
+                dev.put("source", "probe");
+                dev.put("connectable", true);
+                dev.put("connectCheckAt", nowMs);
+                dev.put("discoveredAt", nowMs);
+                dev.put("lastSeenAt", nowMs);
+                JSObject wrap = new JSObject();
+                wrap.put("device", dev);
+                notifyListeners("deviceFound", wrap);
+            }
+        }
+
         JSObject result = implementation.listDevices();
         result.put("requestId", UUID.randomUUID().toString());
 
@@ -218,6 +304,9 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         if (discoveryExecutor != null) {
             discoveryExecutor.shutdownNow();
         }
+        if (hybridScanExecutor != null) {
+            hybridScanExecutor.shutdownNow();
+        }
     }
 
     @NonNull
@@ -239,7 +328,46 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         boolean shouldRunMdns = "hybrid".equals(mode) || "mdns".equals(mode);
         boolean isHybrid = "hybrid".equals(mode);
         Map<String, DiscoveryCandidate> discovered = new LinkedHashMap<>();
-        if (shouldRunMdns) {
+        // SYNRA-COMM::UDP_DISCOVERY::CONNECT::DISCOVERY_SCAN — hybrid runs mDNS and UDP in parallel (matches Electron).
+        if (shouldRunMdns && isHybrid && enableProbeFallback) {
+            CompletableFuture<List<DiscoveryCandidate>> mdnsFuture =
+                CompletableFuture.supplyAsync(() -> discoverByMdns(mdnsServiceType, timeoutMs), hybridScanExecutor);
+            CompletableFuture<List<DiscoveryCandidate>> udpFuture =
+                CompletableFuture.supplyAsync(() -> discoverByUdp(timeoutMs), hybridScanExecutor);
+            CompletableFuture.allOf(mdnsFuture, udpFuture).join();
+            try {
+                for (DiscoveryCandidate candidate : mdnsFuture.get()) {
+                    if (candidate == null || candidate.host == null) {
+                        continue;
+                    }
+                    String host = candidate.host.trim();
+                    if (host.isEmpty()) {
+                        continue;
+                    }
+                    discovered.put(host, candidate);
+                }
+                for (DiscoveryCandidate candidate : udpFuture.get()) {
+                    if (candidate == null || candidate.host == null) {
+                        continue;
+                    }
+                    String host = candidate.host.trim();
+                    if (host.isEmpty()) {
+                        continue;
+                    }
+                    DiscoveryCandidate existing = discovered.get(host);
+                    if (existing == null) {
+                        discovered.put(host, candidate);
+                        continue;
+                    }
+                    String existingSource = existing.sourceDeviceId == null ? "" : existing.sourceDeviceId.trim();
+                    String incomingSource = candidate.sourceDeviceId == null ? "" : candidate.sourceDeviceId.trim();
+                    if (existingSource.isEmpty() && !incomingSource.isEmpty()) {
+                        discovered.put(host, candidate);
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        } else if (shouldRunMdns) {
             for (DiscoveryCandidate candidate : discoverByMdns(mdnsServiceType, timeoutMs)) {
                 if (candidate == null || candidate.host == null) {
                     continue;
@@ -250,8 +378,7 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                 }
                 discovered.put(host, candidate);
             }
-        }
-        if (isHybrid && enableProbeFallback) {
+        } else if (isHybrid && enableProbeFallback) {
             for (DiscoveryCandidate candidate : discoverByUdp(timeoutMs)) {
                 if (candidate == null || candidate.host == null) {
                     continue;
@@ -260,16 +387,7 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                 if (host.isEmpty()) {
                     continue;
                 }
-                DiscoveryCandidate existing = discovered.get(host);
-                if (existing == null) {
-                    discovered.put(host, candidate);
-                    continue;
-                }
-                String existingSource = existing.sourceDeviceId == null ? "" : existing.sourceDeviceId.trim();
-                String incomingSource = candidate.sourceDeviceId == null ? "" : candidate.sourceDeviceId.trim();
-                if (existingSource.isEmpty() && !incomingSource.isEmpty()) {
-                    discovered.put(host, candidate);
-                }
+                discovered.put(host, candidate);
             }
         }
         return new ArrayList<>(discovered.values());
@@ -340,8 +458,12 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                                         sourceDeviceId = new String(raw, StandardCharsets.UTF_8).trim();
                                     }
                                 }
+                                int synraPort = serviceInfo.getPort() > 0 ? serviceInfo.getPort() : 0;
                                 synchronized (discovered) {
-                                    discovered.put(address, new DiscoveryCandidate(address, sourceDeviceId));
+                                    discovered.put(
+                                        address,
+                                        new DiscoveryCandidate(address, sourceDeviceId, synraPort)
+                                    );
                                 }
                             }
                         } finally {
@@ -360,16 +482,15 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         try {
             nsdManager.discoverServices(resolvedType, NsdManager.PROTOCOL_DNS_SD, listener);
             latch.await(Math.max(timeoutMs, 200), TimeUnit.MILLISECONDS);
-            long resolveGraceMs = Math.max(500L, Math.min(2500L, timeoutMs + 500L));
-            long settleDeadline = System.currentTimeMillis() + resolveGraceMs;
+            long settleDeadline = System.currentTimeMillis() + 150L;
             while (System.currentTimeMillis() < settleDeadline) {
                 if (pendingResolves.get() <= 0) {
                     break;
                 }
-                if (System.currentTimeMillis() - lastResolveAt.get() > 350L) {
+                if (System.currentTimeMillis() - lastResolveAt.get() > 120L) {
                     break;
                 }
-                Thread.sleep(50L);
+                Thread.sleep(20L);
             }
         } catch (Exception ignored) {
         } finally {
@@ -448,7 +569,15 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                     String address = response.getAddress().getHostAddress();
                     if (address != null && !address.isBlank() && !address.contains(":")) {
                         String sourceDeviceId = payload.optString("sourceDeviceId", null);
-                        discovered.put(address, new DiscoveryCandidate(address, sourceDeviceId));
+                        int synraPort = payload.optInt("port", 0);
+                        discovered.put(
+                            address,
+                            new DiscoveryCandidate(
+                                address,
+                                sourceDeviceId,
+                                synraPort
+                            )
+                        );
                     }
                 } catch (Exception ignored) {
                     // timeout or malformed payload
@@ -532,7 +661,6 @@ public class LanDiscoveryPluginPlugin extends Plugin {
                     response.put("protocolVersion", PROTOCOL_VERSION);
                     response.put("port", DEFAULT_TCP_PORT);
                     response.put("sourceDeviceId", getOrCreateLocalDeviceUuid());
-                    response.put("displayName", localSynraDisplayName());
                     byte[] responseBytes = response.toString().getBytes(StandardCharsets.UTF_8);
                     DatagramPacket responsePacket = new DatagramPacket(
                         responseBytes,
@@ -636,6 +764,15 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         info.setServiceName("synra-" + UUID.randomUUID().toString().substring(0, 8));
         info.setServiceType(DEFAULT_MDNS_SERVICE_TYPE);
         info.setPort(DEFAULT_TCP_PORT);
+        // SYNRA-COMM::UDP_DISCOVERY::CONNECT::DISCOVERY_SCAN — TXT for peer correlation only (no display strings).
+        try {
+            info.setAttribute("appId", APP_ID.getBytes(StandardCharsets.UTF_8));
+            info.setAttribute(
+                "sourceDeviceId",
+                getOrCreateLocalDeviceUuid().getBytes(StandardCharsets.UTF_8)
+            );
+            info.setAttribute("protocolVersion", PROTOCOL_VERSION.getBytes(StandardCharsets.UTF_8));
+        } catch (Exception ignored) {}
         registeredMdnsServiceName = info.getServiceName();
         this.mdnsRegistrationListener = new NsdManager.RegistrationListener() {
             @Override
@@ -714,75 +851,6 @@ public class LanDiscoveryPluginPlugin extends Plugin {
             }
         } catch (Exception error) {
         }
-    }
-
-    private String localSynraDisplayName() {
-        Context context = getContext();
-        if (context == null) {
-            return defaultDeviceNameFromUuid(UUID.randomUUID().toString());
-        }
-        android.content.SharedPreferences unified =
-            context.getSharedPreferences(INSTANCE_PREFS_NAME, Context.MODE_PRIVATE);
-        String rawBasic = unified.getString(DEVICE_BASIC_INFO_KEY, null);
-        if (rawBasic != null && !rawBasic.isBlank()) {
-            String parsed = parseBasicInfoDeviceName(rawBasic.trim());
-            if (parsed != null && !parsed.isBlank()) {
-                return parsed.trim();
-            }
-        }
-        String legacy = unified.getString(LEGACY_DEVICE_DISPLAY_NAME_KEY, null);
-        if (legacy != null && !legacy.isBlank()) {
-            String trimmed = legacy.trim();
-            try {
-                JSONObject payload = new JSONObject();
-                payload.put("deviceName", trimmed);
-                unified.edit()
-                    .putString(DEVICE_BASIC_INFO_KEY, payload.toString())
-                    .remove(LEGACY_DEVICE_DISPLAY_NAME_KEY)
-                    .apply();
-            } catch (JSONException ignored) {
-                // ignore
-            }
-            return trimmed;
-        }
-        String uuid = getOrCreateLocalDeviceUuid();
-        String derived = defaultDeviceNameFromUuid(uuid);
-        persistBasicInfoJson(unified, derived);
-        return derived;
-    }
-
-    private static String parseBasicInfoDeviceName(String json) {
-        try {
-            JSONObject object = new JSONObject(json);
-            String dn = object.optString("deviceName", "");
-            if (dn.isBlank()) {
-                return null;
-            }
-            return dn.trim();
-        } catch (JSONException error) {
-            return null;
-        }
-    }
-
-    private static void persistBasicInfoJson(
-        android.content.SharedPreferences unified,
-        String deviceName
-    ) {
-        try {
-            JSONObject payload = new JSONObject();
-            payload.put("deviceName", deviceName);
-            unified.edit().putString(DEVICE_BASIC_INFO_KEY, payload.toString()).apply();
-        } catch (JSONException ignored) {
-            // ignore
-        }
-    }
-
-    private static String defaultDeviceNameFromUuid(String uuid) {
-        String raw = uuid.replace("-", "").toLowerCase(Locale.ROOT);
-        if (raw.length() >= 6) {
-            return raw.substring(0, 6);
-        }
-        return raw.isEmpty() ? "device" : raw;
     }
 
     private String primarySourceHostIp() {

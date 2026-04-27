@@ -23,7 +23,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -36,6 +39,8 @@ public class DeviceConnectionPlugin extends Plugin {
     private static final int CONNECT_ACK_TIMEOUT_MS = 6000;
     private static final int HEARTBEAT_INTERVAL_MS = 10_000;
     private static final int SYNRA_DEFAULT_TCP_PORT = 32100;
+    /** Bounded parallelism for PROBE_BATCH (aligns with Electron default concurrency, conservative on mobile). */
+    private static final int SYNRA_PROBE_CONCURRENCY = 8;
     private static final int MAX_FRAME_BYTES = 256 * 1024;
     private static final String APP_ID = "synra";
     private static final String DEVICE_TCP_CONNECT_EVENT = "device.tcp.connect";
@@ -67,6 +72,8 @@ public class DeviceConnectionPlugin extends Plugin {
     private final ExecutorService readerExecutor = Executors.newSingleThreadExecutor();
     private final ExecutorService inboundExecutor = Executors.newCachedThreadPool();
     private final ScheduledExecutorService heartbeatExecutor = Executors.newSingleThreadScheduledExecutor();
+    /** Reused for PROBE_BATCH to avoid per-call thread pool churn. */
+    private final ExecutorService synraProbeExecutor = Executors.newFixedThreadPool(SYNRA_PROBE_CONCURRENCY);
     private final AtomicBoolean primaryOutboundOpen = new AtomicBoolean(false);
     private final AtomicBoolean inboundServerRunning = new AtomicBoolean(false);
     private final Map<String, InboundConnectionContext> inboundConnections = new ConcurrentHashMap<>();
@@ -230,29 +237,7 @@ public class DeviceConnectionPlugin extends Plugin {
         }
         ioExecutor.submit(() -> {
             try {
-                JSONArray out = new JSONArray();
-                for (int i = 0; i < targets.length(); i++) {
-                    JSONObject row = targets.optJSONObject(i);
-                    if (row == null) {
-                        continue;
-                    }
-                    String host = row.optString("host", null);
-                    if (host == null || host.isBlank()) {
-                        continue;
-                    }
-                    int port = row.optInt("port", 32100);
-                    String targetDeviceId = row.optString("target", null);
-                    JSONObject wireExtras = row.optJSONObject("connectWirePayload");
-                    out.put(
-                        probeSynraOneHost(
-                            host.trim(),
-                            port,
-                            Math.max(200, timeoutMs),
-                            wireExtras,
-                            targetDeviceId
-                        )
-                    );
-                }
+                JSONArray out = runProbeSynraPeersBatch(targets, timeoutMs);
                 JSObject ret = new JSObject();
                 ret.put("results", out);
                 call.resolve(ret);
@@ -260,6 +245,87 @@ public class DeviceConnectionPlugin extends Plugin {
                 call.reject("probeSynraPeers failed: " + error.getMessage());
             }
         });
+    }
+
+    /**
+     * Same-process blocking probe for LanDiscovery merge path (no PluginCall). SYNRA-COMM::DEVICE_HANDSHAKE::CONNECT::PROBE_BATCH
+     */
+    public JSONArray probeSynraPeersBlocking(JSONArray targets, int timeoutMs) throws Exception {
+        if (targets == null || targets.length() == 0) {
+            return new JSONArray();
+        }
+        return runProbeSynraPeersBatch(targets, timeoutMs);
+    }
+
+    private JSONArray runProbeSynraPeersBatch(JSONArray targets, int timeoutMs) throws Exception {
+        List<ProbeSynraPeerTarget> probeTargets = new ArrayList<>();
+        for (int i = 0; i < targets.length(); i++) {
+            JSONObject row = targets.optJSONObject(i);
+            if (row == null) {
+                continue;
+            }
+            String host = row.optString("host", null);
+            if (host == null || host.isBlank()) {
+                continue;
+            }
+            int port = row.optInt("port", 32100);
+            String targetDeviceId = row.optString("target", null);
+            JSONObject wireExtras = row.optJSONObject("connectWirePayload");
+            probeTargets.add(
+                new ProbeSynraPeerTarget(host.trim(), port, wireExtras, targetDeviceId)
+            );
+        }
+        int n = probeTargets.size();
+        JSONArray out = new JSONArray();
+        if (n == 0) {
+            return out;
+        }
+        int effectiveTimeout = Math.max(200, timeoutMs);
+        JSONObject[] slots = new JSONObject[n];
+        CountDownLatch latch = new CountDownLatch(n);
+        int poolSize = Math.min(SYNRA_PROBE_CONCURRENCY, Math.max(1, n));
+        ExecutorService probePool = synraProbeExecutor;
+        for (int i = 0; i < n; i++) {
+            final int idx = i;
+            ProbeSynraPeerTarget pt = probeTargets.get(i);
+            probePool.submit(() -> {
+                try {
+                    slots[idx] = probeSynraOneHost(
+                        pt.host,
+                        pt.port,
+                        effectiveTimeout,
+                        pt.wireExtras,
+                        pt.targetDeviceId
+                    );
+                } finally {
+                    latch.countDown();
+                }
+            });
+        }
+        long awaitMs = Math.min(10_000L, effectiveTimeout * 3L + 800L);
+        if (!latch.await(awaitMs, TimeUnit.MILLISECONDS)) {
+            // Best-effort: remaining tasks may still complete; slots may be null.
+        }
+        for (JSONObject slot : slots) {
+            if (slot != null) {
+                out.put(slot);
+            }
+        }
+        return out;
+    }
+
+    private static final class ProbeSynraPeerTarget {
+        final String host;
+        final int port;
+        final JSONObject wireExtras;
+        final String targetDeviceId;
+
+        ProbeSynraPeerTarget(String host, int port, JSONObject wireExtras, String targetDeviceId) {
+            this.host = host;
+            this.port = port;
+            this.wireExtras = wireExtras;
+            this.targetDeviceId = targetDeviceId;
+        }
     }
 
     private JSONObject probeSynraOneHost(
@@ -660,6 +726,7 @@ public class DeviceConnectionPlugin extends Plugin {
         readerExecutor.shutdownNow();
         inboundExecutor.shutdownNow();
         heartbeatExecutor.shutdownNow();
+        synraProbeExecutor.shutdownNow();
     }
 
     private void startPrimaryOutboundReader() {
@@ -716,9 +783,10 @@ public class DeviceConnectionPlugin extends Plugin {
                         // SYNRA-COMM::TCP::ACK::MESSAGE_ACK_AUTO
                         if (topRid != null && !topRid.isBlank() && primaryOutboundOutput != null) {
                             String ackRid = topRid;
+                            String fromWire = frame.optString("from", null);
                             String ackTarget =
-                                frame.has("target")
-                                    ? frame.optString("target", currentDeviceId)
+                                (fromWire != null && !fromWire.isBlank())
+                                    ? fromWire
                                     : currentDeviceId;
                             writeFrame(
                                 primaryOutboundOutput,
@@ -970,9 +1038,10 @@ public class DeviceConnectionPlugin extends Plugin {
                         if (ackRid == null || ackRid.isBlank()) {
                             ackRid = UUID.randomUUID().toString();
                         }
+                        String fromWire = inbound.optString("from", null);
                         String ackTarget =
-                            inbound.has("target")
-                                ? inbound.optString("target", activeContext.canonicalDeviceId)
+                            (fromWire != null && !fromWire.isBlank())
+                                ? fromWire
                                 : activeContext.canonicalDeviceId;
                         writeFrame(
                             output,

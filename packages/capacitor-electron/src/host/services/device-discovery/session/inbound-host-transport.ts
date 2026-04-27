@@ -19,6 +19,7 @@ import {
 } from '../core/constants'
 import { isWirePeerInMainPairedList, localDisplayName } from '../core/device-identity'
 import { normalizeRemoteIp, peerAddressFromSocket, pickPrimarySourceHostIp } from '../core/network'
+import { isBenignTcpPeerDisconnect } from '../core/tcp-peer-disconnect'
 import type { HostEventBus } from '../events/host-event-bus'
 import {
   DEVICE_HOST_RETIRE_EVENT,
@@ -202,7 +203,9 @@ export function createInboundHostTransport(
         requestId: frame.requestId,
         from: frame.from,
         target: frame.target,
-        replyRequestId: frame.replyRequestId,
+        ...(typeof frame.replyRequestId === 'string' && frame.replyRequestId.length > 0
+          ? { replyRequestId: frame.replyRequestId }
+          : {}),
         timestamp: frame.timestamp
       })
     }
@@ -255,7 +258,9 @@ export function createInboundHostTransport(
         requestId: frame.requestId,
         from: frame.from,
         target: frame.target,
-        replyRequestId: frame.replyRequestId,
+        ...(typeof frame.replyRequestId === 'string' && frame.replyRequestId.length > 0
+          ? { replyRequestId: frame.replyRequestId }
+          : {}),
         timestamp: frame.timestamp
       })
     }
@@ -384,10 +389,9 @@ export function createInboundHostTransport(
     }
     // SYNRA-COMM::TCP::ACK::MESSAGE_ACK_AUTO
     if (!isControlEvent(frame.event)) {
-      const ackTarget =
-        typeof frame.target === 'string' && frame.target.length > 0
-          ? frame.target
-          : link.remoteDeviceId
+      // ACK must address the original sender (`from`). `target` is often the local host for inbound requests.
+      const fromWire = typeof frame.from === 'string' ? frame.from.trim() : ''
+      const ackTarget = fromWire.length > 0 ? fromWire : link.remoteDeviceId
       await writeFrame(link.socket, {
         requestId: randomUUID(),
         event: DEVICE_TCP_ACK_EVENT,
@@ -472,12 +476,14 @@ export function createInboundHostTransport(
         }
       })
       socket.on('error', (error) => {
-        options.eventBus.publish({
-          type: 'transport.error',
-          code: 'INBOUND_SOCKET_ERROR',
-          payload: { message: error.message },
-          transport: 'tcp'
-        })
+        if (!isBenignTcpPeerDisconnect(error)) {
+          options.eventBus.publish({
+            type: 'transport.error',
+            code: 'INBOUND_SOCKET_ERROR',
+            payload: { message: error instanceof Error ? error.message : 'INBOUND_SOCKET_ERROR' },
+            transport: 'tcp'
+          })
+        }
       })
       socket.on('close', () => {
         removeBySocket(socket, 'SOCKET_CLOSED')
@@ -556,6 +562,7 @@ export function createInboundHostTransport(
     }
     bonjour = new Bonjour()
     const serviceType = parseMdnsServiceType(undefined)
+    // SYNRA-COMM::UDP_DISCOVERY::CONNECT::DISCOVERY_SCAN — TXT for peer correlation only (no display strings).
     published = bonjour.publish({
       name: `synra-${localDisplayName()}`,
       type: serviceType.type,
@@ -564,8 +571,7 @@ export function createInboundHostTransport(
       txt: {
         appId: DISCOVERY_APP_ID,
         sourceDeviceId: options.resolveLocalDeviceUuid(),
-        protocolVersion: DISCOVERY_PROTOCOL_VERSION,
-        displayName: localDisplayName()
+        protocolVersion: DISCOVERY_PROTOCOL_VERSION
       }
     })
   }

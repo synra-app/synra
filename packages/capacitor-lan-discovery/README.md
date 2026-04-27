@@ -24,12 +24,12 @@ npx cap sync
 
 ## Platform support
 
-| Capability | iOS | Android | Web | Electron |
-| --- | --- | --- | --- | --- |
-| `startDiscovery` / `stopDiscovery` / `getDiscoveredDevices` | Yes | Yes | Mocked | Yes |
-| `scanStateChanged` | Yes | Yes | Partial | Partial |
-| `deviceConnectableUpdated` | Yes | Yes | Partial | Partial |
-| `deviceFound` / `deviceUpdated` / `deviceLost` | No | Yes (compatibility events) | Partial | Partial |
+| Capability                                                  | iOS | Android                    | Web     | Electron |
+| ----------------------------------------------------------- | --- | -------------------------- | ------- | -------- |
+| `startDiscovery` / `stopDiscovery` / `getDiscoveredDevices` | Yes | Yes                        | Mocked  | Yes      |
+| `scanStateChanged`                                          | Yes | Yes                        | Partial | Partial  |
+| `deviceConnectableUpdated`                                  | Yes | Yes                        | Partial | Partial  |
+| `deviceFound` / `deviceUpdated` / `deviceLost`              | No  | Yes (compatibility events) | Partial | Partial  |
 
 ## Notes
 

@@ -1,5 +1,11 @@
 import { expect, test } from 'vite-plus/test'
-import { PROTOCOL_VERSION, createMessage, createProtocolMessage } from '../src/index.ts'
+import {
+  DEFAULT_SYNRA_SCAN_BUDGET_MS,
+  PROTOCOL_VERSION,
+  createMessage,
+  createProtocolMessage,
+  synraDiscoveryTimeoutsFromBudget
+} from '../src/index.ts'
 import {
   DEVICE_DISPLAY_NAME_CHANGED_EVENT,
   DEVICE_PAIRING_PEER_RESET_EVENT,
@@ -8,6 +14,15 @@ import {
   DEVICE_PAIRING_UNPAIR_REQUIRED_EVENT
 } from '../src/event-names'
 import { LAN_WIRE_EVENT_NAMES, isLanWireEventName } from '../src/lan-events'
+
+test('synraDiscoveryTimeoutsFromBudget splits scan budget', () => {
+  const { discoveryTimeoutMs, probeTimeoutMs } = synraDiscoveryTimeoutsFromBudget(
+    DEFAULT_SYNRA_SCAN_BUDGET_MS
+  )
+  expect(discoveryTimeoutMs).toBeGreaterThanOrEqual(200)
+  expect(probeTimeoutMs).toBeGreaterThanOrEqual(350)
+  expect(discoveryTimeoutMs + probeTimeoutMs).toBeLessThanOrEqual(DEFAULT_SYNRA_SCAN_BUDGET_MS)
+})
 
 test('createMessage injects protocol version', () => {
   const message = createMessage({

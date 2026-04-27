@@ -40,3 +40,6 @@
 
 扩展字段需先确认，禁止隐式双写兼容。
 
+## 含义说明
+
+- `MESSAGE_ACK_AUTO`：对非控制类入站帧自动回 `device.tcp.ack` 时，**`target` 必须为原帧的 `from`（发起方）**；不得用原帧的 `target`（对请求类 LAN 事件常为本地 UUID），否则对端无法把 ACK 与己方 `requestId` 正确关联（表现为「已发请求但像没收 ACK」）。

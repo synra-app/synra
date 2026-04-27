@@ -162,10 +162,9 @@ export function validateDiscoveryStartPayload(payload: unknown): payload is {
   subnetCidrs?: string[]
   maxProbeHosts?: number
   concurrency?: number
-  discoveryTimeoutMs?: number
+  scanBudgetMs?: number
   reset?: boolean
   port?: number
-  timeoutMs?: number
 } {
   if (!isObject(payload)) {
     return false
@@ -220,7 +219,7 @@ export function validateDiscoveryStartPayload(payload: unknown): payload is {
     return false
   }
 
-  if (payload.discoveryTimeoutMs !== undefined && typeof payload.discoveryTimeoutMs !== 'number') {
+  if (payload.scanBudgetMs !== undefined && typeof payload.scanBudgetMs !== 'number') {
     return false
   }
 
@@ -229,10 +228,6 @@ export function validateDiscoveryStartPayload(payload: unknown): payload is {
   }
 
   if (payload.port !== undefined && typeof payload.port !== 'number') {
-    return false
-  }
-
-  if (payload.timeoutMs !== undefined && typeof payload.timeoutMs !== 'number') {
     return false
   }
 

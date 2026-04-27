@@ -11,10 +11,6 @@ import Network
     internal let udpDiscoveryPort: UInt16 = 32101
     internal let udpDiscoveryMagic = "SYNRA_DISCOVERY_V1"
     internal let unifiedDeviceUuidDefaultsKey = "synra.preferences.synra.device.instance-uuid"
-    /// Full UserDefaults key (matches `SynraPreferences` for `synra.device.basic-info` JSON).
-    internal let deviceBasicInfoDefaultsKey = "synra.preferences.synra.device.basic-info"
-    /// Legacy display-name; read once to migrate into basic-info.
-    internal let legacyDeviceDisplayNameDefaultsKey = "synra.preferences.synra.device.display-name"
     internal let legacyLanDeviceUuidKey = "synra.lan-discovery.device-uuid"
     internal var state: String = "idle"
     internal var startedAt: Int?

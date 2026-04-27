@@ -30,10 +30,10 @@ export type StartDiscoveryOptions = {
   scanWindowMs?: number
   /** @deprecated Not consumed by native implementations. */
   concurrency?: number
-  discoveryTimeoutMs?: number
+  /** Single wall-clock budget (ms); native splits between mDNS/UDP and Synra probe. */
+  scanBudgetMs?: number
   reset?: boolean
   port?: number
-  timeoutMs?: number
   /** Electron host: merged into each Synra TCP probe `connect` payload for this run. */
   probeConnectWirePayload?: Record<string, unknown>
 }

@@ -18,6 +18,7 @@ import type {
 } from '../../../../shared/protocol/types'
 import { DEFAULT_ACK_TIMEOUT_MS, DEFAULT_HEARTBEAT_TIMEOUT_MS } from '../core/constants'
 import { localDisplayName } from '../core/device-identity'
+import { isBenignTcpPeerDisconnect } from '../core/tcp-peer-disconnect'
 import { pickPrimarySourceHostIp } from '../core/network'
 import type { HostEventBus } from '../events/host-event-bus'
 import type { ProbeSocketRegistry } from '../discovery/probe-socket-registry'
@@ -151,7 +152,9 @@ export function createOutboundClientTransport(
         requestId: frame.requestId,
         from: frame.from,
         target: frame.target,
-        replyRequestId: frame.replyRequestId,
+        ...(typeof frame.replyRequestId === 'string' && frame.replyRequestId.length > 0
+          ? { replyRequestId: frame.replyRequestId }
+          : {}),
         timestamp: frame.timestamp
       })
     }
@@ -174,7 +177,9 @@ export function createOutboundClientTransport(
         requestId: frame.requestId,
         from: frame.from,
         target: frame.target,
-        replyRequestId: frame.replyRequestId,
+        ...(typeof frame.replyRequestId === 'string' && frame.replyRequestId.length > 0
+          ? { replyRequestId: frame.replyRequestId }
+          : {}),
         timestamp: frame.timestamp
       })
     }
@@ -219,8 +224,9 @@ export function createOutboundClientTransport(
     }
     // SYNRA-COMM::TCP::ACK::MESSAGE_ACK_AUTO
     if (!isControlEvent(frame.event) && frame.requestId) {
+      const fromWire = typeof frame.from === 'string' ? frame.from.trim() : ''
       const ackTarget =
-        typeof frame.target === 'string' && frame.target.length > 0 ? frame.target : state.deviceId
+        fromWire.length > 0 ? fromWire : typeof state.deviceId === 'string' ? state.deviceId : ''
       if (!ackTarget || ackTarget.length === 0) {
         return
       }
@@ -294,8 +300,24 @@ export function createOutboundClientTransport(
       rejectConnect?.(error)
       rejectConnect = undefined
       resolveConnect = undefined
-      publishTransportError('SOCKET_ERROR', { message: error.message })
-      closeWithError(error.message)
+      const benign = isBenignTcpPeerDisconnect(error)
+      const deviceIdForClose = state.deviceId
+      if (!benign) {
+        publishTransportError('SOCKET_ERROR', {
+          message: error instanceof Error ? error.message : 'SOCKET_ERROR'
+        })
+      }
+      closeWithError(
+        benign ? 'REMOTE_CLOSED' : error instanceof Error ? error.message : 'SOCKET_ERROR'
+      )
+      if (benign && deviceIdForClose) {
+        options.eventBus.publish({
+          type: 'transport.closed',
+          deviceId: deviceIdForClose,
+          payload: { reason: 'REMOTE_CLOSED' },
+          transport: 'tcp'
+        })
+      }
     })
     currentSocket.on('close', () => {
       if (state.state === 'connecting') {

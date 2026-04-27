@@ -5,9 +5,10 @@ extension LanDiscoveryPlugin {
     struct DiscoveryCandidate {
         let host: String
         let sourceDeviceId: String?
+        let synraPort: Int
     }
 
-    /// IPv4 candidates only (mDNS / UDP / manual). Synra TCP hello is performed by `DeviceConnection.probeSynraPeers` in JS.
+    /// IPv4 candidates only (mDNS / UDP / manual). Names are non-display placeholders (IP); handshake fills UI via hooks.
     func populateCandidateDevices(
         candidates: [DiscoveryCandidate],
         port: Int,
@@ -23,14 +24,17 @@ extension LanDiscoveryPlugin {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             let stableId = sourceDeviceId?.isEmpty == false ? sourceDeviceId! : trimmed
             let source: String = manualHosts.contains(trimmed) ? "manual" : "mdns"
+            let trustedLanIdentity =
+                !manualHosts.contains(trimmed) && sourceDeviceId?.isEmpty == false
+            let rowPort = candidate.synraPort > 0 ? candidate.synraPort : port
             devices[stableId] = DeviceRecord(
                 deviceId: stableId,
                 name: trimmed,
                 ipAddress: trimmed,
-                port: port,
+                port: rowPort,
                 source: source,
-                connectable: false,
-                connectCheckAt: nil,
+                connectable: trustedLanIdentity,
+                connectCheckAt: trustedLanIdentity ? checkedAt : nil,
                 connectCheckError: nil,
                 discoveredAt: checkedAt,
                 lastSeenAt: checkedAt
@@ -78,8 +82,6 @@ extension LanDiscoveryPlugin {
         }
         defer { freeifaddrs(cursor) }
 
-        let hostName = ProcessInfo.processInfo.hostName
-        let host = hostName.isEmpty ? "ios-host" : hostName
         var records: [DeviceRecord] = []
         var pointer: UnsafeMutablePointer<ifaddrs>? = first
         while let current = pointer {
@@ -104,7 +106,7 @@ extension LanDiscoveryPlugin {
             records.append(
                 DeviceRecord(
                     deviceId: addressValue,
-                    name: "\(host) (\(interfaceName))",
+                    name: addressValue,
                     ipAddress: addressValue,
                     port: Int(defaultTcpPort),
                     source: "mdns",
@@ -126,31 +128,35 @@ extension LanDiscoveryPlugin {
     }
 
     /// Resolves `_synra._tcp` to candidate IPv4 addresses only (not devices until TCP helloAck).
+    /// Runs Bonjour on a dedicated thread with its own run loop so discovery can run in parallel with UDP
+    /// without `DispatchQueue.main.sync` deadlocks when the caller is on the main thread.
     func discoverByMdns(serviceType: String, timeoutMs: Int) -> [DiscoveryCandidate] {
         let normalized = normalizeMdnsType(serviceType)
-
-        // NetServiceBrowser delivers callbacks on the thread that started the search; that thread's
-        // run loop must run. Never block it with Thread.sleep (common Capacitor path is main queue).
-        let runBrowse: () -> [DiscoveryCandidate] = {
+        final class ResultBox {
+            var value: [DiscoveryCandidate] = []
+        }
+        let box = ResultBox()
+        let sem = DispatchSemaphore(value: 0)
+        let thread = Thread { [normalized] in
             let collector = MdnsCollector()
             collector.start(serviceType: normalized, timeoutMs: timeoutMs)
-            return collector.collectedEntries().compactMap { entry in
+            box.value = collector.collectedEntries().compactMap { entry in
                 let host = entry.ip.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !host.isEmpty else {
                     return nil
                 }
-                return DiscoveryCandidate(host: host, sourceDeviceId: entry.sourceDeviceId)
+                return DiscoveryCandidate(
+                    host: host,
+                    sourceDeviceId: entry.sourceDeviceId,
+                    synraPort: 0
+                )
             }
+            sem.signal()
         }
-
-        if Thread.isMainThread {
-            return runBrowse()
-        }
-        var candidates: [DiscoveryCandidate] = []
-        DispatchQueue.main.sync {
-            candidates = runBrowse()
-        }
-        return candidates
+        thread.name = "com.synra.lan-discovery.mdns-browse"
+        thread.start()
+        sem.wait()
+        return box.value
     }
 
     func normalizeMdnsType(_ serviceType: String) -> String {
@@ -325,7 +331,12 @@ extension LanDiscoveryPlugin {
             }
             let addr = String(cString: addressBuffer)
             let sourceDeviceId = object["sourceDeviceId"] as? String
-            results[addr] = DiscoveryCandidate(host: addr, sourceDeviceId: sourceDeviceId)
+            let synraPort = (object["port"] as? Int) ?? 0
+            results[addr] = DiscoveryCandidate(
+                host: addr,
+                sourceDeviceId: sourceDeviceId,
+                synraPort: synraPort
+            )
         }
         return Array(results.values)
     }

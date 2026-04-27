@@ -1,6 +1,16 @@
 import Foundation
 
 extension LanDiscoveryPlugin {
+    /// SYNRA-COMM::UDP_DISCOVERY::RECEIVE::UDP_RESPONDER — payload shape aligned with Android/Electron UDP discovery reply.
+    internal func buildSynraUdpDiscoveryResponsePayload() -> [String: Any] {
+        [
+            "appId": appId,
+            "protocolVersion": protocolVersion,
+            "port": Int(defaultTcpPort),
+            "sourceDeviceId": localDeviceUuid(),
+        ]
+    }
+
     func startUdpDiscoveryResponder() {
         if udpResponderSocket >= 0 {
             return
@@ -79,11 +89,7 @@ extension LanDiscoveryPlugin {
             return
         }
         let responseData = try? JSONSerialization.data(
-            withJSONObject: [
-                "appId": appId,
-                "protocolVersion": protocolVersion,
-                "port": Int(defaultTcpPort),
-            ]
+            withJSONObject: buildSynraUdpDiscoveryResponsePayload()
         )
         guard let responseData else {
             return

@@ -7,6 +7,7 @@ final class DeviceRecord {
     final String deviceId;
     final String name;
     final String ipAddress;
+    final int port;
     final String source;
     final boolean connectable;
     final Long connectCheckAt;
@@ -18,6 +19,7 @@ final class DeviceRecord {
         String deviceId,
         String name,
         String ipAddress,
+        int port,
         String source,
         boolean connectable,
         Long connectCheckAt,
@@ -28,6 +30,7 @@ final class DeviceRecord {
         this.deviceId = deviceId;
         this.name = name;
         this.ipAddress = ipAddress;
+        this.port = port > 0 ? port : DEFAULT_TCP_PORT;
         this.source = source;
         this.connectable = connectable;
         this.connectCheckAt = connectCheckAt;
@@ -41,7 +44,7 @@ final class DeviceRecord {
         object.put("deviceId", this.deviceId);
         object.put("name", this.name);
         object.put("ipAddress", this.ipAddress);
-        object.put("port", DEFAULT_TCP_PORT);
+        object.put("port", this.port);
         object.put("source", this.source);
         object.put("connectable", this.connectable);
         if (this.connectCheckAt != null) {

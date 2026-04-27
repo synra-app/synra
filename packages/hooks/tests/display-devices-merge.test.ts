@@ -10,8 +10,9 @@ function peer(
   overrides: Partial<DiscoveredDevice> & Pick<DiscoveredDevice, 'deviceId' | 'name' | 'ipAddress'>
 ): DiscoveredDevice {
   return {
-    source: 'mdns',
+    source: 'probe',
     connectable: true,
+    connectCheckAt: 1,
     discoveredAt: now,
     lastSeenAt: now,
     ...overrides
@@ -99,13 +100,16 @@ test('merge reconciles paired id with discovery id drift by host:port (Electron 
     }
   ]
   const discovered: DiscoveredDevice[] = [
-    peer({
+    {
       deviceId: 'mdns-ghost-candidate',
       name: 'Phone',
       ipAddress: '192.168.1.5',
       port: 32100,
+      source: 'mdns',
+      connectable: true,
+      discoveredAt: now,
       lastSeenAt: 500
-    })
+    }
   ]
   const merged = mergePairedAndDiscoveredDevices(
     paired,

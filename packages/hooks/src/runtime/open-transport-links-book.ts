@@ -125,6 +125,21 @@ export class OpenTransportLinksBook {
     return snapshot
   }
 
+  /**
+   * Snapshot of the active TCP link for a peer (e.g. re-list after pairing wire events that drop
+   * local paired state while the inbound socket stays up).
+   */
+  getReadyLinkSnapshot(deviceId: string | undefined): RuntimeOpenTransportLink | undefined {
+    if (!deviceId || deviceId.trim().length === 0) {
+      return undefined
+    }
+    const link = this.linkByDeviceId.get(deviceId.trim())
+    if (!link || link.transport !== 'ready') {
+      return undefined
+    }
+    return { ...link }
+  }
+
   touchLinkActivity(
     deviceId: string,
     updatedAt: number,

@@ -30,7 +30,13 @@ export function createUdpDiscoveryStrategy(): DiscoveryStrategy {
           // discovery requires a non-empty displayName from the Synra TCP connectAck (see probe-runner).
           devicesByIp.set(
             normalizedIp,
-            toProbeCandidate(normalizedIp, 'probe', undefined, envelope.sourceDeviceId)
+            toProbeCandidate(
+              normalizedIp,
+              'probe',
+              undefined,
+              envelope.sourceDeviceId,
+              envelope.displayName
+            )
           )
         })
         // SYNRA-COMM::UDP_DISCOVERY::SEND::DISCOVERY_BROADCAST

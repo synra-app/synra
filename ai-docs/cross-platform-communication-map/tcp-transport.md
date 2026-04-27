@@ -35,4 +35,3 @@
 - `FRAME_WRITE`：长度前缀 JSON 帧写出点。
 - `TRANSPORT_CLOSE`：主动/被动关闭汇合点。
 - `TRANSPORT_HEARTBEAT`：心跳发送或超时检查点。
-

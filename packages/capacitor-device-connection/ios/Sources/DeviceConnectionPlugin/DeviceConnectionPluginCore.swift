@@ -40,6 +40,8 @@ public final class DeviceConnectionPluginCore: NSObject {
     public var onTransportError: (([String: Any]) -> Void)?
 
     internal let synraDefaultTcpPort: UInt16 = 32100
+    /// Bounded parallelism for PROBE_BATCH (matches Android / Electron-style pooling).
+    internal let synraProbeMaxConcurrency: Int = 8
     internal let tcpServerQueue = DispatchQueue(label: "com.synra.device-connection.tcp-server")
     internal var tcpListener: NWListener?
     internal var inboundConnections: [String: SynraInboundConnectionContext] = [:]
@@ -704,16 +706,20 @@ public final class DeviceConnectionPluginCore: NSObject {
                 }
                 // SYNRA-COMM::TCP::ACK::MESSAGE_ACK_AUTO
                 if let topRequestId, !topRequestId.isEmpty {
-                    let ackTarget =
-                        (frame["target"] as? String)?
-                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                    let trimmedFrom =
+                        (frame["from"] as? String)?
+                            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    let ackTargetResolved =
+                        !trimmedFrom.isEmpty ? trimmedFrom : (self.outboundTransportState.deviceId ?? "")
                     self.sendFrame(
                         self.synraLanFrame(
                             type: self.legacyTypeAck,
                             requestId: topRequestId,
                             event: frame["event"] as? String,
                             from: self.localDeviceUuid(),
-                            target: (ackTarget?.isEmpty == false) ? ackTarget : self.outboundTransportState.deviceId,
+                            target: ackTargetResolved.isEmpty
+                                ? self.outboundTransportState.deviceId
+                                : ackTargetResolved,
                             replyRequestId: topRequestId,
                             payload: nil,
                             timestamp: nil,

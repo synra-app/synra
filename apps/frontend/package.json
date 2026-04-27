@@ -21,8 +21,8 @@
     "@synra/plugin-sdk": "workspace:*",
     "@synra/protocol": "workspace:*",
     "@synra/transport-events": "workspace:*",
-    "pinia": "^3.0.4",
     "@synra/utils": "workspace:*",
+    "pinia": "^3.0.4",
     "vue": "catalog:vue",
     "vue-router": "catalog:vue"
   },

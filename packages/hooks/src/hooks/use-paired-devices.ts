@@ -1,3 +1,4 @@
+import type { DiscoveredDevice } from '@synra/capacitor-lan-discovery'
 import {
   SYNRA_PAIRED_DEVICES_KEY,
   SynraPreferences,
@@ -9,9 +10,51 @@ import { getPairAwaitingAcceptDeviceIds } from '../runtime/pair-awaiting-accept'
 import { pairedDevicesStorageEpoch } from '../runtime/paired-devices-storage-epoch'
 import { getPairedLinkPhases } from '../runtime/paired-link-phases'
 import { findReadyTransportLinkForDevice } from '../runtime/ready-transport-link'
+import { normalizeHost } from '../runtime/host-normalization'
 import { useTransport } from './use-transport'
 
 export type PairedLinkStatus = 'disconnected' | 'idle' | 'connecting' | 'connected'
+
+/**
+ * Paired list surface fields: prefer persisted pairing record; LAN `live` is only a fallback
+ * when storage has no host/name (never overwrite stored displayName / address with scan noise).
+ */
+export function pairedSurfaceFromRecordAndLive(
+  record: SynraPairedDeviceRecord,
+  live: DiscoveredDevice | undefined
+): { name: string; ipAddress: string; port?: number } {
+  const storedName = typeof record.displayName === 'string' ? record.displayName.trim() : ''
+  const name =
+    storedName.length > 0
+      ? storedName
+      : typeof live?.name === 'string' && live.name.trim().length > 0
+        ? live.name.trim()
+        : record.deviceId
+
+  const liveHost = normalizeHost(live?.ipAddress ?? '')
+  const storedHost = record.lastResolvedHost?.trim() ?? ''
+  const hasStoredHost = storedHost.length > 0
+  const ipAddress = hasStoredHost ? storedHost : liveHost.length > 0 ? liveHost : ''
+
+  let port: number | undefined
+  if (hasStoredHost) {
+    port =
+      typeof record.lastResolvedPort === 'number' && record.lastResolvedPort > 0
+        ? record.lastResolvedPort
+        : typeof live?.port === 'number' && live.port > 0
+          ? live.port
+          : undefined
+  } else {
+    port =
+      typeof live?.port === 'number' && live.port > 0
+        ? live.port
+        : typeof record.lastResolvedPort === 'number' && record.lastResolvedPort > 0
+          ? record.lastResolvedPort
+          : undefined
+  }
+
+  return { name, ipAddress, port }
+}
 
 export type PairedDeviceRow = {
   deviceId: string
@@ -74,11 +117,12 @@ export function usePairedDevices() {
       } else if (live) {
         linkStatus = 'idle'
       }
+      const { name, ipAddress, port } = pairedSurfaceFromRecordAndLive(record, live)
       return {
         deviceId: record.deviceId,
-        name: live?.name ?? record.displayName,
-        ipAddress: live?.ipAddress ?? record.lastResolvedHost ?? '',
-        port: live?.port ?? record.lastResolvedPort,
+        name,
+        ipAddress,
+        port,
         source: live?.source,
         connectable: live?.connectable ?? false,
         connectCheckError: live?.connectCheckError,

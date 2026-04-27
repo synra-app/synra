@@ -20,6 +20,7 @@
 - `TRANSPORT_CLOSE`
 - `TRANSPORT_HEARTBEAT`
 - `TRANSPORT_ERROR`
+- `PAIRING_DISCOVERY_RESYNC_AFTER_WIRE`（PLUGIN_BRIDGE / RECEIVE；hooks 解配 wire 后补回 discovery）
 
 ## 使用流程
 
@@ -35,4 +36,3 @@
 - `device-handshake.md`
 - `plugin-bridge.md`
 - `message-envelope-and-validation.md`
-
