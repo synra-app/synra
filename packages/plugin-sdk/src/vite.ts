@@ -298,6 +298,11 @@ export function synraVitePluginConfig(): UserConfig {
   })
 
   return {
+    fmt: {
+      singleQuote: true,
+      semi: false,
+      trailingComma: 'none'
+    },
     plugins: [
       Vue() as unknown as PluginOption,
       hasUnoConfig ? UnoCSS({ configFile: unoConfigPath }) : null
