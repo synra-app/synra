@@ -54,7 +54,12 @@ export type RuntimeMessageType =
   | 'runtime.finished'
   | 'runtime.error'
 
-export type PluginSyncMessageType = 'plugin.catalog.request' | 'plugin.catalog.response'
+export type PluginSyncMessageType =
+  | 'plugin.catalog.request'
+  | 'plugin.catalog.response'
+  | 'plugin.bundle.request'
+  | 'plugin.bundle.chunk'
+  | 'plugin.bundle.complete'
 
 export type ProtocolMessageType = RuntimeMessageType | PluginSyncMessageType
 
@@ -332,6 +337,26 @@ export type PluginCatalogResponsePayload = {
   generatedAt: number
 }
 
+export type PluginBundleRequestPayload = {
+  pluginId: string
+  version: string
+}
+
+export type PluginBundleChunkPayload = {
+  pluginId: string
+  version: string
+  chunkIndex: number
+  totalChunks: number
+  chunkBase64: string
+}
+
+export type PluginBundleCompletePayload = {
+  pluginId: string
+  version: string
+  totalChunks: number
+  sha256?: string
+}
+
 export type ProtocolPayloadByType = {
   'runtime.request': RuntimeRequestPayload
   'runtime.received': RuntimeReceivedPayload
@@ -340,6 +365,9 @@ export type ProtocolPayloadByType = {
   'runtime.error': RuntimeErrorPayload
   'plugin.catalog.request': PluginCatalogRequestPayload
   'plugin.catalog.response': PluginCatalogResponsePayload
+  'plugin.bundle.request': PluginBundleRequestPayload
+  'plugin.bundle.chunk': PluginBundleChunkPayload
+  'plugin.bundle.complete': PluginBundleCompletePayload
 }
 
 type MessageByType<K extends keyof ProtocolPayloadByType> = ProtocolEnvelope<
@@ -357,6 +385,9 @@ export type SynraRuntimeMessage =
 export type SynraPluginSyncMessage =
   | MessageByType<'plugin.catalog.request'>
   | MessageByType<'plugin.catalog.response'>
+  | MessageByType<'plugin.bundle.request'>
+  | MessageByType<'plugin.bundle.chunk'>
+  | MessageByType<'plugin.bundle.complete'>
 
 export type SynraProtocolMessage = SynraRuntimeMessage | SynraPluginSyncMessage
 

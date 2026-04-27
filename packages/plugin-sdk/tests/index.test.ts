@@ -33,7 +33,11 @@ test('getSynraUiManifestMetadata derives ui metadata from package manifest', () 
         title: 'Chat',
         builtin: true,
         defaultPage: 'home',
-        icon: 'material-symbols:chat-bubble-outline'
+        icon: 'material-symbols:chat-bubble-outline',
+        entries: {
+          ui: 'dist/ui/index.mjs',
+          worker: 'dist/worker/index.mjs'
+        }
       }
     })
   ).toEqual({
@@ -43,7 +47,11 @@ test('getSynraUiManifestMetadata derives ui metadata from package manifest', () 
     title: 'Chat',
     builtin: true,
     defaultPage: 'home',
-    icon: 'material-symbols:chat-bubble-outline'
+    icon: 'material-symbols:chat-bubble-outline',
+    entries: {
+      ui: 'dist/ui/index.mjs',
+      worker: 'dist/worker/index.mjs'
+    }
   })
 })
 
@@ -72,10 +80,10 @@ test('synraVitePluginConfig generates default plugin package config', () => {
     const config = synraVitePluginConfig()
 
     expect((config.pack as { entry?: Record<string, string> } | undefined)?.entry).toEqual({
-      index: 'src/index.ts',
-      __synra_pages__: 'virtual:synra-pages-entry',
-      'pages/home/index': 'pages/home/index.vue',
-      'pages/settings/index': 'pages/settings/index.vue'
+      'ui/index': 'src/index.ts',
+      'ui/__synra_pages__': 'virtual:synra-pages-entry',
+      'ui/pages/home/index': 'pages/home/index.vue',
+      'ui/pages/settings/index': 'pages/settings/index.vue'
     })
     expect((config.pack as { dts?: boolean } | undefined)?.dts).toBe(false)
     expect((config.pack as { exports?: { devExports: boolean } } | undefined)?.exports).toEqual({

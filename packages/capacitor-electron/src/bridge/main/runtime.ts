@@ -8,6 +8,7 @@ import { createFileService } from '../../host/services/file.service'
 import { createConnectionService } from '../../host/services/connection.service'
 import { createDeviceDiscoveryService } from '../../host/services/device-discovery.service'
 import { createPluginCatalogService } from '../../host/services/plugin-catalog.service'
+import { createPluginManagementService } from '../../host/services/plugin-management.service'
 import { createPluginRuntimeService } from '../../host/services/plugin-runtime.service'
 import { createRuntimeInfoService } from '../../host/services/runtime-info.service'
 import { createPreferencesService } from '../../host/services/preferences.service'
@@ -62,6 +63,7 @@ export function setupBridgeMainRuntime(
   const connectionService = createConnectionService(deviceDiscoveryService)
   const pluginRuntimeService = createPluginRuntimeService()
   const pluginCatalogService = createPluginCatalogService(pluginRuntimeService)
+  const pluginManagementService = createPluginManagementService()
 
   const handlers = createBridgeHandlers({
     runtimeInfoService,
@@ -69,6 +71,7 @@ export function setupBridgeMainRuntime(
     fileService,
     pluginRuntimeService,
     pluginCatalogService,
+    pluginManagementService,
     deviceDiscoveryService,
     connectionService,
     preferencesService

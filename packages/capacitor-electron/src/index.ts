@@ -42,6 +42,10 @@ export {
   type PluginCatalogService
 } from './host/services/plugin-catalog.service'
 export {
+  createPluginManagementService,
+  type PluginManagementService
+} from './host/services/plugin-management.service'
+export {
   createFileService,
   type FileService,
   type FileServiceOptions
@@ -98,6 +102,15 @@ export type {
   DeviceDiscoveryHostEvent,
   DeviceDiscoveryPullHostEventsResult,
   PluginCatalogResult,
+  PluginInstallOptions,
+  PluginInstallResult,
+  PluginListInstalledOptions,
+  PluginListInstalledResult,
+  PluginSyncToDeviceOptions,
+  PluginSyncToDeviceResult,
+  PluginUninstallOptions,
+  PluginUninstallResult,
+  InstalledPluginSummary,
   OperationResult,
   ReadFileOptions,
   ReadFileResult,

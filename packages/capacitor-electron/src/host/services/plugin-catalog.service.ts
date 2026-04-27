@@ -1,11 +1,11 @@
 import type { PluginCatalogRequestPayload } from '@synra/protocol'
+import { parsePluginIdFromPackageName, type SynraActionPlugin } from '@synra/plugin-sdk'
 import {
-  getSynraUiManifestMetadata,
-  parsePluginIdFromPackageName,
-  type SynraActionPlugin,
-  type SynraPluginManifest
-} from '@synra/plugin-sdk'
-import chatPackageJson from '@synra-plugin/chat/package.json'
+  createSynraPluginInstallStore,
+  type SynraInstalledPluginRecord
+} from '@synra/plugin-system/node'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import type { PluginCatalogResult } from '../../shared/protocol/types'
 import type { PluginRuntimeService } from './plugin-runtime.service'
 
@@ -13,15 +13,12 @@ export type PluginCatalogService = {
   getCatalog(request?: PluginCatalogRequestPayload): Promise<PluginCatalogResult>
 }
 
-const chatPluginManifest = chatPackageJson as SynraPluginManifest
-
 type PluginMetadata = {
   packageName?: string
   displayName?: string
   builtin?: boolean
   defaultPage?: string
   icon?: string
-  manifest?: SynraPluginManifest
 }
 
 function getPluginMetadata(plugin: SynraActionPlugin): PluginMetadata | undefined {
@@ -40,60 +37,49 @@ type CatalogPluginRecord = {
   icon?: string
 }
 
-function toCatalogPluginRecordFromManifest(manifest: SynraPluginManifest): CatalogPluginRecord {
-  const metadata = getSynraUiManifestMetadata(manifest)
+function toCatalogPluginRecordFromInstalled(
+  record: SynraInstalledPluginRecord
+): CatalogPluginRecord {
   return {
-    pluginId: metadata.pluginId,
-    packageName: metadata.packageName,
-    version: metadata.version,
-    displayName: metadata.title,
+    pluginId: record.pluginId,
+    packageName: record.packageName,
+    version: record.version,
+    displayName: record.title,
     status: 'installed',
-    builtin: metadata.builtin,
-    defaultPage: metadata.defaultPage,
-    icon: metadata.icon
-  }
-}
-
-function readManifestMetadata(
-  manifest?: SynraPluginManifest
-): ReturnType<typeof getSynraUiManifestMetadata> | undefined {
-  if (!manifest) {
-    return undefined
-  }
-
-  try {
-    return getSynraUiManifestMetadata(manifest)
-  } catch {
-    return undefined
+    builtin: record.builtin,
+    defaultPage: record.defaultPage,
+    icon: record.icon
   }
 }
 
 export function createPluginCatalogService(
-  pluginRuntimeService: PluginRuntimeService
+  pluginRuntimeService: PluginRuntimeService,
+  options: { installStorePath?: string } = {}
 ): PluginCatalogService {
+  const installStorePath =
+    options.installStorePath ?? join(homedir(), '.synra', 'plugins', 'installed.json')
+  const installStore = createSynraPluginInstallStore(installStorePath)
   return {
     async getCatalog(request: PluginCatalogRequestPayload = {}): Promise<PluginCatalogResult> {
-      const catalogMap = new Map<string, CatalogPluginRecord>(
-        [toCatalogPluginRecordFromManifest(chatPluginManifest)].map(
-          (item) => [item.pluginId, item] as const
-        )
-      )
+      const catalogMap = new Map<string, CatalogPluginRecord>()
+      for (const record of installStore.list()) {
+        catalogMap.set(record.pluginId, toCatalogPluginRecordFromInstalled(record))
+      }
 
       for (const plugin of pluginRuntimeService.listPlugins()) {
         const metadata = getPluginMetadata(plugin)
-        const manifestMetadata = readManifestMetadata(metadata?.manifest)
-        const packageName = manifestMetadata?.packageName ?? metadata?.packageName
+        const packageName = metadata?.packageName
         const parsedPluginId = packageName ? parsePluginIdFromPackageName(packageName) : null
-        const pluginId = manifestMetadata?.pluginId ?? parsedPluginId ?? plugin.id
+        const pluginId = parsedPluginId ?? plugin.id
         catalogMap.set(pluginId, {
           pluginId,
           packageName,
-          version: manifestMetadata?.version ?? plugin.version,
-          displayName: metadata?.displayName ?? manifestMetadata?.title ?? plugin.id,
+          version: plugin.version,
+          displayName: metadata?.displayName ?? plugin.id,
           status: 'installed',
-          builtin: manifestMetadata?.builtin ?? metadata?.builtin ?? false,
-          defaultPage: manifestMetadata?.defaultPage ?? metadata?.defaultPage ?? 'home',
-          icon: manifestMetadata?.icon ?? metadata?.icon
+          builtin: metadata?.builtin ?? false,
+          defaultPage: metadata?.defaultPage ?? 'home',
+          icon: metadata?.icon
         })
       }
 

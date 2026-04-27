@@ -1,4 +1,12 @@
 import type { SynraActionReceipt, SynraActionRequest } from '@synra/protocol'
+import {
+  getSynraPluginManifestMetadata,
+  parsePluginIdFromPackageName,
+  type SynraPluginEntryKind,
+  type SynraPluginManifest,
+  type SynraPluginManifestEntries,
+  type SynraPluginPackageName
+} from '@synra/plugin-system'
 
 export type ShareInputType = 'text' | 'url' | 'file'
 
@@ -40,21 +48,6 @@ export type SynraActionPlugin = {
   execute(action: PluginAction, context: ExecuteContext): Promise<SynraActionReceipt>
 }
 
-export type SynraPluginPackageName = `@synra-plugin/${string}` | `synra-plugin-${string}`
-
-export type SynraPluginManifest = {
-  name: string
-  version: string
-  synra?: {
-    title?: string
-    description?: string
-    defaultPage?: string
-    builtin?: boolean
-    // Iconify icon name in collection:name format, e.g. material-symbols:10k.
-    icon?: string
-  }
-}
-
 export type SynraUiManifestMetadata = {
   pluginId: string
   packageName: SynraPluginPackageName
@@ -63,25 +56,7 @@ export type SynraUiManifestMetadata = {
   builtin: boolean
   defaultPage: string
   icon?: string
-}
-
-const ICONIFY_ICON_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*:[a-z0-9]+(?:-[a-z0-9]+)*$/i
-
-function normalizeManifestIcon(icon: string | undefined): string | undefined {
-  if (!icon) {
-    return undefined
-  }
-
-  const normalized = icon.trim()
-  if (!normalized) {
-    return undefined
-  }
-
-  if (!ICONIFY_ICON_NAME_PATTERN.test(normalized)) {
-    return undefined
-  }
-
-  return normalized
+  entries: SynraPluginManifestEntries
 }
 
 export abstract class SynraPlugin {
@@ -89,43 +64,8 @@ export abstract class SynraPlugin {
   onPluginExit(): void | Promise<void> {}
 }
 
-export function parsePluginIdFromPackageName(packageName: string): string | null {
-  const scopedPrefix = '@synra-plugin/'
-  const unscopedPrefix = 'synra-plugin-'
-  let candidate = ''
-
-  if (packageName.startsWith(scopedPrefix)) {
-    candidate = packageName.slice(scopedPrefix.length)
-  } else if (packageName.startsWith(unscopedPrefix)) {
-    candidate = packageName.slice(unscopedPrefix.length)
-  } else {
-    return null
-  }
-
-  if (!/^[a-z0-9-]+$/.test(candidate)) {
-    return null
-  }
-
-  return candidate
-}
-
 export function getSynraUiManifestMetadata(manifest: SynraPluginManifest): SynraUiManifestMetadata {
-  const pluginId = parsePluginIdFromPackageName(manifest.name)
-  if (!pluginId) {
-    throw new Error(
-      `Cannot derive pluginId from package name '${manifest.name}'. Expected @synra-plugin/<id> or synra-plugin-<id>.`
-    )
-  }
-
-  return {
-    pluginId,
-    packageName: manifest.name as SynraPluginPackageName,
-    version: manifest.version,
-    title: manifest.synra?.title ?? pluginId,
-    builtin: manifest.synra?.builtin ?? false,
-    defaultPage: manifest.synra?.defaultPage ?? 'home',
-    icon: normalizeManifestIcon(manifest.synra?.icon)
-  }
+  return getSynraPluginManifestMetadata(manifest)
 }
 
 export function getSynraPluginMetaFromManifest(
@@ -142,6 +82,9 @@ export function getSynraPluginMetaFromManifest(
   }
 }
 
+export type { SynraPluginManifest, SynraPluginManifestEntries, SynraPluginEntryKind }
+export { parsePluginIdFromPackageName }
+
 export { normalizePluginPagePath, pluginFilePathToPagePath } from './page-path'
 export {
   createSynraPluginEvent,
@@ -150,10 +93,18 @@ export {
 } from './transport/create-synra-plugin-event'
 
 export type {
+  PluginWorkerActionInvokeInput,
+  PluginWorkerClient,
   PluginWorkerRuntime,
   PluginWorkerTaskRequest,
   PluginWorkerTaskResult,
   LocalTaskExecutor,
   WorkerRuntimeOptions
 } from './worker-runtime'
-export { FallbackWorkerRuntime, WorkerProxyRuntime } from './worker-runtime'
+export {
+  createPluginWorkerClient,
+  disposePluginWorker,
+  FallbackWorkerRuntime,
+  invokePluginAction,
+  WorkerProxyRuntime
+} from './worker-runtime'

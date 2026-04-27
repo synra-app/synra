@@ -1,4 +1,6 @@
 import { describe, expect, test, vi } from 'vite-plus/test'
+import os from 'node:os'
+import path from 'node:path'
 import { createLoopbackTransportPair } from '../../../../transport-core/src/index.ts'
 import { createBridgeHandlers } from '../../../src/bridge/main/handlers'
 import { createMainDispatcher } from '../../../src/bridge/main/dispatch'
@@ -9,6 +11,10 @@ import { createRuntimeInfoService } from '../../../src/host/services/runtime-inf
 import { BRIDGE_METHODS, BRIDGE_PROTOCOL_VERSION } from '../../../src/shared/protocol/constants'
 import type { MethodResultMap } from '../../../src/shared/protocol/types'
 import type { RuntimeExecuteOptions } from '../../../src/shared/protocol/types'
+
+function createEmptyInstallStorePath(testName: string): string {
+  return path.join(os.tmpdir(), `synra-runtime-flow-${testName}-${Date.now()}.json`)
+}
 
 function createRuntimeExecuteMessage(requestId: string) {
   return {
@@ -45,7 +51,9 @@ describe('bridge/main runtime e2e flow', () => {
     const openExternal = vi.fn(async () => ({ success: true as const }))
     const runtime = createPluginRuntimeService()
     runtime.register(createOpenUrlRuntimeFixturePlugin({ openExternal }))
-    const catalog = createPluginCatalogService(runtime)
+    const catalog = createPluginCatalogService(runtime, {
+      installStorePath: createEmptyInstallStorePath('catalog')
+    })
     const handlers = createBridgeHandlers({
       runtimeInfoService: createRuntimeInfoService(),
       externalLinkService: { openExternal },
@@ -54,6 +62,28 @@ describe('bridge/main runtime e2e flow', () => {
       },
       pluginRuntimeService: runtime,
       pluginCatalogService: catalog,
+      pluginManagementService: {
+        install: vi.fn(async () => ({
+          pluginId: 'chat',
+          packageName: '@synra-plugin/chat',
+          version: '0.1.0',
+          title: 'Chat',
+          defaultPage: 'home',
+          builtin: false,
+          icon: undefined,
+          installedAt: Date.now(),
+          artifactRoot: '/tmp'
+        })),
+        uninstall: vi.fn(async () => ({ success: true as const })),
+        listInstalled: vi.fn(async () => ({ plugins: [] })),
+        syncToDevice: vi.fn(async () => ({
+          success: true as const,
+          pluginId: 'chat',
+          version: '0.1.0',
+          deviceId: 'dev-e2e-1',
+          artifactRoot: '/tmp'
+        }))
+      },
       deviceDiscoveryService: {
         startDiscovery: vi.fn(async () => ({
           requestId: 'discovery-e2e-1',
@@ -197,7 +227,31 @@ describe('bridge/main runtime e2e flow', () => {
         readFile: vi.fn(async () => ({ content: '', encoding: 'utf-8' as BufferEncoding }))
       },
       pluginRuntimeService: runtime,
-      pluginCatalogService: createPluginCatalogService(runtime),
+      pluginCatalogService: createPluginCatalogService(runtime, {
+        installStorePath: createEmptyInstallStorePath('dedupe')
+      }),
+      pluginManagementService: {
+        install: vi.fn(async () => ({
+          pluginId: 'chat',
+          packageName: '@synra-plugin/chat',
+          version: '0.1.0',
+          title: 'Chat',
+          defaultPage: 'home',
+          builtin: false,
+          icon: undefined,
+          installedAt: Date.now(),
+          artifactRoot: '/tmp'
+        })),
+        uninstall: vi.fn(async () => ({ success: true as const })),
+        listInstalled: vi.fn(async () => ({ plugins: [] })),
+        syncToDevice: vi.fn(async () => ({
+          success: true as const,
+          pluginId: 'chat',
+          version: '0.1.0',
+          deviceId: 'dev-e2e-2',
+          artifactRoot: '/tmp'
+        }))
+      },
       deviceDiscoveryService: {
         startDiscovery: vi.fn(async () => ({
           requestId: 'discovery-e2e-2',

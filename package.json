@@ -1,6 +1,6 @@
 {
   "name": "synra-monorepo",
-  "version": "0.0.0",
+  "version": "0.0.2",
   "private": true,
   "type": "module",
   "scripts": {
@@ -17,11 +17,13 @@
     "test": "vp run -r test",
     "lint": "vp lint --fix",
     "check": "vp check --fix",
+    "release": "bumpp -r",
     "prepare": "vp config"
   },
   "devDependencies": {
     "@inquirer/prompts": "catalog:cli",
     "@types/node": "catalog:types",
+    "bumpp": "catalog:release",
     "esno": "^4.8.0",
     "unconfig": "catalog:cli",
     "vite-plus": "catalog:vite"

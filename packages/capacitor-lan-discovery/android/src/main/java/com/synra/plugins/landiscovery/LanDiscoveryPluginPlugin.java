@@ -766,12 +766,9 @@ public class LanDiscoveryPluginPlugin extends Plugin {
         info.setPort(DEFAULT_TCP_PORT);
         // SYNRA-COMM::UDP_DISCOVERY::CONNECT::DISCOVERY_SCAN — TXT for peer correlation only (no display strings).
         try {
-            info.setAttribute("appId", APP_ID.getBytes(StandardCharsets.UTF_8));
-            info.setAttribute(
-                "sourceDeviceId",
-                getOrCreateLocalDeviceUuid().getBytes(StandardCharsets.UTF_8)
-            );
-            info.setAttribute("protocolVersion", PROTOCOL_VERSION.getBytes(StandardCharsets.UTF_8));
+            info.setAttribute("appId", APP_ID);
+            info.setAttribute("sourceDeviceId", getOrCreateLocalDeviceUuid());
+            info.setAttribute("protocolVersion", PROTOCOL_VERSION);
         } catch (Exception ignored) {}
         registeredMdnsServiceName = info.getServiceName();
         this.mdnsRegistrationListener = new NsdManager.RegistrationListener() {

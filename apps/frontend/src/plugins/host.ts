@@ -1,10 +1,10 @@
 export {
   activatePlugin,
   deactivatePlugin,
-  initializePluginHost,
-  listBuiltinPlugins,
+  listPlugins,
   openPluginPage,
-  registerBuiltinPlugin,
+  registerPlugin,
+  syncInstalledPlugins,
   PluginHostFacade,
-  type RegisteredBuiltinPlugin
+  type RegisteredPlugin
 } from './host/index'

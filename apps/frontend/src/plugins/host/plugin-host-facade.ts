@@ -1,11 +1,8 @@
 import type { SynraUiManifestMetadata } from '@synra/plugin-sdk'
+import { getSynraUiManifestMetadata, type SynraPluginManifest } from '@synra/plugin-sdk'
 import type { Router } from 'vue-router'
-import {
-  discoverBuiltinSynraUiPluginPackages,
-  loadBuiltinSynraPluginEntry
-} from './builtin-plugin-loaders'
-import type { RegisteredBuiltinPlugin } from './types'
-import { registerBuiltinPluginFromManifest } from './register-builtin-from-manifest'
+import type { InstalledPluginSummary } from '@synra/capacitor-electron'
+import type { RegisteredPlugin } from './types'
 import { PluginRegistry } from './plugin-registry'
 import { PluginRouteBinder } from './plugin-route-binder'
 import { PluginLifecycleManager } from './plugin-lifecycle-manager'
@@ -20,32 +17,44 @@ export class PluginHostFacade {
     this.metadataByPluginId
   )
 
-  private builtinPluginsInit: Promise<void> | null = null
-
-  /**
-   * Discovers `@synra-plugin/*` packages under node_modules, dynamically imports each
-   * entry + manifest, and registers builtins. Idempotent.
-   */
-  initializeBuiltinPlugins(): Promise<void> {
-    if (this.builtinPluginsInit) {
-      return this.builtinPluginsInit
-    }
-    this.builtinPluginsInit = (async () => {
-      for (const { packageName, manifest } of discoverBuiltinSynraUiPluginPackages()) {
-        const PluginCtor = await loadBuiltinSynraPluginEntry(packageName)
-        this.registerBuiltinPlugin(registerBuiltinPluginFromManifest(manifest, new PluginCtor()))
-      }
-    })()
-    return this.builtinPluginsInit
-  }
-
-  listBuiltinPlugins(): SynraUiManifestMetadata[] {
+  listPlugins(): SynraUiManifestMetadata[] {
     return this.registry.list()
   }
 
-  registerBuiltinPlugin(plugin: RegisteredBuiltinPlugin): void {
+  registerPlugin(plugin: RegisteredPlugin): void {
     this.registry.register(plugin)
     this.metadataByPluginId.set(plugin.metadata.pluginId, plugin.metadata)
+  }
+
+  async syncInstalledPlugins(plugins: InstalledPluginSummary[]): Promise<void> {
+    for (const plugin of plugins) {
+      const manifest: SynraPluginManifest = {
+        name: plugin.packageName,
+        version: plugin.version,
+        synra: {
+          title: plugin.title,
+          defaultPage: plugin.defaultPage,
+          icon: plugin.icon,
+          builtin: plugin.builtin
+        }
+      }
+      const metadata = getSynraUiManifestMetadata(manifest)
+      if (this.registry.get(metadata.pluginId)) {
+        continue
+      }
+
+      const uiEntryPath = `${plugin.artifactRoot.replace(/\\/g, '/')}/package/dist/ui/index.mjs`
+      const imported = await import(/* @vite-ignore */ this.toFileModuleUrl(uiEntryPath))
+      const PluginCtor = imported.default as (new () => RegisteredPlugin['plugin']) | undefined
+      if (typeof PluginCtor !== 'function') {
+        continue
+      }
+      this.registerPlugin({
+        plugin: new PluginCtor(),
+        metadata,
+        artifactRoot: plugin.artifactRoot
+      })
+    }
   }
 
   activatePlugin(router: Router, pluginId: string): Promise<void> {
@@ -67,5 +76,13 @@ export class PluginHostFacade {
       path: this.routeBinder.resolveRuntimePath(pluginId, pagePath),
       query
     })
+  }
+
+  private toFileModuleUrl(filePath: string): string {
+    const normalized = filePath.replace(/\\/g, '/')
+    if (/^[a-zA-Z]:\//.test(normalized)) {
+      return `file:///${normalized}`
+    }
+    return `file://${normalized}`
   }
 }

@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs'
+import { builtinModules } from 'node:module'
 import { resolve } from 'node:path'
 import { loadConfig } from '@unocss/config'
 import { createGenerator } from 'unocss'
@@ -13,7 +14,7 @@ function normalizeEntryPath(entry: string): string {
 }
 
 function toPageEntryName(pageEntryPath: string): string {
-  return pageEntryPath.replace(/\.vue$/i, '')
+  return `ui/${pageEntryPath.replace(/\.vue$/i, '')}`
 }
 
 function pluginFilePathToPagePath(filePath: string): string {
@@ -42,7 +43,7 @@ function debugLog(message: string, meta?: unknown): void {
   console.info(`[synra-plugin-sdk/vite] ${message}`, meta)
 }
 
-const VIRTUAL_PAGES_ENTRY_NAME = '__synra_pages__'
+const VIRTUAL_PAGES_ENTRY_NAME = 'ui/__synra_pages__'
 const VIRTUAL_PAGES_ENTRY_ID = 'virtual:synra-pages-entry'
 const RESOLVED_VIRTUAL_PAGES_ENTRY_ID = '\0virtual:synra-pages-entry'
 const VIRTUAL_UNO_CSS_ID = 'virtual:uno.css'
@@ -50,6 +51,16 @@ const RESOLVED_VIRTUAL_UNO_CSS_ID = '\0virtual:uno.css'
 
 /** Cascade layer for vp-pack CSS so host (unlayered) utilities win over identical plugin selectors. */
 const SYNRA_PLUGIN_PACK_STYLE_LAYER = 'synra-plugin'
+const SYNRA_RUNTIME_ENTRY_KINDS = ['ui', 'worker', 'shared', 'host'] as const
+const NODE_BUILTINS = new Set(
+  builtinModules.flatMap((value) => {
+    return value.startsWith('node:')
+      ? [value, value.slice('node:'.length)]
+      : [value, `node:${value}`]
+  })
+)
+
+type RuntimeEntryKind = (typeof SYNRA_RUNTIME_ENTRY_KINDS)[number]
 
 function createPagesManifestItems(pageEntries: string[]): PagesManifestItem[] {
   return pageEntries.map((pageEntry) => {
@@ -78,11 +89,47 @@ function createPagesManifestPlugin(items: PagesManifestItem[]) {
       }
       this.emitFile({
         type: 'asset',
-        fileName: 'pages.json',
+        fileName: 'ui/pages.json',
         source: JSON.stringify({ pages: items }, null, 2)
       })
     }
   } as UserConfig
+}
+
+function isNodeBuiltinModule(input: string): boolean {
+  if (input.startsWith('node:')) {
+    return NODE_BUILTINS.has(input)
+  }
+  return NODE_BUILTINS.has(input)
+}
+
+function createRuntimeBoundaryCheckPlugin(cwd: string) {
+  const normalizedRoot = normalizeEntryPath(`${cwd}/`)
+  const runtimeKinds = new Set<RuntimeEntryKind>(['ui', 'worker', 'shared'])
+  return {
+    name: 'synra-runtime-boundary-check',
+    resolveId(source: string, importer?: string) {
+      if (!importer || !isNodeBuiltinModule(source)) {
+        return null
+      }
+      const normalizedImporter = normalizeEntryPath(importer)
+      if (!normalizedImporter.startsWith(normalizedRoot)) {
+        return null
+      }
+      const relativeImporter = normalizedImporter.slice(normalizedRoot.length)
+      const segments = relativeImporter.split('/')
+      const runtimeSegment =
+        segments[0] === 'src' && typeof segments[1] === 'string'
+          ? (segments[1] as RuntimeEntryKind)
+          : (segments[0] as RuntimeEntryKind)
+      if (!runtimeKinds.has(runtimeSegment)) {
+        return null
+      }
+      throw new Error(
+        `Entry '${runtimeSegment}' cannot import Node.js built-in module '${source}'. Move this logic to src/host/index.ts.`
+      )
+    }
+  }
 }
 
 function createVirtualPagesEntryPlugin(cwd: string, pageEntries: string[], hasUnoConfig: boolean) {
@@ -208,12 +255,26 @@ function resolveDefaultEntries(
   styleEntryPath?: string
 ): Record<string, string> {
   const entries: Record<string, string> = {
-    index: 'src/index.ts',
+    'ui/index': existsSync(resolve(process.cwd(), 'src/ui/index.ts'))
+      ? 'src/ui/index.ts'
+      : 'src/index.ts',
     [VIRTUAL_PAGES_ENTRY_NAME]: VIRTUAL_PAGES_ENTRY_ID
   }
 
+  const runtimeOptionalEntries: Array<{ kind: RuntimeEntryKind; entryPath: string }> = [
+    { kind: 'worker', entryPath: 'src/worker/index.ts' },
+    { kind: 'shared', entryPath: 'src/shared/index.ts' },
+    { kind: 'host', entryPath: 'src/host/index.ts' }
+  ]
+
+  for (const entry of runtimeOptionalEntries) {
+    if (existsSync(resolve(process.cwd(), entry.entryPath))) {
+      entries[`${entry.kind}/index`] = entry.entryPath
+    }
+  }
+
   if (styleEntryPath) {
-    entries.style = styleEntryPath
+    entries['ui/style'] = styleEntryPath
   }
 
   for (const pageEntry of pageEntries) {
@@ -252,6 +313,7 @@ export function synraVitePluginConfig(): UserConfig {
       },
       plugins: [
         VueRolldown({ isProduction: true }),
+        createRuntimeBoundaryCheckPlugin(cwd),
         createUnoCssGeneratePlugin(cwd, hasUnoConfig, unoConfigPath),
         createVirtualPagesEntryPlugin(cwd, pageEntries, hasUnoConfig),
         createPagesManifestPlugin(pageManifestItems)

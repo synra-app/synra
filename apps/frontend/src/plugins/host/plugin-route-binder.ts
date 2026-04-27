@@ -1,32 +1,13 @@
-import { normalizePluginPagePath, pluginFilePathToPagePath } from '@synra/plugin-sdk'
+import { normalizePluginPagePath } from '@synra/plugin-sdk'
+import { createElectronBridgePluginFromGlobal } from '@synra/capacitor-electron/api/plugin'
 import type { Router } from 'vue-router'
 import type { PagesManifest, RegisteredPage } from './types'
 
 export class PluginRouteBinder {
   private readonly pagesByPlugin = new Map<string, Map<string, RegisteredPage>>()
-  // Source pages are available during local workspace development.
-  private readonly pageSourceModules = import.meta.glob(
-    '/node_modules/@synra-plugin/*/pages/**/index.vue'
-  )
-  // Dist pages are required for published plugin packages.
-  private readonly pageDistModules = import.meta.glob(
-    '/node_modules/@synra-plugin/*/dist/pages/**/index.mjs'
-  )
-  private readonly pageModuleLoaders = {
-    // Prefer source modules in workspace development for better HMR and stable resolving.
-    ...this.pageDistModules,
-    ...this.pageSourceModules
-  }
-  private readonly pagesManifestModules = import.meta.glob(
-    '/node_modules/@synra-plugin/*/dist/pages.json',
-    {
-      eager: true,
-      import: 'default'
-    }
-  ) as Record<string, unknown>
 
-  attachRoutes(router: Router, pluginId: string, packageName: string): void {
-    const pages = this.resolvePages(pluginId, packageName)
+  async attachRoutes(router: Router, pluginId: string, artifactRoot?: string): Promise<void> {
+    const pages = await this.resolvePages(pluginId, artifactRoot)
     this.pagesByPlugin.set(pluginId, pages)
     for (const page of pages.values()) {
       if (router.hasRoute(page.routeName)) {
@@ -44,81 +25,72 @@ export class PluginRouteBinder {
     }
   }
 
-  private resolvePages(pluginId: string, packageName: string): Map<string, RegisteredPage> {
-    const manifest = this.resolvePagesManifest(packageName)
+  private async resolvePages(
+    pluginId: string,
+    artifactRoot?: string
+  ): Promise<Map<string, RegisteredPage>> {
+    const manifest = await this.resolvePagesManifest(artifactRoot)
     const byPlugin = new Map<string, RegisteredPage>()
     for (const page of manifest.pages) {
       const normalizedPagePath = normalizePluginPagePath(page.path)
       byPlugin.set(normalizedPagePath, {
         pagePath: normalizedPagePath,
         routeName: this.toRouteName(pluginId, normalizedPagePath),
-        loader: this.resolvePageLoader(packageName, page.file)
+        loader: this.resolvePageLoader(artifactRoot, page.file)
       })
     }
     return byPlugin
   }
 
-  private resolvePagesManifest(packageName: string): PagesManifest {
-    const manifestPath = `/node_modules/${packageName}/dist/pages.json`
-    const manifest = this.pagesManifestModules[manifestPath] as PagesManifest | undefined
-    if (manifest && Array.isArray(manifest.pages)) {
-      return manifest
+  private async resolvePagesManifest(artifactRoot?: string): Promise<PagesManifest> {
+    if (!artifactRoot || !window.__synraCapElectron?.invoke) {
+      throw new Error('Cannot resolve installed plugin pages manifest without artifactRoot.')
     }
 
-    // Compatibility fallback for plugins that do not emit pages.json in development.
-    const inferredManifest = this.inferPagesManifest(packageName)
-    if (inferredManifest.pages.length > 0) {
-      return inferredManifest
-    }
+    const bridge = createElectronBridgePluginFromGlobal()
+    const normalizedRoot = artifactRoot.replace(/\\/g, '/')
+    const manifestPaths = [
+      `${normalizedRoot}/package/dist/ui/pages.json`,
+      `${normalizedRoot}/package/dist/pages.json`
+    ]
 
-    throw new Error(`Cannot resolve pages.json for package '${packageName}'.`)
-  }
-
-  private inferPagesManifest(packageName: string): PagesManifest {
-    const pages = new Map<string, { path: string; file: string }>()
-    const sourcePrefix = `/node_modules/${packageName}/`
-    const distPrefix = `/node_modules/${packageName}/dist/`
-
-    for (const sourceModulePath of Object.keys(this.pageSourceModules)) {
-      if (!sourceModulePath.startsWith(sourcePrefix) || !sourceModulePath.endsWith('/index.vue')) {
-        continue
-      }
-      const file = sourceModulePath.slice(sourcePrefix.length)
-      const path = pluginFilePathToPagePath(file)
-      pages.set(path, { path, file })
-    }
-
-    for (const distModulePath of Object.keys(this.pageDistModules)) {
-      if (!distModulePath.startsWith(distPrefix) || !distModulePath.endsWith('/index.mjs')) {
-        continue
-      }
-      const distRelativeFile = distModulePath.slice(distPrefix.length)
-      const file = distRelativeFile.replace(/\.mjs$/i, '.vue')
-      const path = pluginFilePathToPagePath(file)
-      if (!pages.has(path)) {
-        pages.set(path, { path, file })
+    for (const manifestPath of manifestPaths) {
+      try {
+        const fileResult = await bridge.readFile({ path: manifestPath, encoding: 'utf-8' })
+        const parsed = JSON.parse(fileResult.content) as PagesManifest
+        if (Array.isArray(parsed.pages)) {
+          return parsed
+        }
+      } catch {
+        // Try the next candidate path.
       }
     }
-
-    return {
-      pages: [...pages.values()]
-    }
+    throw new Error(`Cannot resolve pages.json in installed artifact root '${artifactRoot}'.`)
   }
 
   private resolvePageLoader(
-    packageName: string,
+    artifactRoot: string | undefined,
     pageFilePath: string
   ): () => Promise<{ default: unknown }> {
-    const normalizedFilePath = pageFilePath.replace(/^\/+/, '')
-    const sourcePath = `/node_modules/${packageName}/${normalizedFilePath}`
-    const distPath = `/node_modules/${packageName}/dist/${normalizedFilePath.replace(/\.vue$/i, '.mjs')}`
-    const loader = this.pageModuleLoaders[sourcePath] ?? this.pageModuleLoaders[distPath]
-    if (!loader) {
-      throw new Error(
-        `Cannot resolve page module for '${packageName}' file '${normalizedFilePath}'.`
-      )
+    if (!artifactRoot) {
+      throw new Error('Cannot resolve page loader without artifactRoot.')
     }
-    return loader as () => Promise<{ default: unknown }>
+    const normalizedFilePath = pageFilePath.replace(/^\/+/, '')
+    const moduleRelativePath = normalizedFilePath.replace(/\.vue$/i, '.mjs')
+    const normalizedRoot = artifactRoot.replace(/\\/g, '/')
+    const distUiPath = `${normalizedRoot}/package/dist/ui/${moduleRelativePath}`
+    const distPath = `${normalizedRoot}/package/dist/${moduleRelativePath}`
+    return async () => {
+      try {
+        return (await import(/* @vite-ignore */ this.toFileModuleUrl(distUiPath))) as {
+          default: unknown
+        }
+      } catch {
+        return (await import(/* @vite-ignore */ this.toFileModuleUrl(distPath))) as {
+          default: unknown
+        }
+      }
+    }
   }
 
   detachRoutes(router: Router, pluginId: string): void {
@@ -145,5 +117,13 @@ export class PluginRouteBinder {
 
   private toRuntimePath(pluginId: string, pagePath: string): string {
     return `/plugin-${pluginId}${normalizePluginPagePath(pagePath)}`
+  }
+
+  private toFileModuleUrl(filePath: string): string {
+    const normalized = filePath.replace(/\\/g, '/')
+    if (/^[a-zA-Z]:\//.test(normalized)) {
+      return `file:///${normalized}`
+    }
+    return `file://${normalized}`
   }
 }

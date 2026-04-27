@@ -7,7 +7,6 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { routes } from 'vue-router/auto-routes'
 import App from './App.vue'
 import { setupSynraRuntime } from './bootstrap/setup-synra-runtime'
-import { initializePluginHost } from './plugins/host'
 import {
   PAIRING_PROTOCOL_KEY,
   type PairingProtocolContext
@@ -28,8 +27,6 @@ const pairingProtocolHolder = shallowRef<PairingProtocolContext | null>(null)
 app.provide(PAIRING_PROTOCOL_KEY, pairingProtocolHolder)
 setupSynraRuntime(pinia, pairingProtocolHolder)
 const { tcpLogger } = useLogger()
-
-await initializePluginHost()
 
 tcpLogger.info('frontend main')
 

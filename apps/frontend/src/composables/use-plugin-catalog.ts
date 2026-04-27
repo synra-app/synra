@@ -1,12 +1,13 @@
 import { createElectronBridgePluginFromGlobal } from '@synra/capacitor-electron/api/plugin'
 import { unknownToErrorMessage } from '@synra/protocol'
 import { getInstalledPluginRecord, installPluginOnClient } from '../plugins/install-manager'
-import { listBuiltinPlugins, openPluginPage } from '../plugins/host'
+import { listPlugins, openPluginPage, syncInstalledPlugins } from '../plugins/host'
 
 const DEFAULT_PLUGIN_ICON = 'material-symbols:extension-outline'
 
 export type PluginCardItem = {
   pluginId: string
+  packageName?: string
   name: string
   version: string
   status: 'installed' | 'available'
@@ -18,8 +19,9 @@ export type PluginCardItem = {
 }
 
 function getFallbackPlugins(): PluginCardItem[] {
-  return listBuiltinPlugins().map((plugin) => ({
+  return listPlugins().map((plugin) => ({
     pluginId: plugin.pluginId,
+    packageName: plugin.packageName,
     name: plugin.title,
     version: plugin.version,
     status: 'installed',
@@ -62,7 +64,12 @@ export function usePluginCatalog() {
       }
 
       const bridge = createElectronBridgePluginFromGlobal()
-      const result = await bridge.getPluginCatalog()
+      const [result, installed] = await Promise.all([
+        bridge.getPluginCatalog(),
+        bridge.listInstalledPlugins()
+      ])
+      await syncInstalledPlugins(installed.plugins)
+      const installedIds = new Set(installed.plugins.map((plugin) => plugin.pluginId))
       const fetched = result.plugins.map((plugin) => {
         const extension = plugin as {
           status?: 'installed' | 'available'
@@ -74,6 +81,7 @@ export function usePluginCatalog() {
 
         return {
           pluginId: plugin.pluginId,
+          packageName: plugin.packageName,
           name: plugin.displayName,
           version: plugin.version,
           status: extension.status ?? ('installed' as const),
@@ -96,7 +104,10 @@ export function usePluginCatalog() {
           defaultPage: previous?.defaultPage ?? plugin.defaultPage,
           icon: previous?.icon ?? plugin.icon,
           logoUrl: previous?.logoUrl ?? plugin.logoUrl,
-          status: getInstalledPluginRecord(plugin.pluginId) ? 'installed' : plugin.status
+          status:
+            installedIds.has(plugin.pluginId) || getInstalledPluginRecord(plugin.pluginId)
+              ? 'installed'
+              : plugin.status
         })
       }
 
@@ -112,9 +123,13 @@ export function usePluginCatalog() {
   async function openPlugin(plugin: PluginCardItem): Promise<void> {
     plugin.installState = 'installing'
     try {
+      if (!plugin.packageName) {
+        throw new Error(`Plugin '${plugin.pluginId}' packageName is missing.`)
+      }
       await installPluginOnClient({
         router,
         pluginId: plugin.pluginId,
+        packageName: plugin.packageName,
         version: plugin.version
       })
       plugin.status = 'installed'

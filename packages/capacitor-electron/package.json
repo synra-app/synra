@@ -40,17 +40,17 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
-    "@synra-plugin/chat": "workspace:*",
     "@synra/capacitor-preferences": "workspace:*",
     "@synra/plugin-sdk": "workspace:*",
+    "@synra/plugin-system": "workspace:*",
     "@synra/protocol": "workspace:*",
     "@synra/utils": "workspace:*",
-    "bonjour-service": "catalog:electron"
+    "bonjour-service": "catalog:electron",
+    "tar": "^7.4.3"
   },
   "devDependencies": {
     "@types/node": "catalog:types",
     "@typescript/native-preview": "catalog:types",
-    "bumpp": "catalog:release",
     "esbuild": "catalog:build",
     "typescript": "catalog:types",
     "vite-plus": "catalog:vite"

@@ -15,7 +15,8 @@ export type PagesManifest = {
   }>
 }
 
-export type RegisteredBuiltinPlugin = {
+export type RegisteredPlugin = {
   plugin: SynraPlugin
   metadata: SynraUiManifestMetadata
+  artifactRoot?: string
 }

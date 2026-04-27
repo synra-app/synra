@@ -55,7 +55,6 @@
     "@capacitor/ios": "catalog:capacitor",
     "@types/node": "catalog:types",
     "@typescript/native-preview": "catalog:types",
-    "bumpp": "catalog:release",
     "esbuild": "catalog:build",
     "typescript": "catalog:types",
     "vite-plus": "catalog:vite"

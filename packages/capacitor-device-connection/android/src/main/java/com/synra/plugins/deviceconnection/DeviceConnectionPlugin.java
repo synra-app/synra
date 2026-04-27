@@ -334,10 +334,9 @@ public class DeviceConnectionPlugin extends Plugin {
             int timeoutMs,
             JSONObject wireExtras,
             String targetDeviceId
-    )
-            throws IOException, JSONException {
+    ) {
         // SYNRA-COMM::DEVICE_HANDSHAKE::CONNECT::PROBE_SINGLE
-        JSONObject base = new JSONObject();
+        JSObject base = new JSObject();
         base.put("host", host);
         base.put("port", port);
         base.put("ok", false);

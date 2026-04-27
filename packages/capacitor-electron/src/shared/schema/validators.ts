@@ -73,6 +73,10 @@ export function isSupportedMethod(method: string): boolean {
     method === BRIDGE_METHODS.runtimeResolveActions ||
     method === BRIDGE_METHODS.runtimeExecute ||
     method === BRIDGE_METHODS.pluginCatalogGet ||
+    method === BRIDGE_METHODS.pluginInstall ||
+    method === BRIDGE_METHODS.pluginUninstall ||
+    method === BRIDGE_METHODS.pluginListInstalled ||
+    method === BRIDGE_METHODS.pluginSyncToDevice ||
     method === BRIDGE_METHODS.externalOpen ||
     method === BRIDGE_METHODS.fileRead ||
     method === BRIDGE_METHODS.discoveryStart ||

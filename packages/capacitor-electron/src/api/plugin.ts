@@ -16,6 +16,13 @@ import type {
   MethodPayloadMap,
   MethodResultMap,
   OpenExternalOptions,
+  PluginInstallOptions,
+  PluginInstallResult,
+  PluginListInstalledResult,
+  PluginSyncToDeviceOptions,
+  PluginSyncToDeviceResult,
+  PluginUninstallOptions,
+  PluginUninstallResult,
   PluginCatalogResult,
   ReadFileOptions,
   ReadFileResult,
@@ -48,6 +55,22 @@ export interface ElectronBridgePlugin {
     timeoutMs?: number
     signal?: AbortSignal
   }): Promise<PluginCatalogResult>
+  installPlugin(
+    options: PluginInstallOptions,
+    invokeOptions?: { timeoutMs?: number; signal?: AbortSignal }
+  ): Promise<PluginInstallResult>
+  uninstallPlugin(
+    options: PluginUninstallOptions,
+    invokeOptions?: { timeoutMs?: number; signal?: AbortSignal }
+  ): Promise<PluginUninstallResult>
+  listInstalledPlugins(invokeOptions?: {
+    timeoutMs?: number
+    signal?: AbortSignal
+  }): Promise<PluginListInstalledResult>
+  syncPluginToDevice(
+    options: PluginSyncToDeviceOptions,
+    invokeOptions?: { timeoutMs?: number; signal?: AbortSignal }
+  ): Promise<PluginSyncToDeviceResult>
   openExternal(
     options: OpenExternalOptions,
     invokeOptions?: { timeoutMs?: number; signal?: AbortSignal }
@@ -138,6 +161,32 @@ export function createElectronBridgePlugin(invoke: BridgeInvoke): ElectronBridge
         },
         options
       )
+    },
+    async installPlugin(
+      options: PluginInstallOptions,
+      invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {}
+    ): Promise<PluginInstallResult> {
+      ensureObject(options, 'installPlugin options must be an object.')
+      return invoke(API_METHODS.installPlugin, options, invokeOptions)
+    },
+    async uninstallPlugin(
+      options: PluginUninstallOptions,
+      invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {}
+    ): Promise<PluginUninstallResult> {
+      ensureObject(options, 'uninstallPlugin options must be an object.')
+      return invoke(API_METHODS.uninstallPlugin, options, invokeOptions)
+    },
+    async listInstalledPlugins(
+      invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {}
+    ): Promise<PluginListInstalledResult> {
+      return invoke(API_METHODS.listInstalledPlugins, {}, invokeOptions)
+    },
+    async syncPluginToDevice(
+      options: PluginSyncToDeviceOptions,
+      invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {}
+    ): Promise<PluginSyncToDeviceResult> {
+      ensureObject(options, 'syncPluginToDevice options must be an object.')
+      return invoke(API_METHODS.syncPluginToDevice, options, invokeOptions)
     },
     async readFile(
       options: ReadFileOptions,

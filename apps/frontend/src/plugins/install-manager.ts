@@ -1,6 +1,6 @@
 import { createElectronBridgePluginFromGlobal } from '@synra/capacitor-electron/api/plugin'
 import type { Router } from 'vue-router'
-import { activatePlugin } from './host'
+import { activatePlugin, syncInstalledPlugins } from './host'
 
 const CACHE_KEY = 'synra.plugin.install.cache.v1'
 
@@ -13,6 +13,7 @@ export type PluginInstallStage =
 
 export type PluginInstallRecord = {
   pluginId: string
+  packageName: string
   version: string
   checksum: string
   installedAt: number
@@ -51,36 +52,34 @@ async function sha256(input: string): Promise<string> {
 export async function installPluginOnClient(options: {
   router: Router
   pluginId: string
+  packageName: string
   version: string
   assetKey?: string
   onStageChange?: (stage: PluginInstallStage) => void
 }): Promise<PluginInstallRecord> {
   options.onStageChange?.('sync-catalog')
-  if (window.__synraCapElectron?.invoke) {
-    const bridge = createElectronBridgePluginFromGlobal()
-    await bridge.getPluginCatalog({ knownPluginIds: [] })
+  if (!window.__synraCapElectron?.invoke) {
+    throw new Error('Electron bridge is unavailable. Dynamic plugin installation is not supported.')
   }
-
-  const assetKey = options.assetKey ?? `builtin:${options.pluginId}:${options.version}`
+  const bridge = createElectronBridgePluginFromGlobal()
   options.onStageChange?.('download-assets')
-  const downloadedAssetRef = assetKey
-
-  options.onStageChange?.('validate-assets')
-  const checksum = await sha256(
-    `${options.pluginId}:${options.version}:${downloadedAssetRef}:${Date.now()}`
-  )
-
+  const installed = await bridge.installPlugin({
+    packageName: options.packageName,
+    version: options.version
+  })
   options.onStageChange?.('cache-assets')
   const cache = readInstallCache()
   const record: PluginInstallRecord = {
-    pluginId: options.pluginId,
-    version: options.version,
-    checksum,
-    installedAt: Date.now(),
-    assetKey: downloadedAssetRef
+    pluginId: installed.pluginId,
+    packageName: installed.packageName,
+    version: installed.version,
+    checksum: await sha256(`${installed.pluginId}:${installed.version}:${installed.artifactRoot}`),
+    installedAt: installed.installedAt,
+    assetKey: installed.artifactRoot
   }
-  cache[options.pluginId] = record
+  cache[record.pluginId] = record
   writeInstallCache(cache)
+  await syncInstalledPlugins([installed])
 
   options.onStageChange?.('activate-plugin')
   await activatePlugin(options.router, options.pluginId)

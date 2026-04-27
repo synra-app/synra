@@ -110,6 +110,59 @@ export type PluginCatalogResult = {
   generatedAt: number
 }
 
+export type InstalledPluginSummary = {
+  pluginId: string
+  packageName: string
+  version: string
+  title: string
+  defaultPage: string
+  builtin: boolean
+  icon?: string
+  installedAt: number
+  artifactRoot: string
+}
+
+export type PluginInstallOptions = {
+  packageName: string
+  version?: string
+  registryUrl?: string
+}
+
+export type PluginInstallResult = InstalledPluginSummary
+
+export type PluginUninstallOptions = {
+  pluginId: string
+}
+
+export type PluginUninstallResult = {
+  success: boolean
+}
+
+export type PluginListInstalledOptions = Record<string, never>
+
+export type PluginListInstalledResult = {
+  plugins: InstalledPluginSummary[]
+}
+
+export type PluginSyncToDeviceOptions = {
+  pluginId: string
+  deviceId: string
+}
+
+export type PluginSyncToDeviceResult =
+  | {
+      success: true
+      pluginId: string
+      version: string
+      deviceId: string
+      artifactRoot: string
+      transmittedChunks?: number
+    }
+  | {
+      success: false
+      reason: string
+    }
+
 export type DiscoverySource = 'mdns' | 'probe' | 'manual' | 'transport'
 export type DiscoveryMode = 'hybrid' | 'mdns' | 'subnet' | 'manual'
 
@@ -273,6 +326,10 @@ export type MethodPayloadMap = {
   'runtime.resolveActions': ResolveRuntimeActionsOptions
   'runtime.execute': RuntimeExecuteOptions
   'plugin.catalog.get': PluginCatalogRequestPayload
+  'plugin.install': PluginInstallOptions
+  'plugin.uninstall': PluginUninstallOptions
+  'plugin.listInstalled': PluginListInstalledOptions
+  'plugin.syncToDevice': PluginSyncToDeviceOptions
   'external.open': OpenExternalOptions
   'file.read': ReadFileOptions
   'discovery.start': DeviceDiscoveryStartOptions
@@ -294,6 +351,10 @@ export type MethodResultMap = {
   'runtime.resolveActions': ResolveRuntimeActionsResult
   'runtime.execute': RuntimeExecuteResult
   'plugin.catalog.get': PluginCatalogResult
+  'plugin.install': PluginInstallResult
+  'plugin.uninstall': PluginUninstallResult
+  'plugin.listInstalled': PluginListInstalledResult
+  'plugin.syncToDevice': PluginSyncToDeviceResult
   'external.open': OperationResult
   'file.read': ReadFileResult
   'discovery.start': DeviceDiscoveryStartResult

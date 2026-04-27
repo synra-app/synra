@@ -5,8 +5,11 @@ import type { FileService } from '../../host/services/file.service'
 import type { ConnectionService } from '../../host/services/connection.service'
 import type { DeviceDiscoveryService } from '../../host/services/device-discovery.service'
 import type { PluginCatalogService } from '../../host/services/plugin-catalog.service'
+import type { PluginManagementService } from '../../host/services/plugin-management.service'
 import type { PluginRuntimeService } from '../../host/services/plugin-runtime.service'
 import type { PreferencesService } from '../../host/services/preferences.service'
+import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 
 type RuntimeInfoService = ReturnType<
   typeof import('../../host/services/runtime-info.service').createRuntimeInfoService
@@ -18,6 +21,7 @@ export type BridgeHandlerDependencies = {
   fileService: FileService
   pluginRuntimeService: PluginRuntimeService
   pluginCatalogService: PluginCatalogService
+  pluginManagementService: PluginManagementService
   deviceDiscoveryService: DeviceDiscoveryService
   connectionService: ConnectionService
   preferencesService: PreferencesService
@@ -48,6 +52,63 @@ export function createBridgeHandlers(deps: BridgeHandlerDependencies): BridgeHan
       }),
     [BRIDGE_METHODS.pluginCatalogGet]: async (request) =>
       deps.pluginCatalogService.getCatalog(request.payload),
+    [BRIDGE_METHODS.pluginInstall]: async (request) =>
+      deps.pluginManagementService.install(request.payload),
+    [BRIDGE_METHODS.pluginUninstall]: async (request) =>
+      deps.pluginManagementService.uninstall(request.payload),
+    [BRIDGE_METHODS.pluginListInstalled]: async () => deps.pluginManagementService.listInstalled(),
+    [BRIDGE_METHODS.pluginSyncToDevice]: async (request) => {
+      // SYNRA-COMM::PLUGIN_BRIDGE::SEND::PLUGIN_SYNC_TO_DEVICE
+      const synced = await deps.pluginManagementService.syncToDevice(request.payload)
+      if (!synced.success) {
+        return synced
+      }
+
+      const bundlePath = join(synced.artifactRoot, 'package.tgz')
+      if (!existsSync(bundlePath)) {
+        return synced
+      }
+
+      const localDeviceId = deps.preferencesService.ensureDeviceInstanceUuid()
+      const bundleBuffer = readFileSync(bundlePath)
+      const chunkSize = 64 * 1024
+      const totalChunks = Math.max(1, Math.ceil(bundleBuffer.length / chunkSize))
+
+      for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex += 1) {
+        const start = chunkIndex * chunkSize
+        const chunk = bundleBuffer.subarray(start, Math.min(bundleBuffer.length, start + chunkSize))
+        await deps.connectionService.sendMessage({
+          requestId: crypto.randomUUID(),
+          target: synced.deviceId,
+          from: localDeviceId,
+          event: 'plugin.bundle.chunk',
+          payload: {
+            pluginId: synced.pluginId,
+            version: synced.version,
+            chunkIndex,
+            totalChunks,
+            chunkBase64: chunk.toString('base64')
+          }
+        })
+      }
+
+      await deps.connectionService.sendMessage({
+        requestId: crypto.randomUUID(),
+        target: synced.deviceId,
+        from: localDeviceId,
+        event: 'plugin.bundle.complete',
+        payload: {
+          pluginId: synced.pluginId,
+          version: synced.version,
+          totalChunks
+        }
+      })
+
+      return {
+        ...synced,
+        transmittedChunks: totalChunks
+      }
+    },
     [BRIDGE_METHODS.externalOpen]: async (request) =>
       deps.externalLinkService.openExternal(request.payload.url),
     [BRIDGE_METHODS.fileRead]: async (request) =>

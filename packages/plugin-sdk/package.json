@@ -1,6 +1,6 @@
 {
   "name": "@synra/plugin-sdk",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "Plugin contracts for Synra cross-device runtime.",
   "license": "MIT",
   "files": [
@@ -32,6 +32,7 @@
   },
   "dependencies": {
     "@synra/hooks": "workspace:*",
+    "@synra/plugin-system": "workspace:*",
     "@synra/protocol": "workspace:*",
     "@unocss/config": "catalog:unocss",
     "@unocss/vite": "catalog:unocss",
@@ -46,7 +47,6 @@
   },
   "devDependencies": {
     "@types/node": "catalog:types",
-    "bumpp": "catalog:release",
     "typescript": "catalog:types"
   }
 }

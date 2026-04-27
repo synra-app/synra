@@ -1,27 +1,28 @@
 import type { SynraPlugin, SynraUiManifestMetadata } from '@synra/plugin-sdk'
-import type { RegisteredBuiltinPlugin } from './types'
+import type { RegisteredPlugin } from './types'
 
 export class PluginRegistry {
-  private readonly plugins = new Map<string, SynraPlugin>()
-  private readonly metadataByPluginId = new Map<string, SynraUiManifestMetadata>()
+  private readonly plugins = new Map<string, RegisteredPlugin>()
 
-  constructor(initialPlugins: RegisteredBuiltinPlugin[] = []) {
-    for (const plugin of initialPlugins) {
-      this.plugins.set(plugin.metadata.pluginId, plugin.plugin)
-      this.metadataByPluginId.set(plugin.metadata.pluginId, plugin.metadata)
+  constructor(initialPlugins: RegisteredPlugin[] = []) {
+    for (const record of initialPlugins) {
+      this.plugins.set(record.metadata.pluginId, record)
     }
   }
 
   list(): SynraUiManifestMetadata[] {
-    return [...this.metadataByPluginId.values()]
+    return [...this.plugins.values()].map((record) => record.metadata)
   }
 
-  register(plugin: RegisteredBuiltinPlugin): void {
-    this.plugins.set(plugin.metadata.pluginId, plugin.plugin)
-    this.metadataByPluginId.set(plugin.metadata.pluginId, plugin.metadata)
+  register(record: RegisteredPlugin): void {
+    this.plugins.set(record.metadata.pluginId, record)
   }
 
   get(pluginId: string): SynraPlugin | undefined {
+    return this.plugins.get(pluginId)?.plugin
+  }
+
+  getRecord(pluginId: string): RegisteredPlugin | undefined {
     return this.plugins.get(pluginId)
   }
 }

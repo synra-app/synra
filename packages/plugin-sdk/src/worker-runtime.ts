@@ -23,6 +23,21 @@ export type PluginWorkerRuntime = {
   ): Promise<PluginWorkerTaskResult<TResult>>
 }
 
+export type PluginWorkerClient = {
+  invokePluginAction<TPayload, TResult>(
+    input: PluginWorkerActionInvokeInput<TPayload>
+  ): Promise<PluginWorkerTaskResult<TResult>>
+  disposePluginWorker(): void
+}
+
+export type PluginWorkerActionInvokeInput<TPayload = unknown> = {
+  requestId?: string
+  pluginId: string
+  actionType: string
+  payload: TPayload
+  timeoutMs?: number
+}
+
 type WorkerResponseMessage = PluginWorkerTaskResult
 
 type WorkerMessageEvent = {
@@ -131,4 +146,47 @@ export class FallbackWorkerRuntime implements PluginWorkerRuntime {
   ): Promise<PluginWorkerTaskResult<TResult>> {
     return this.executeLocalTask<TPayload, TResult>(request)
   }
+}
+
+export function createPluginWorkerClient(
+  runtime: PluginWorkerRuntime,
+  options: WorkerRuntimeOptions = {}
+): PluginWorkerClient {
+  const createRequestId =
+    options.createRequestId ??
+    (() => {
+      return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(16).slice(2)}`
+    })
+
+  return {
+    invokePluginAction<TPayload, TResult>(
+      input: PluginWorkerActionInvokeInput<TPayload>
+    ): Promise<PluginWorkerTaskResult<TResult>> {
+      return runtime.executeTask<TPayload, TResult>({
+        requestId: input.requestId ?? createRequestId(),
+        pluginId: input.pluginId,
+        taskType: input.actionType,
+        payload: input.payload,
+        timeoutMs: input.timeoutMs ?? options.timeoutMs
+      })
+    },
+    disposePluginWorker(): void {
+      if (runtime instanceof WorkerProxyRuntime) {
+        runtime.dispose()
+      }
+    }
+  }
+}
+
+export function invokePluginAction<TPayload, TResult>(
+  client: PluginWorkerClient,
+  input: PluginWorkerActionInvokeInput<TPayload>
+): Promise<PluginWorkerTaskResult<TResult>> {
+  return client.invokePluginAction<TPayload, TResult>(input)
+}
+
+export function disposePluginWorker(client: PluginWorkerClient): void {
+  client.disposePluginWorker()
 }
