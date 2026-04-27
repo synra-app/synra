@@ -1,6 +1,6 @@
 {
   "name": "@synra/transport-events",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "Synra runtime platform + LAN wire event registry (SynraEvent / createSynraEvent).",
   "license": "MIT",
   "files": [

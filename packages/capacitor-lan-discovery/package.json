@@ -1,6 +1,6 @@
 {
   "name": "@synra/capacitor-lan-discovery",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "Capacitor plugin for LAN device discovery.",
   "keywords": [
     "capacitor",
