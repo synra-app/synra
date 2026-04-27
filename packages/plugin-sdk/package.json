@@ -11,7 +11,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./hooks": "./src/hooks/index.ts",
-    "./vite": "./src/vite.ts",
+    "./unocss": "./src/unocss/index.ts",
+    "./vite": "./src/vite/index.ts",
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -19,7 +20,8 @@
     "exports": {
       ".": "./dist/index.mjs",
       "./hooks": "./dist/hooks/index.mjs",
-      "./vite": "./dist/vite.mjs",
+      "./unocss": "./dist/unocss/index.mjs",
+      "./vite": "./dist/vite/index.mjs",
       "./package.json": "./package.json"
     }
   },
