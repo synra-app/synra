@@ -87,7 +87,6 @@ export function isSupportedMethod(method: string): boolean {
     method === BRIDGE_METHODS.connectionSendMessage ||
     method === BRIDGE_METHODS.connectionSendLanEvent ||
     method === BRIDGE_METHODS.connectionGetTransportState ||
-    method === BRIDGE_METHODS.connectionPullHostEvents ||
     method === BRIDGE_METHODS.preferencesGet ||
     method === BRIDGE_METHODS.preferencesSet ||
     method === BRIDGE_METHODS.preferencesRemove

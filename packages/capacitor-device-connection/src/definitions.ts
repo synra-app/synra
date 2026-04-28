@@ -116,10 +116,6 @@ export type HostEvent = {
   transport: ConnectionTransport
 }
 
-export type PullHostEventsResult = {
-  events: HostEvent[]
-}
-
 export type TransportOpenedEvent = {
   deviceId: string
   transport: ConnectionTransport
@@ -229,7 +225,6 @@ export interface DeviceConnectionPlugin {
   sendMessage(options: SendMessageOptions): Promise<SendMessageResult>
   sendLanEvent(options: SendLanEventOptions): Promise<SendLanEventResult>
   getTransportState(options?: GetTransportStateOptions): Promise<GetTransportStateResult>
-  pullHostEvents(options?: { transport?: ConnectionTransport }): Promise<PullHostEventsResult>
   probeSynraPeers(options: ProbeSynraPeersOptions): Promise<ProbeSynraPeersResult>
   addListener(
     eventName: 'transportOpened',

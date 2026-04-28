@@ -100,8 +100,7 @@ function createHandlers() {
         deviceId: 'dev-1',
         state: 'open' as const,
         transport: 'tcp' as const
-      })),
-      pullHostEvents: vi.fn(async () => ({ events: [] }))
+      }))
     },
     connectionService: {
       openTransport: vi.fn(async () => ({
@@ -129,8 +128,7 @@ function createHandlers() {
         deviceId: 'dev-1',
         state: 'open' as const,
         transport: 'tcp' as const
-      })),
-      pullHostEvents: vi.fn(async () => ({ events: [] }))
+      }))
     },
     preferencesService: {
       get: vi.fn(() => null),
@@ -273,8 +271,7 @@ describe('bridge/main/dispatch', () => {
           deviceId: 'dev-1',
           state: 'open' as const,
           transport: 'tcp' as const
-        })),
-        pullHostEvents: vi.fn(async () => ({ events: [] }))
+        }))
       },
       connectionService: {
         openTransport: vi.fn(async () => ({
@@ -302,8 +299,7 @@ describe('bridge/main/dispatch', () => {
           deviceId: 'dev-1',
           state: 'open' as const,
           transport: 'tcp' as const
-        })),
-        pullHostEvents: vi.fn(async () => ({ events: [] }))
+        }))
       },
       preferencesService: {
         get: vi.fn(() => null),

@@ -8,7 +8,6 @@ import type {
   OpenTransportResult,
   ProbeSynraPeersOptions,
   ProbeSynraPeersResult,
-  PullHostEventsResult,
   SendLanEventOptions,
   SendLanEventResult,
   SendMessageOptions,
@@ -52,10 +51,6 @@ export class DeviceConnectionWeb extends WebPlugin implements DeviceConnectionPl
     _options: GetTransportStateOptions = {}
   ): Promise<GetTransportStateResult> {
     return this.transportState
-  }
-
-  async pullHostEvents(): Promise<PullHostEventsResult> {
-    return { events: [] }
   }
 
   async probeSynraPeers(_options: ProbeSynraPeersOptions): Promise<ProbeSynraPeersResult> {

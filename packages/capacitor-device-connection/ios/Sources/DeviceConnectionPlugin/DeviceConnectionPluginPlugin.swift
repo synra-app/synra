@@ -11,7 +11,6 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "sendMessage", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "sendLanEvent", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getTransportState", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "pullHostEvents", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "probeSynraPeers", returnType: CAPPluginReturnPromise),
     ]
 
@@ -179,10 +178,6 @@ public class DeviceConnectionPluginPlugin: CAPPlugin, CAPBridgedPlugin {
             implementation.getTransportState(target: target)
         }
         call.resolve(snapshot)
-    }
-
-    @objc func pullHostEvents(_ call: CAPPluginCall) {
-        call.resolve(["events": []])
     }
 
     @objc func probeSynraPeers(_ call: CAPPluginCall) {

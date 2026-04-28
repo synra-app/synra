@@ -120,8 +120,7 @@ describe('bridge/main runtime e2e flow', () => {
           deviceId: 'dev-e2e-1',
           state: 'open' as const,
           transport: 'tcp' as const
-        })),
-        pullHostEvents: vi.fn(async () => ({ events: [] }))
+        }))
       },
       connectionService: {
         openTransport: vi.fn(async () => ({
@@ -149,8 +148,7 @@ describe('bridge/main runtime e2e flow', () => {
           deviceId: 'dev-e2e-1',
           state: 'open' as const,
           transport: 'tcp' as const
-        })),
-        pullHostEvents: vi.fn(async () => ({ events: [] }))
+        }))
       },
       preferencesService: {
         get: vi.fn(() => null),
@@ -288,8 +286,7 @@ describe('bridge/main runtime e2e flow', () => {
           deviceId: 'dev-e2e-2',
           state: 'open' as const,
           transport: 'tcp' as const
-        })),
-        pullHostEvents: vi.fn(async () => ({ events: [] }))
+        }))
       },
       connectionService: {
         openTransport: vi.fn(async () => ({
@@ -317,8 +314,7 @@ describe('bridge/main runtime e2e flow', () => {
           deviceId: 'dev-e2e-2',
           state: 'open' as const,
           transport: 'tcp' as const
-        })),
-        pullHostEvents: vi.fn(async () => ({ events: [] }))
+        }))
       },
       preferencesService: {
         get: vi.fn(() => null),

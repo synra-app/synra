@@ -127,7 +127,6 @@ export function createBridgeHandlers(deps: BridgeHandlerDependencies): BridgeHan
       deps.connectionService.sendLanEvent(request.payload),
     [BRIDGE_METHODS.connectionGetTransportState]: async (request) =>
       deps.connectionService.getTransportState(request.payload),
-    [BRIDGE_METHODS.connectionPullHostEvents]: async () => deps.connectionService.pullHostEvents(),
     [BRIDGE_METHODS.preferencesGet]: async (request) => ({
       value: deps.preferencesService.get(request.payload.key)
     }),

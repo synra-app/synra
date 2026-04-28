@@ -3,7 +3,8 @@ import {
   SynraPreferences,
   type SynraDeviceBasicInfo
 } from '@synra/capacitor-preferences'
-import { getHooksRuntimeOptions, useTransport } from '@synra/hooks'
+import { getHooksRuntimeOptions, useSynraEvent, useTransport } from '@synra/hooks'
+import { DEVICE_DISPLAY_NAME_CHANGED_EVENT } from '@synra/protocol'
 import { ensureDeviceInstanceUuid } from '../lib/device-instance-uuid'
 import { parseDeviceNameFromBasicInfo } from '../lib/device-basic-info'
 
@@ -24,7 +25,8 @@ function validateDeviceName(input: string): string {
 }
 
 export function useDeviceBasicInfo() {
-  const { broadcastDeviceProfileToOpenTransportLinks } = useTransport()
+  const transport = useTransport()
+  const synra = useSynraEvent()
 
   const deviceName = ref('')
   const loadStatus = ref<BasicInfoLoadStatus>('idle')
@@ -69,16 +71,25 @@ export function useDeviceBasicInfo() {
         return 1
       }
     }
-    try {
-      await broadcastDeviceProfileToOpenTransportLinks({
-        deviceId: deviceLanId,
-        displayName: nextDeviceName,
-        updatedAt: Date.now()
-      })
-      return 0
-    } catch {
-      return 1
-    }
+    const links = transport.openTransportLinks.value.filter(
+      (link) =>
+        link.transport === 'ready' && typeof link.deviceId === 'string' && link.deviceId.length > 0
+    )
+    let failureCount = 0
+    await Promise.all(
+      links.map((link) =>
+        synra
+          .postMessage({
+            event: DEVICE_DISPLAY_NAME_CHANGED_EVENT,
+            target: link.deviceId,
+            payload: { deviceId: deviceLanId, displayName: nextDeviceName }
+          })
+          .catch(() => {
+            failureCount += 1
+          })
+      )
+    )
+    return failureCount
   }
 
   async function saveBasicInfo(): Promise<void> {

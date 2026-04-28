@@ -26,7 +26,6 @@ export const BRIDGE_METHODS = {
   connectionSendMessage: 'connection.sendMessage',
   connectionSendLanEvent: 'connection.sendLanEvent',
   connectionGetTransportState: 'connection.getTransportState',
-  connectionPullHostEvents: 'connection.pullHostEvents',
   preferencesGet: 'preferences.get',
   preferencesSet: 'preferences.set',
   preferencesRemove: 'preferences.remove'

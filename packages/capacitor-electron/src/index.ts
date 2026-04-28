@@ -100,7 +100,6 @@ export type {
   DeviceDiscoveryStartOptions,
   DeviceDiscoveryStartResult,
   DeviceDiscoveryHostEvent,
-  DeviceDiscoveryPullHostEventsResult,
   PluginCatalogResult,
   PluginInstallOptions,
   PluginInstallResult,

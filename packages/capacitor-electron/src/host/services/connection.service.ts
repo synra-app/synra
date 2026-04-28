@@ -1,5 +1,4 @@
 import type {
-  DeviceDiscoveryPullHostEventsResult,
   DeviceTransportCloseOptions,
   DeviceTransportCloseResult,
   DeviceTransportGetStateOptions,
@@ -21,7 +20,6 @@ export interface ConnectionService {
     options: DeviceTransportSendLanEventOptions
   ): Promise<DeviceTransportSendLanEventResult>
   getTransportState(options?: DeviceTransportGetStateOptions): Promise<DeviceTransportSnapshot>
-  pullHostEvents(): Promise<DeviceDiscoveryPullHostEventsResult>
 }
 
 function assertTcpTransport(transport: string): void {
@@ -63,9 +61,6 @@ export function createConnectionService(
       assertTcpTransport(transport)
       const result = await discoveryService.getTransportState(options)
       return { ...result, transport: 'tcp' }
-    },
-    async pullHostEvents() {
-      return discoveryService.pullHostEvents()
     }
   }
 }

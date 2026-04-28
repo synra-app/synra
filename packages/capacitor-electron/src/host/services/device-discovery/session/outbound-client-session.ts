@@ -537,7 +537,9 @@ export function createOutboundClientTransport(
       if (!isUuidLike(localFrom)) {
         throw new BridgeError(BRIDGE_ERROR_CODES.internalError, 'Local device UUID is unavailable.')
       }
-      const key = `${sendOptions.target}:${sendOptions.requestId}`
+      // Must match handleFrame DEVICE_TCP_ACK lookup: `${frame.target}:${frame.replyRequestId}`
+      // where frame.target is this peer (ack is addressed to the sender).
+      const key = `${localFrom}:${sendOptions.requestId}`
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(() => {
           pendingAcks.delete(key)

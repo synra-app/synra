@@ -17,6 +17,5 @@ export const API_METHODS = {
   openConnectionTransport: BRIDGE_METHODS.connectionOpenTransport,
   closeConnectionTransport: BRIDGE_METHODS.connectionCloseTransport,
   sendConnectionTransportMessage: BRIDGE_METHODS.connectionSendMessage,
-  getConnectionTransportState: BRIDGE_METHODS.connectionGetTransportState,
-  pullConnectionHostEvents: BRIDGE_METHODS.connectionPullHostEvents
+  getConnectionTransportState: BRIDGE_METHODS.connectionGetTransportState
 } as const

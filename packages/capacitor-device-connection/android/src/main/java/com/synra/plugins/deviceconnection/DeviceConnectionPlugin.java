@@ -710,13 +710,6 @@ public class DeviceConnectionPlugin extends Plugin {
         call.resolve(result);
     }
 
-    @PluginMethod
-    public void pullHostEvents(PluginCall call) {
-        JSObject response = new JSObject();
-        response.put("events", new JSONArray());
-        call.resolve(response);
-    }
-
     @Override
     protected void handleOnDestroy() {
         stopInboundTcpServer();

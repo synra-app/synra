@@ -14,10 +14,6 @@ export const useLanDiscoveryStore = defineStore('lan-discovery', () => {
     startScan: transport.startScan,
     connectToDevice: transport.connectToDevice,
     connectToDeviceAt: transport.connectToDeviceAt,
-    broadcastDeviceProfileToOpenTransportLinks:
-      transport.broadcastDeviceProfileToOpenTransportLinks,
-    disconnectDevice: transport.disconnectDevice,
-    sendConnectionMessage: transport.sendConnectionMessage,
-    onSynraMessage: transport.onSynraMessage
+    disconnectDevice: transport.disconnectDevice
   }
 })

@@ -42,7 +42,6 @@ export function createRuntimeInfoService(options: RuntimeInfoServiceOptions = {}
           'connection.sendMessage',
           'connection.sendLanEvent',
           'connection.getTransportState',
-          'connection.pullHostEvents',
           'preferences.get',
           'preferences.set',
           'preferences.remove'

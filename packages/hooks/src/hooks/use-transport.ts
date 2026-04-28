@@ -1,18 +1,7 @@
 import type { DiscoveredDevice } from '@synra/capacitor-lan-discovery'
-import { DEVICE_DISPLAY_NAME_CHANGED_EVENT } from '@synra/protocol'
 import { computed } from 'vue'
-import type {
-  SynraConnectionFilter,
-  SynraConnectionSendInput,
-  SynraConnectionMessage,
-  SendMessageToReadyDeviceInput,
-  TransportBroadcastMessageInput,
-  RuntimeOpenTransportInput,
-  SynraLanWireSendInput
-} from '../types'
-import { getHooksRuntimeOptions } from '../runtime/config'
+import type { RuntimeOpenTransportInput } from '../types'
 import { getConnectionRuntime } from '../runtime/core'
-import { type DeviceProfileUpdatedPayload } from '../runtime/device-profile'
 import { normalizeHost } from '../runtime/host-normalization'
 import { findReadyTransportLinkForDevice } from '../runtime/ready-transport-link'
 
@@ -22,36 +11,14 @@ function isTransportLive(link: { transport: string }): boolean {
   return link.transport === 'ready' || link.transport === 'handshaking'
 }
 
-function isUuidLike(value: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
-}
-
 /**
- * Full transport including discovery (`startScan`). Host apps use this for the
- * device screen. Plugins must not call discovery APIs; use `usePairedDevices`
- * for device lists instead (see `@synra/plugin-sdk/hooks`).
+ * Discovery + connection orchestration (`startScan`, `connectToDevice`). Host apps use this for the
+ * device screen. Send/receive app messages via `useSynraEvent` / `useSynraPluginEvent` (or `useEvent`
+ * for raw wire names). Plugins must not call discovery APIs; use `usePairedDevices` for device lists
+ * instead (see `@synra/plugin-sdk/hooks`).
  */
 export function useTransport() {
   const runtime = getConnectionRuntime()
-
-  function requireLocalFromUuid(): string {
-    const localUuid = getHooksRuntimeOptions().localDiscoveryDeviceId?.trim() ?? ''
-    if (!isUuidLike(localUuid)) {
-      throw new Error('Local device UUID is unavailable.')
-    }
-    return localUuid
-  }
-
-  function resolveWireFrom(inputFrom?: string): string {
-    if (typeof inputFrom === 'string' && inputFrom.trim().length > 0) {
-      const trimmed = inputFrom.trim()
-      if (!isUuidLike(trimmed)) {
-        throw new Error('Message from must be a UUID.')
-      }
-      return trimmed
-    }
-    return requireLocalFromUuid()
-  }
 
   const peers = computed((): DiscoveredDevice[] =>
     [...runtime.devices.value]
@@ -182,113 +149,6 @@ export function useTransport() {
     }
   }
 
-  async function resolveTargetDeviceId(deviceId: string): Promise<string | undefined> {
-    const opened = findTransportReadyLinkByPeer(deviceId)
-    if (opened?.deviceId) {
-      return opened.deviceId
-    }
-    const openedDeviceId = await connectToDevice(deviceId)
-    if (openedDeviceId) {
-      return openedDeviceId
-    }
-    const connected = findTransportReadyLinkByPeer(deviceId)
-    return connected?.deviceId
-  }
-
-  async function sendMessageToReadyDevice(input: SendMessageToReadyDeviceInput): Promise<void> {
-    // SYNRA-COMM::PLUGIN_BRIDGE::SEND::UI_SEND_READY_MESSAGE
-    const readyLink = findTransportReadyLinkByPeer(input.deviceId)
-    if (!readyLink?.deviceId) {
-      throw new Error(`Device ${input.deviceId} is not ready for sending.`)
-    }
-    await runtime.sendMessage({
-      requestId: crypto.randomUUID(),
-      from: resolveWireFrom(input.from),
-      target: input.deviceId,
-      replyRequestId: input.replyRequestId,
-      event: input.event,
-      payload: input.payload,
-      timestamp: input.timestamp
-    })
-  }
-
-  async function broadcastDeviceProfileToOpenTransportLinks(
-    profile: DeviceProfileUpdatedPayload
-  ): Promise<void> {
-    const links = runtime.openTransportLinks.value.filter(
-      (link) =>
-        link.transport === 'ready' && typeof link.deviceId === 'string' && link.deviceId.length > 0
-    )
-    await Promise.all(
-      links.map((link) =>
-        runtime
-          .sendLanEvent({
-            requestId: crypto.randomUUID(),
-            from: requireLocalFromUuid(),
-            target: link.deviceId,
-            event: DEVICE_DISPLAY_NAME_CHANGED_EVENT,
-            payload: { deviceId: profile.deviceId, displayName: profile.displayName }
-          })
-          .catch(() => undefined)
-      )
-    )
-  }
-
-  async function broadcastMessage(input: TransportBroadcastMessageInput): Promise<void> {
-    const failures: Array<{ deviceId: string; error: unknown }> = []
-    const tasks = peers.value.map(async (peer) => {
-      try {
-        const targetDeviceId = await resolveTargetDeviceId(peer.deviceId)
-        if (!targetDeviceId) {
-          throw new Error(`Device ${peer.deviceId} is not connected.`)
-        }
-        await runtime.sendMessage({
-          requestId: crypto.randomUUID(),
-          from: resolveWireFrom(input.from),
-          target: targetDeviceId,
-          event: input.event,
-          payload: input.payload
-        })
-      } catch (error) {
-        failures.push({ deviceId: peer.deviceId, error })
-      }
-    })
-    await Promise.all(tasks)
-    if (failures.length > 0) {
-      throw new AggregateError(
-        failures.map((item) => item.error),
-        `Broadcast failed for ${failures.length} device(s): ${failures
-          .map((item) => item.deviceId)
-          .join(', ')}`
-      )
-    }
-  }
-
-  async function sendConnectionMessage(input: SynraConnectionSendInput): Promise<void> {
-    // SYNRA-COMM::PLUGIN_BRIDGE::SEND::UI_SEND_CONNECTION_MESSAGE
-    await runtime.sendMessage({
-      requestId: input.requestId,
-      from: input.from,
-      target: input.target,
-      replyRequestId: input.replyRequestId,
-      event: input.event,
-      payload: input.payload,
-      timestamp: input.timestamp
-    })
-  }
-
-  async function sendLanEvent(input: SynraLanWireSendInput): Promise<void> {
-    // SYNRA-COMM::PLUGIN_BRIDGE::SEND::UI_SEND_LAN_EVENT
-    await runtime.sendLanEvent(input)
-  }
-
-  function onSynraMessage(
-    handler: (message: SynraConnectionMessage) => void | Promise<void>,
-    filter?: SynraConnectionFilter
-  ): () => void {
-    return runtime.onMessage(handler, filter)
-  }
-
   return {
     peers,
     openTransportLinks,
@@ -299,12 +159,6 @@ export function useTransport() {
     startScan,
     connectToDevice,
     connectToDeviceAt,
-    disconnectDevice,
-    sendMessageToReadyDevice,
-    broadcastDeviceProfileToOpenTransportLinks,
-    broadcastMessage,
-    sendConnectionMessage,
-    sendLanEvent,
-    onSynraMessage
+    disconnectDevice
   }
 }

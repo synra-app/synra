@@ -317,10 +317,6 @@ export type DeviceDiscoveryHostEvent = {
   transport?: ConnectionTransport
 }
 
-export type DeviceDiscoveryPullHostEventsResult = {
-  events: DeviceDiscoveryHostEvent[]
-}
-
 export type MethodPayloadMap = {
   'runtime.getInfo': Record<string, never>
   'runtime.resolveActions': ResolveRuntimeActionsOptions
@@ -340,7 +336,6 @@ export type MethodPayloadMap = {
   'connection.sendMessage': DeviceTransportSendMessageOptions
   'connection.sendLanEvent': DeviceTransportSendLanEventOptions
   'connection.getTransportState': DeviceTransportGetStateOptions
-  'connection.pullHostEvents': Record<string, never>
   'preferences.get': { key: string }
   'preferences.set': { key: string; value: string }
   'preferences.remove': { key: string }
@@ -365,7 +360,6 @@ export type MethodResultMap = {
   'connection.sendMessage': DeviceTransportSendMessageResult
   'connection.sendLanEvent': DeviceTransportSendLanEventResult
   'connection.getTransportState': DeviceTransportSnapshot
-  'connection.pullHostEvents': DeviceDiscoveryPullHostEventsResult
   'preferences.get': { value: string | null }
   'preferences.set': OperationResult
   'preferences.remove': OperationResult

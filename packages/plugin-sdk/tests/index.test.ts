@@ -8,8 +8,8 @@ import {
   parsePluginIdFromPackageName,
   SynraPlugin
 } from '../src/index.ts'
-import { useTransport } from '../src/hooks/index.ts'
-import { synraVitePluginConfig } from '../src/vite.ts'
+import { useSynraEvent, useSynraPluginEvent, useTransport } from '../src/hooks/index.ts'
+import { synraVitePluginConfig } from '../src/vite/index.ts'
 
 test('parsePluginIdFromPackageName supports scoped and unscoped names', () => {
   expect(parsePluginIdFromPackageName('@synra-plugin/chat')).toBe('chat')
@@ -108,9 +108,14 @@ test('synraVitePluginConfig generates default plugin package config', () => {
   }
 })
 
-test('plugin-sdk hooks should re-export useTransport from @synra/hooks', () => {
+test('plugin-sdk hooks should re-export transport and synra event helpers from @synra/hooks', () => {
   const transport = useTransport()
-  expect(typeof transport.sendMessageToReadyDevice).toBe('function')
-  expect(typeof transport.broadcastMessage).toBe('function')
-  expect(typeof transport.onSynraMessage).toBe('function')
+  expect(typeof transport.connectToDevice).toBe('function')
+  expect(typeof transport.disconnectDevice).toBe('function')
+  expect(transport.openTransportLinks).toBeDefined()
+  const synra = useSynraEvent()
+  expect(typeof synra.postMessage).toBe('function')
+  expect(typeof synra.onMessage).toBe('function')
+  const pluginEv = useSynraPluginEvent('@synra-plugin/chat')
+  expect(typeof pluginEv.postMessage).toBe('function')
 })

@@ -3,7 +3,6 @@ import { BRIDGE_ERROR_CODES } from '../../shared/errors/codes'
 import type {
   DeviceDiscoveryHostEvent,
   DeviceDiscoveryListResult,
-  DeviceDiscoveryPullHostEventsResult,
   DeviceDiscoveryStartOptions,
   DeviceDiscoveryStartResult,
   DeviceTransportCloseOptions,
@@ -45,7 +44,6 @@ export interface DeviceDiscoveryService {
     options: DeviceTransportSendLanEventOptions
   ): Promise<DeviceTransportSendLanEventResult>
   getTransportState(options?: DeviceTransportGetStateOptions): Promise<DeviceTransportSnapshot>
-  pullHostEvents(): Promise<DeviceDiscoveryPullHostEventsResult>
 }
 
 export function createDeviceDiscoveryService(
@@ -197,9 +195,6 @@ export function createDeviceDiscoveryService(
     },
     async getTransportState(getStateOptions = {}) {
       return resolveTransportState(getStateOptions)
-    },
-    async pullHostEvents() {
-      return eventBus.drain()
     }
   }
 }

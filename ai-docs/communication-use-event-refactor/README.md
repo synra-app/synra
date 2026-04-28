@@ -14,15 +14,21 @@
 
 ## 涉及代码（便于检索，非穷举）
 
-| 区域              | 路径/说明                                                                                                                                                              |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 运行时与适配器    | `packages/hooks/src/runtime/resolve-adapter.ts`、`adapters/capacitor-adapter.ts`、`adapters/electron-main-adapter.ts`                                                  |
-| 连接运行时 / 发送 | `packages/hooks/src/runtime/create-connection-runtime.ts`、`transport-operations-module.ts`、`use-transport.ts`                                                        |
-| 收包 / 订阅       | `packages/hooks/src/runtime/adapter-listeners.ts`、`lan-wire-listeners.ts`、`create-connection-runtime.ts`（`onMessage`）                                              |
-| useEvent 三层     | `packages/hooks/src/hooks/use-event.ts`、`use-synra-event.ts`、`use-synra-plugin-event.ts`，前缀 `synra-event-prefix.ts`                                               |
-| Electron 应用     | `apps/electron/src/main.ts`（`__synraHooksMainBridge`、`BRIDGE_HOST_EVENT_CHANNEL`）、`apps/electron/src/preload.ts`                                                   |
-| Capacitor 桥      | `packages/capacitor-electron/src/bridge/**`、`packages/capacitor-device-connection/**`（原生与 Electron 实现）                                                         |
-| 前端业务          | `apps/frontend/src/composables/use-connect-page.ts`、`PairingRequestDialog.vue` 等已改用 `useSynraEvent().postMessage`；`useLanDiscoveryStore` 不再暴露 `sendLanEvent` |
-| 协议与信封        | `packages/protocol`、`ai-docs/cross-platform-communication-map/message-envelope-and-validation.md`                                                                     |
+| 区域              | 路径/说明                                                                                                                                                                            |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 运行时与适配器    | `packages/hooks/src/runtime/resolve-adapter.ts`、`adapters/capacitor-adapter.ts`、`adapters/electron-main-adapter.ts`                                                                |
+| 连接运行时 / 发送 | `packages/hooks/src/runtime/create-connection-runtime.ts`、`transport-operations-module.ts`；业务发消息经 `use-event.ts` / `use-synra-event.ts`，`use-transport.ts` 仅发现与连接编排 |
+| 收包 / 订阅       | `packages/hooks/src/runtime/adapter-listeners.ts`、`lan-wire-listeners.ts`、`create-connection-runtime.ts`（`onMessage`）                                                            |
+| useEvent 三层     | `packages/hooks/src/hooks/use-event.ts`、`use-synra-event.ts`、`use-synra-plugin-event.ts`，前缀 `synra-event-prefix.ts`                                                             |
+| Electron 应用     | `apps/electron/src/main.ts`（`__synraHooksMainBridge`、`BRIDGE_HOST_EVENT_CHANNEL`）、`apps/electron/src/preload.ts`                                                                 |
+| Capacitor 桥      | `packages/capacitor-electron/src/bridge/**`、`packages/capacitor-device-connection/**`（原生与 Electron 实现）                                                                       |
+| 前端业务          | `apps/frontend/src/composables/use-connect-page.ts`、`PairingRequestDialog.vue` 等已改用 `useSynraEvent().postMessage`；`useLanDiscoveryStore` 不再暴露 `sendLanEvent`               |
+| 协议与信封        | `packages/protocol`、`ai-docs/cross-platform-communication-map/message-envelope-and-validation.md`                                                                                   |
 
 后续实施与拆旧进展可在此 README **追加小节**（例如「已迁移模块」「仍待拆除入口」），保持简短即可。
+
+## 已迁移模块 / 已拆除入口（落地）
+
+- **前端**：`apps/frontend/src/composables/use-device-basic-info.ts` 对已连接链路广播展示名时使用 `useSynraEvent().postMessage`（`DEVICE_DISPLAY_NAME_CHANGED_EVENT`）；`apps/frontend/src/stores/lan-discovery.ts` 仅 re-export 发现与连接编排（`peers`、`openTransportLinks`、`ensureReady`、`startScan`、`connectToDevice`、`connectToDeviceAt`、`disconnectDevice` 等），不再暴露 `sendConnectionMessage` / `onSynraMessage` / `broadcastDeviceProfileToOpenTransportLinks`。
+- **hooks**：`packages/hooks/src/hooks/use-transport.ts` 收敛为仅发现 + 连接；收发统一走 `useSynraEvent` / `useSynraPluginEvent` / `useEvent`。`@synra/hooks` 公开导出已移除若干仅服务于旧并行 API 的类型（`SendMessageToReadyDeviceInput`、`TransportBroadcastMessageInput`、`SynraConnection*` 等与连接消息相关的对外类型）；运行时内部类型仍留在 `packages/hooks/src/types.ts`。
+- **`pullHostEvents` 全栈拆除**：已从 `packages/capacitor-electron`（协议常量、`connectionService`、`device-discovery.service`、`bridge` handler、runtime capabilities、`host-event-bus` 的队列 drain）、`packages/capacitor-device-connection`（definitions、web、electron 实现）、Android `DeviceConnectionPlugin.java`、iOS `DeviceConnectionPluginPlugin.swift` 移除；宿主事件仅以实时通道推送，不做 pull 回放。

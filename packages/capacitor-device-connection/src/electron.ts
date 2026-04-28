@@ -14,7 +14,6 @@ import type {
   OpenTransportResult,
   ProbeSynraPeersOptions,
   ProbeSynraPeersResult,
-  PullHostEventsResult,
   SendLanEventOptions,
   SendLanEventResult,
   SendMessageOptions,
@@ -50,7 +49,6 @@ type ConnectionBridgeMethods = {
     payload: GetTransportStateOptions
     result: GetTransportStateResult
   }
-  'connection.pullHostEvents': { payload: Record<string, never>; result: PullHostEventsResult }
 }
 
 export class DeviceConnectionElectron extends WebPlugin implements DeviceConnectionPlugin {
@@ -299,11 +297,6 @@ export class DeviceConnectionElectron extends WebPlugin implements DeviceConnect
   ): Promise<GetTransportStateResult> {
     this.ensureHostEventSubscription()
     return this.invokeBridge('connection.getTransportState', options)
-  }
-
-  async pullHostEvents(): Promise<PullHostEventsResult> {
-    this.ensureHostEventSubscription()
-    return this.invokeBridge('connection.pullHostEvents', {})
   }
 
   async probeSynraPeers(options: ProbeSynraPeersOptions): Promise<ProbeSynraPeersResult> {

@@ -10,7 +10,6 @@ import type {
   DeviceTransportSendMessageOptions,
   DeviceTransportSendMessageResult,
   DeviceTransportSnapshot,
-  DeviceDiscoveryPullHostEventsResult,
   DeviceDiscoveryStartOptions,
   DeviceDiscoveryStartResult,
   MethodPayloadMap,
@@ -109,10 +108,6 @@ export interface ElectronBridgePlugin {
     options?: DeviceTransportGetStateOptions,
     invokeOptions?: { timeoutMs?: number; signal?: AbortSignal }
   ): Promise<DeviceTransportSnapshot>
-  pullConnectionHostEvents(invokeOptions?: {
-    timeoutMs?: number
-    signal?: AbortSignal
-  }): Promise<DeviceDiscoveryPullHostEventsResult>
 }
 
 function ensureObject(value: unknown, errorMessage: string): void {
@@ -239,11 +234,6 @@ export function createElectronBridgePlugin(invoke: BridgeInvoke): ElectronBridge
     ): Promise<DeviceTransportSnapshot> {
       ensureObject(options, 'getConnectionTransportState options must be an object.')
       return invoke(API_METHODS.getConnectionTransportState, options, invokeOptions)
-    },
-    async pullConnectionHostEvents(
-      invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {}
-    ): Promise<DeviceDiscoveryPullHostEventsResult> {
-      return invoke(API_METHODS.pullConnectionHostEvents, {}, invokeOptions)
     }
   }
 }

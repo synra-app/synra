@@ -16,10 +16,12 @@ import type {
   TransportErrorEvent
 } from '@synra/capacitor-device-connection'
 import { DEVICE_CONNECTION_TRANSPORT_ERROR_CODES } from '@synra/capacitor-device-connection'
+import { DEVICE_PAIRING_REQUEST_EVENT } from '@synra/protocol'
 import {
   configureHooksRuntime,
   resetConnectionRuntime,
   resetHooksRuntimeOptions,
+  useSynraEvent,
   useTransport
 } from '../src/index'
 import type { ConnectionRuntimeAdapter, DeviceLostEvent } from '../src/runtime/adapter'
@@ -110,7 +112,7 @@ function createMockAdapter(): ConnectionRuntimeAdapter {
   }
 }
 
-test('useTransport exposes generic messaging capabilities', async () => {
+test('useSynraEvent delivers connection-layer messages after connect', async () => {
   configureHooksRuntime({
     adapterFactory: () => createMockAdapter(),
     resolveSynraConnectType: () => 'paired',
@@ -118,20 +120,21 @@ test('useTransport exposes generic messaging capabilities', async () => {
   })
   resetConnectionRuntime()
   const transport = useTransport()
+  const synra = useSynraEvent()
   await transport.ensureReady()
   await transport.startScan()
   expect(transport.peers.value.length).toBe(1)
 
   const seen: unknown[] = []
-  const cleanup = transport.onSynraMessage(
+  const cleanup = synra.onMessage(
     (message) => {
       seen.push(message.payload)
     },
     { event: 'custom.chat.text' }
   )
   await transport.connectToDevice(PEER_UUID)
-  await transport.sendMessageToReadyDevice({
-    deviceId: PEER_UUID,
+  await synra.postMessage({
+    target: PEER_UUID,
     event: 'custom.chat.text',
     payload: {
       channel: 'default',
@@ -147,7 +150,7 @@ test('cleanup runtime options', () => {
   resetConnectionRuntime()
 })
 
-test('sendMessageToReadyDevice rejects non-uuid from', async () => {
+test('useSynraEvent postMessage rejects non-uuid from', async () => {
   configureHooksRuntime({
     adapterFactory: () => createMockAdapter(),
     resolveSynraConnectType: () => 'paired',
@@ -155,17 +158,18 @@ test('sendMessageToReadyDevice rejects non-uuid from', async () => {
   })
   resetConnectionRuntime()
   const transport = useTransport()
+  const synra = useSynraEvent()
   await transport.ensureReady()
   await transport.startScan()
   await transport.connectToDevice(PEER_UUID)
   await expect(
-    transport.sendMessageToReadyDevice({
-      deviceId: PEER_UUID,
+    synra.postMessage({
+      from: 'local-device',
+      target: PEER_UUID,
       event: 'custom.chat.text',
-      payload: { body: 'hello' },
-      from: 'local-device'
+      payload: { body: 'hello' }
     })
-  ).rejects.toThrow('Message from must be a UUID.')
+  ).rejects.toThrow(/local from UUID is invalid or missing/)
 })
 
 test('transport error closes primary transport and marks link dead', async () => {
@@ -454,14 +458,15 @@ test('transport is not open error marks transport dead and reconnects', async ()
   await transport.ensureReady()
   await transport.startScan()
 
+  const synra = useSynraEvent()
   const firstDeviceId = await transport.connectToDevice('device-a')
   expect(firstDeviceId).toBe('device-a')
   await expect(
-    transport.sendLanEvent({
+    synra.postMessage({
       requestId: 'r1',
       from: LOCAL_UUID,
       target: 'device-a',
-      event: 'device.pairing.request',
+      event: DEVICE_PAIRING_REQUEST_EVENT,
       payload: { requestId: 'r1' }
     })
   ).rejects.toThrow('Transport is not open.')
