@@ -1,5 +1,9 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import {
+  SYNRA_HOST_ENVELOPE_INVOKE_CHANNEL,
+  SYNRA_HOST_ENVELOPE_PUSH_CHANNEL
+} from '@synra/hooks/electron'
+import {
   BRIDGE_HOST_EVENT_CHANNEL,
   createPreloadInvoker,
   type InvokeOptions,
@@ -14,6 +18,7 @@ import type {
 const ipcInvoke: IpcInvoke = async (channel, request) => ipcRenderer.invoke(channel, request)
 const invoke = createPreloadInvoker(ipcInvoke)
 const hostListeners = new Set<(event: DeviceDiscoveryHostEvent) => void>()
+const hostEnvelopeListeners = new Set<(envelope: unknown) => void>()
 const windowStateListeners = new Set<(state: { maximized: boolean; focused: boolean }) => void>()
 
 const WINDOW_CONTROL_CHANNELS = {
@@ -26,6 +31,12 @@ const WINDOW_CONTROL_CHANNELS = {
 
 ipcRenderer.on(BRIDGE_HOST_EVENT_CHANNEL, (_event, payload: DeviceDiscoveryHostEvent) => {
   for (const listener of hostListeners) {
+    listener(payload)
+  }
+})
+
+ipcRenderer.on(SYNRA_HOST_ENVELOPE_PUSH_CHANNEL, (_event, payload: unknown) => {
+  for (const listener of hostEnvelopeListeners) {
     listener(payload)
   }
 })
@@ -51,6 +62,20 @@ contextBridge.exposeInMainWorld('__synraCapElectron', {
     return () => {
       hostListeners.delete(listener)
     }
+  }
+})
+
+contextBridge.exposeInMainWorld('__synraHostEnvelope', {
+  subscribe(callback: (envelope: unknown) => void) {
+    hostEnvelopeListeners.add(callback)
+    return () => {
+      hostEnvelopeListeners.delete(callback)
+    }
+  },
+  postToMain(envelope: unknown) {
+    return ipcRenderer.invoke(SYNRA_HOST_ENVELOPE_INVOKE_CHANNEL, envelope) as Promise<
+      { ok: true } | { ok: false; error: string }
+    >
   }
 })
 

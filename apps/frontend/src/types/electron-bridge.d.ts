@@ -18,6 +18,10 @@ declare global {
   }
 
   interface Window {
+    __synraHostEnvelope?: {
+      subscribe: (callback: (envelope: unknown) => void) => () => void
+      postToMain: (envelope: unknown) => Promise<{ ok: true } | { ok: false; error: string }>
+    }
     __synraCapElectron?: {
       invoke: (
         method: string,

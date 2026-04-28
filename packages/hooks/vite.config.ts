@@ -4,7 +4,7 @@ import { createPackageViteConfig } from '../../scripts/vite/config'
 export default defineConfig(
   createPackageViteConfig({
     pack: {
-      entry: ['src/index.ts'],
+      entry: ['src/index.ts', 'src/electron.ts'],
       exports: {
         devExports: true
       },

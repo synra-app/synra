@@ -1,4 +1,30 @@
 export { useTransport, type ConnectToDeviceOptions } from './hooks/use-transport'
+export { useEvent } from './hooks/use-event'
+export type {
+  SynraEventOnFilter,
+  UseSynraEventRequestOptions,
+  SynraEventRuntimeSurface
+} from './hooks/use-event'
+export type { SynraEventInbound, SynraMessageEnvelope } from './synra/synra-envelope'
+export { getSynraEventRuntimeSurface } from './synra/synra-event-surface'
+export { parseSynraMessageEnvelope, isWhitelistedEnvelopeRecord } from './synra/synra-envelope'
+export {
+  SYNRA_HOST_ENVELOPE_PUSH_CHANNEL,
+  SYNRA_HOST_ENVELOPE_INVOKE_CHANNEL
+} from './synra/host-ipc-constants'
+export { setSynraHostEnvelopeMainDispatch } from './synra/host-envelope-main-dispatch'
+export { USE_SYNRA_EVENT_DEFAULT_TIMEOUT_MS } from './hooks/use-synra-event-helpers'
+export { useSynraEvent } from './hooks/use-synra-event'
+export { useSynraPluginEvent } from './hooks/use-synra-plugin-event'
+export {
+  toLogicalFromSystemWireEvent,
+  toSystemWireEvent,
+  toPluginWireEvent,
+  toLogicalFromPluginWireEvent,
+  normalizePluginPackageNameToWireSlug,
+  SYSTEM_WIRE_EVENT_PREFIX,
+  SYNRA_HOST_ONLY_EVENT_PREFIX
+} from './synra/synra-event-prefix'
 export { useLogger } from './hooks/use-logger'
 export {
   DEVICE_PROFILE_UPDATED_MESSAGE_TYPE,

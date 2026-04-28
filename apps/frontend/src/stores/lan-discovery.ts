@@ -1,14 +1,8 @@
-import { useLogger, useTransport } from '@synra/hooks'
+import { useTransport } from '@synra/hooks'
 import { defineStore } from 'pinia'
 
 export const useLanDiscoveryStore = defineStore('lan-discovery', () => {
   const transport = useTransport()
-  const { tcpLogger } = useLogger()
-
-  const sendLanEvent: typeof transport.sendLanEvent = async (input) => {
-    tcpLogger.info('send', input)
-    return transport.sendLanEvent(input)
-  }
 
   return {
     peers: transport.peers,
@@ -24,7 +18,6 @@ export const useLanDiscoveryStore = defineStore('lan-discovery', () => {
       transport.broadcastDeviceProfileToOpenTransportLinks,
     disconnectDevice: transport.disconnectDevice,
     sendConnectionMessage: transport.sendConnectionMessage,
-    sendLanEvent,
     onSynraMessage: transport.onSynraMessage
   }
 })

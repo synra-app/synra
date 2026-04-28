@@ -17,6 +17,7 @@
   "dependencies": {
     "@capacitor/core": "catalog:capacitor",
     "@synra/capacitor-electron": "workspace:*",
+    "@synra/hooks": "workspace:*",
     "@synra/utils": "workspace:*"
   },
   "devDependencies": {

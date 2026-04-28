@@ -1,5 +1,12 @@
 import { join, resolve } from 'node:path'
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import {
+  parseSynraMessageEnvelope,
+  setSynraHostEnvelopeMainDispatch,
+  SYNRA_HOST_ENVELOPE_INVOKE_CHANNEL,
+  SYNRA_HOST_ENVELOPE_PUSH_CHANNEL,
+  type SynraMessageEnvelope
+} from '@synra/hooks/electron'
 import { BRIDGE_HOST_EVENT_CHANNEL, setupBridgeMainRuntime } from './bridge/main'
 import type {
   DeviceDiscoveryHostEvent,
@@ -200,9 +207,36 @@ function registerWindowControlBridge(): void {
   })
 }
 
+/**
+ * Scheme B: whitelisted host↔renderer envelope over dedicated IPC
+ * (see `useEvent` + preload `__synraHostEnvelope`).
+ * SYNRA-COMM::MESSAGE_ENVELOPE::SEND::ELECTRON_HOST_ENVELOPE_IPC
+ */
+function registerSynraHostEnvelopeBridge(): void {
+  function broadcastToRenderers(envelope: SynraMessageEnvelope): void {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) {
+        window.webContents.send(SYNRA_HOST_ENVELOPE_PUSH_CHANNEL, envelope)
+      }
+    }
+  }
+
+  setSynraHostEnvelopeMainDispatch(broadcastToRenderers)
+
+  ipcMain.handle(SYNRA_HOST_ENVELOPE_INVOKE_CHANNEL, (_event, payload: unknown) => {
+    const parsed = parseSynraMessageEnvelope(payload)
+    if (!parsed) {
+      return { ok: false as const, error: 'invalid envelope' }
+    }
+    broadcastToRenderers(parsed)
+    return { ok: true as const }
+  })
+}
+
 void app.whenReady().then(() => {
   registerCapacitorElectronBridge()
   registerWindowControlBridge()
+  registerSynraHostEnvelopeBridge()
   createMainWindow()
 
   app.on('activate', () => {

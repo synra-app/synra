@@ -4,6 +4,7 @@ import {
   mergePairedAndDiscoveredDevices,
   setPairAwaitingAccept,
   setPairedDeviceConnecting,
+  useSynraEvent,
   type DisplayDevice
 } from '@synra/hooks'
 import { DEVICE_PAIRING_REQUEST_EVENT, DEVICE_PAIRING_UNPAIR_REQUIRED_EVENT } from '@synra/protocol'
@@ -37,6 +38,7 @@ function isTransportNotOpenError(error: unknown): boolean {
 }
 
 export function useConnectPage() {
+  const synra = useSynraEvent()
   const store = useLanDiscoveryStore()
   const pairingStore = usePairingStore()
   const pairingProtocol = usePairingProtocolContext()
@@ -190,7 +192,7 @@ export function useConnectPage() {
         initiator
       }
       try {
-        await store.sendLanEvent({
+        await synra.postMessage({
           requestId,
           from: initiator.deviceId,
           target: targetDeviceId,
@@ -207,7 +209,7 @@ export function useConnectPage() {
         if (!retriedTargetDeviceId) {
           throw error
         }
-        await store.sendLanEvent({
+        await synra.postMessage({
           requestId,
           from: initiator.deviceId,
           target: retriedTargetDeviceId,
@@ -240,8 +242,8 @@ export function useConnectPage() {
       if (openedLink?.deviceId) {
         const requestId = crypto.randomUUID()
         const localDeviceId = await ensureDeviceInstanceUuid()
-        await store
-          .sendLanEvent({
+        await synra
+          .postMessage({
             requestId,
             from: localDeviceId,
             target: device.deviceId,

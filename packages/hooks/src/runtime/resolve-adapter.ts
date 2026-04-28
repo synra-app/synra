@@ -3,19 +3,7 @@ import { createElectronMainRuntimeAdapter } from './adapters/electron-main-adapt
 import { createUnsupportedMainAdapter } from './adapters/unsupported-main-adapter'
 import type { ConnectionRuntimeAdapter } from './adapter'
 import { getHooksRuntimeOptions } from './config'
-
-function isElectronMainProcess(): boolean {
-  const runtime = globalThis as unknown as {
-    process?: {
-      versions?: { electron?: string }
-      type?: string
-    }
-  }
-  return Boolean(
-    runtime.process?.versions?.electron &&
-    (runtime.process?.type === 'browser' || !runtime.process?.type)
-  )
-}
+import { isElectronMainProcess } from './is-electron-main-process'
 
 export function resolveRuntimeAdapter(): ConnectionRuntimeAdapter {
   const options = getHooksRuntimeOptions()

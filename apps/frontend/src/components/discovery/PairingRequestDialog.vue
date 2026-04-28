@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
 import { ref } from 'vue'
-import { setPairAwaitingAccept, setPairedDeviceConnecting } from '@synra/hooks'
+import { setPairAwaitingAccept, setPairedDeviceConnecting, useSynraEvent } from '@synra/hooks'
 import { DEVICE_PAIRING_RESPONSE_EVENT } from '@synra/protocol'
 import { upsertPairedDeviceRecord } from '../../lib/paired-devices-storage'
 import { isIpv4Address } from '../../lib/network'
@@ -11,6 +11,7 @@ import AppButton from '../base/AppButton.vue'
 
 const pairingStore = usePairingStore()
 const lanStore = useLanDiscoveryStore()
+const synra = useSynraEvent()
 const { incoming } = storeToRefs(pairingStore)
 
 const busy = ref(false)
@@ -37,7 +38,7 @@ async function onAccept(): Promise<void> {
           }
         : recordBase
     )
-    await lanStore.sendLanEvent({
+    await synra.postMessage({
       requestId: crypto.randomUUID(),
       from: current.target,
       target: current.from,
@@ -68,7 +69,7 @@ async function onReject(): Promise<void> {
   }
   busy.value = true
   try {
-    await lanStore.sendLanEvent({
+    await synra.postMessage({
       requestId: crypto.randomUUID(),
       from: current.target,
       target: current.from,

@@ -10,6 +10,7 @@ allowBuilds:
   esbuild: true
 catalog:
   bumpp: ^11.0.1
+  importx: ^0.5.2
 catalogMode: prefer
 
 catalogs:
