@@ -1,5 +1,5 @@
 import { isLanWireEventName } from '@synra/protocol'
-import { isHostOnlySynraEvent, stripForTransportRouting } from './synra-event-prefix'
+import { isHostOnlySynraEvent, stripForTransportRouting } from './event-prefix'
 
 export type SynraPostRoute = 'lan' | 'connection' | 'host'
 

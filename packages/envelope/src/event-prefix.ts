@@ -1,13 +1,13 @@
 /**
- * `useEvent` = raw wire. `useSynraEvent` / `useSynraPluginEvent` only add/strip name prefixes
- * (no separate `system` / `plugin` *domain* type; routing is by prefix on the wire `event` string).
+ * Raw wire names use `useSynraEnvelope`. `useSynraEvent` / `useSynraPluginEvent` add or strip
+ * `event` string prefixes (no separate `system` / `plugin` domain type; routing is by prefix on the wire `event` string).
  * SYNRA-COMM::MESSAGE_ENVELOPE::CONNECT::SYNRA_EVENT_PREFIX
  */
 
-/** App-level system events on the wire (useSynraEvent → useEvent). */
+/** App-level system events on the wire (useSynraEvent → useSynraEnvelope). */
 export const SYSTEM_WIRE_EVENT_PREFIX = '_system.' as const
 
-/** App-level plugin events: `_plugin.{pluginSlug}.{logicalEvent}` (useSynraPluginEvent → useEvent). */
+/** App-level plugin events: `_plugin.{pluginSlug}.{logicalEvent}` (useSynraPluginEvent → useSynraEnvelope). */
 const PLUGIN_WIRE_RE = /^_plugin\.([^.]+)\.(.+)$/s
 
 /** Host-only (Electron main↔renderer) — not the same as `_system.`. */

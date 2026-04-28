@@ -24,6 +24,7 @@
   },
   "devDependencies": {
     "@capacitor/cli": "catalog:capacitor",
-    "esno": "^4.8.0"
+    "esno": "^4.8.0",
+    "xmlbuilder": "catalog:capacitor"
   }
 }

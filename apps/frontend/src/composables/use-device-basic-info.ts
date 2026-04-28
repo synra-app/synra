@@ -79,7 +79,7 @@ export function useDeviceBasicInfo() {
     await Promise.all(
       links.map((link) =>
         synra
-          .postMessage({
+          .send({
             event: DEVICE_DISPLAY_NAME_CHANGED_EVENT,
             target: link.deviceId,
             payload: { deviceId: deviceLanId, displayName: nextDeviceName }

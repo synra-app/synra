@@ -1,35 +1,37 @@
 import { isLanWireEventName } from '@synra/protocol'
-import { getConnectionRuntime } from '../runtime/core'
-import { dispatchHostEnvelopeFromMainIfRegistered } from '../synra/host-envelope-main-dispatch'
-import { resolveSynraPostTransport } from '../synra/resolve-synra-post-transport'
 import {
-  getSynraEventRuntimeSurface,
-  type SynraEventRuntimeSurface
-} from '../synra/synra-event-surface'
-import { isHostOnlySynraEvent, stripForTransportRouting } from '../synra/synra-event-prefix'
-import {
+  getSynraEnvelopeRuntimeSurface,
+  isHostOnlySynraEvent,
   normalizePartialOutbound,
   parseSynraMessageEnvelope,
+  resolveSynraPostTransport,
+  stripForTransportRouting,
   toConnectionSendInput,
   toLanSendInput,
-  type SynraEventInbound,
+  type SynraEnvelopeRuntimeSurface,
+  type SynraInboundEnvelope,
   type SynraMessageEnvelope
-} from '../synra/synra-envelope'
-import { resolveWireFromForSynra } from '../synra/synra-resolve-from'
+} from '@synra/envelope'
+import { getConnectionRuntime } from '../runtime/core'
+import { dispatchHostEnvelopeFromMainIfRegistered } from '../synra/host-envelope-main-dispatch'
+import { resolveWireFromForSynra } from './resolve-wire-from'
 import {
   isUuidLike,
   matchesFilter,
-  type SynraEventOnFilter,
-  type UseSynraEventRequestOptions,
-  USE_SYNRA_EVENT_DEFAULT_TIMEOUT_MS
-} from './use-synra-event-helpers'
+  type SynraInboundFilter,
+  type UseSynraEnvelopeRequestOptions,
+  USE_SYNRA_ENVELOPE_DEFAULT_TIMEOUT_MS
+} from './use-synra-envelope-helpers'
 import type { SynraConnectionMessage } from '../types'
 import type { SynraLanWireEvent } from '../types'
 
-export type { SynraEventInbound, SynraMessageEnvelope } from '../synra/synra-envelope'
-export type { SynraEventRuntimeSurface } from '../synra/synra-event-surface'
-export type { SynraEventOnFilter, UseSynraEventRequestOptions }
-export { USE_SYNRA_EVENT_DEFAULT_TIMEOUT_MS } from './use-synra-event-helpers'
+export type {
+  SynraEnvelopeRuntimeSurface,
+  SynraInboundEnvelope,
+  SynraMessageEnvelope
+} from '@synra/envelope'
+export type { SynraInboundFilter, UseSynraEnvelopeRequestOptions }
+export { USE_SYNRA_ENVELOPE_DEFAULT_TIMEOUT_MS } from './use-synra-envelope-helpers'
 
 type HostEnvelopeWindow = typeof globalThis & {
   __synraHostEnvelope?: {
@@ -41,12 +43,12 @@ type HostEnvelopeWindow = typeof globalThis & {
 /**
  * Core transport: `event` is the **on-wire** name (e.g. `_system.device.*`, `_plugin.{slug}.*`, or legacy protocol names without prefix).
  * Use `useSynraEvent` / `useSynraPluginEvent` for app/plugin code; they add prefixes and map logical `event` in callbacks.
- * SYNRA-COMM::MESSAGE_ENVELOPE::SEND::USE_EVENT_POST
- * SYNRA-COMM::MESSAGE_ENVELOPE::RECEIVE::USE_EVENT_ON_MESSAGE
+ * SYNRA-COMM::MESSAGE_ENVELOPE::SEND::SYNRA_ENVELOPE_POST
+ * SYNRA-COMM::MESSAGE_ENVELOPE::RECEIVE::SYNRA_ENVELOPE_SUBSCRIBE
  */
-export function useEvent() {
+export function useSynraEnvelope() {
   const runtime = getConnectionRuntime()
-  const surface: SynraEventRuntimeSurface = getSynraEventRuntimeSurface()
+  const surface: SynraEnvelopeRuntimeSurface = getSynraEnvelopeRuntimeSurface()
 
   async function ensureReadyForTransport(): Promise<void> {
     if (surface === 'web') {
@@ -55,7 +57,7 @@ export function useEvent() {
     await runtime.ensureListeners()
   }
 
-  function toInboundFromConnection(m: SynraConnectionMessage): SynraEventInbound {
+  function toInboundFromConnection(m: SynraConnectionMessage): SynraInboundEnvelope {
     return {
       requestId: m.requestId,
       event: m.event,
@@ -68,7 +70,7 @@ export function useEvent() {
     }
   }
 
-  function toInboundFromLan(w: SynraLanWireEvent): SynraEventInbound {
+  function toInboundFromLan(w: SynraLanWireEvent): SynraInboundEnvelope {
     return {
       requestId: w.requestId,
       event: w.event,
@@ -81,7 +83,7 @@ export function useEvent() {
     }
   }
 
-  function toInboundFromHost(m: SynraMessageEnvelope): SynraEventInbound {
+  function toInboundFromHost(m: SynraMessageEnvelope): SynraInboundEnvelope {
     return {
       ...m,
       timestamp: m.timestamp ?? Date.now(),
@@ -101,14 +103,14 @@ export function useEvent() {
     }
   }
 
-  async function postMessage(
+  async function send(
     partial: Partial<SynraMessageEnvelope> & Pick<SynraMessageEnvelope, 'event' | 'target'>
   ): Promise<SynraMessageEnvelope> {
     if (typeof partial.event !== 'string' || partial.event.length === 0) {
-      throw new Error('useEvent postMessage: event is required.')
+      throw new Error('useSynraEnvelope send: event is required.')
     }
     if (typeof partial.target !== 'string' || partial.target.length === 0) {
-      throw new Error('useEvent postMessage: target is required.')
+      throw new Error('useSynraEnvelope send: target is required.')
     }
 
     const base = normalizePartialOutbound({
@@ -122,7 +124,7 @@ export function useEvent() {
       resolveFrom: () => resolveWireFromForSynra()
     })
     if (!isHostOnlySynraEvent(base.event) && !isUuidLike(base.from)) {
-      throw new Error('useEvent: local from UUID is invalid or missing.')
+      throw new Error('useSynraEnvelope: local from UUID is invalid or missing.')
     }
 
     const full = toFullEnvelope(base)
@@ -133,7 +135,7 @@ export function useEvent() {
         const w = globalThis as HostEnvelopeWindow
         if (!w.__synraHostEnvelope) {
           throw new Error(
-            'useEvent: host envelope bridge is not available (Electron preload not loaded).'
+            'useSynraEnvelope: host envelope bridge is not available (Electron preload not loaded).'
           )
         }
         await w.__synraHostEnvelope.postToMain(full)
@@ -143,14 +145,14 @@ export function useEvent() {
         dispatchHostEnvelopeFromMainIfRegistered(full)
         return full
       }
-      throw new Error('useEvent: host-only events are only supported in Electron.')
+      throw new Error('useSynraEnvelope: host-only events are only supported in Electron.')
     }
 
     await ensureReadyForTransport()
     if (route === 'lan') {
       const native = stripForTransportRouting(full.event)
       if (!isLanWireEventName(native)) {
-        throw new Error('useEvent: inconsistent route for event after prefix strip.')
+        throw new Error('useSynraEnvelope: inconsistent route for event after prefix strip.')
       }
       await runtime.sendLanEvent(toLanSendInput({ ...full, event: native }))
       return full
@@ -159,9 +161,9 @@ export function useEvent() {
     return full
   }
 
-  function onMessage(
-    handler: (message: SynraEventInbound) => void | Promise<void>,
-    filter?: SynraEventOnFilter
+  function subscribe(
+    handler: (message: SynraInboundEnvelope) => void | Promise<void>,
+    filter?: SynraInboundFilter
   ): () => void {
     const unsubs: Array<() => void> = []
     unsubs.push(
@@ -230,16 +232,16 @@ export function useEvent() {
   function request(
     partial: Partial<SynraMessageEnvelope> &
       Pick<SynraMessageEnvelope, 'event' | 'target' | 'payload'>,
-    options?: UseSynraEventRequestOptions
-  ): Promise<SynraEventInbound> {
+    options?: UseSynraEnvelopeRequestOptions
+  ): Promise<SynraInboundEnvelope> {
     const requestId =
       globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`
-    const timeoutMs = options?.timeoutMs ?? USE_SYNRA_EVENT_DEFAULT_TIMEOUT_MS
+    const timeoutMs = options?.timeoutMs ?? USE_SYNRA_ENVELOPE_DEFAULT_TIMEOUT_MS
     return new Promise((resolve, reject) => {
       const signal = options?.signal
       const onAbort = (): void => {
         cleanup()
-        const err = new Error('useEvent request aborted') as Error & { name?: string }
+        const err = new Error('useSynraEnvelope request aborted') as Error & { name?: string }
         if (signal?.aborted) {
           err.name = 'AbortError'
         }
@@ -252,14 +254,14 @@ export function useEvent() {
       signal?.addEventListener('abort', onAbort, { once: true })
       const t = setTimeout(() => {
         cleanup()
-        reject(new Error('useEvent request timeout'))
+        reject(new Error('useSynraEnvelope request timeout'))
       }, timeoutMs)
       function cleanup(): void {
         clearTimeout(t)
         off()
         signal?.removeEventListener('abort', onAbort)
       }
-      const off = onMessage(
+      const off = subscribe(
         (m) => {
           if (m.replyRequestId === requestId) {
             cleanup()
@@ -268,7 +270,7 @@ export function useEvent() {
         },
         { replyRequestId: requestId }
       )
-      void postMessage({
+      void send({
         ...partial,
         requestId,
         replyRequestId: undefined
@@ -283,8 +285,8 @@ export function useEvent() {
 
   return {
     getRuntimeSurface: () => surface,
-    postMessage,
-    onMessage,
+    send,
+    subscribe,
     request
   }
 }

@@ -1,5 +1,5 @@
 /**
- * Matches {@link resolveRuntimeAdapter}: Electron **main** uses `electron-main-adapter`;
+ * Matches host adapter selection: Electron **main** uses `electron-main-adapter`;
  * renderer / Capacitor use `capacitor-adapter`.
  */
 export function isElectronMainProcess(): boolean {

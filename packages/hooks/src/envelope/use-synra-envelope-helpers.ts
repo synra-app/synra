@@ -1,8 +1,8 @@
-import type { SynraEventInbound } from '../synra/synra-envelope'
+import type { SynraInboundEnvelope } from '@synra/envelope'
 
-export const USE_SYNRA_EVENT_DEFAULT_TIMEOUT_MS = 30_000
+export const USE_SYNRA_ENVELOPE_DEFAULT_TIMEOUT_MS = 30_000
 
-export type SynraEventOnFilter = {
+export type SynraInboundFilter = {
   requestId?: string
   event?: string
   replyRequestId?: string
@@ -14,8 +14,8 @@ export function isUuidLike(value: string): boolean {
 }
 
 export function matchesFilter(
-  message: SynraEventInbound,
-  filter: SynraEventOnFilter | undefined
+  message: SynraInboundEnvelope,
+  filter: SynraInboundFilter | undefined
 ): boolean {
   if (!filter) {
     return true
@@ -37,7 +37,7 @@ export function matchesFilter(
   return true
 }
 
-export type UseSynraEventRequestOptions = {
+export type UseSynraEnvelopeRequestOptions = {
   timeoutMs?: number
   signal?: AbortSignal
 }

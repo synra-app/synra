@@ -1,31 +1,31 @@
-import type { SynraEventInbound, SynraMessageEnvelope } from '../synra/synra-envelope'
+import type { SynraInboundEnvelope, SynraMessageEnvelope } from '@synra/envelope'
 import {
   normalizePluginPackageNameToWireSlug,
   toLogicalFromPluginWireEvent,
   toPluginWireEvent
-} from '../synra/synra-event-prefix'
-import { useEvent } from './use-event'
+} from '@synra/envelope'
 import {
   matchesFilter,
-  type SynraEventOnFilter,
-  type UseSynraEventRequestOptions
-} from './use-synra-event-helpers'
+  type SynraInboundFilter,
+  type UseSynraEnvelopeRequestOptions
+} from './use-synra-envelope-helpers'
+import { useSynraEnvelope } from './use-synra-envelope'
 
-export type { SynraEventInbound, SynraMessageEnvelope } from '../synra/synra-envelope'
-export type { SynraEventRuntimeSurface } from './use-event'
-export type { SynraEventOnFilter, UseSynraEventRequestOptions }
+export type { SynraInboundEnvelope, SynraMessageEnvelope } from '@synra/envelope'
+export type { SynraEnvelopeRuntimeSurface } from '@synra/envelope'
+export type { SynraInboundFilter, UseSynraEnvelopeRequestOptions }
 
 /**
  * Plugin event helper: same as `useSynraEvent` but with `_plugin.{pluginSlug}.{logicalEvent}` on the wire
- * (e.g. package `@synra-plugin/chat` + `postMessage({ event: 'send' })` → `_plugin.chat.send`).
+ * (e.g. package `@synra-plugin/chat` + `send({ event: 'send' })` → `_plugin.chat.send`).
  * Inbound `event` in the callback is the **logical** tail (e.g. `send`).
  * SYNRA-COMM::MESSAGE_ENVELOPE::SEND::USE_SYNRA_PLUGIN_EVENT_POST
  */
 export function useSynraPluginEvent(pluginPackageNameOrSlug: string) {
   const slug = normalizePluginPackageNameToWireSlug(pluginPackageNameOrSlug)
-  const ev = useEvent()
+  const ev = useSynraEnvelope()
 
-  function mapPluginInbound(m: SynraEventInbound): SynraEventInbound | null {
+  function mapPluginInbound(m: SynraInboundEnvelope): SynraInboundEnvelope | null {
     const p = toLogicalFromPluginWireEvent(m.event)
     if (!p || p.slug !== slug) {
       return null
@@ -33,22 +33,22 @@ export function useSynraPluginEvent(pluginPackageNameOrSlug: string) {
     return { ...m, event: p.event }
   }
 
-  async function postMessage(
+  async function send(
     partial: Partial<SynraMessageEnvelope> & Pick<SynraMessageEnvelope, 'event' | 'target'>
   ): Promise<SynraMessageEnvelope> {
-    const out = await ev.postMessage({
+    const out = await ev.send({
       ...partial,
       event: toPluginWireEvent(slug, partial.event)
-    } as Parameters<ReturnType<typeof useEvent>['postMessage']>[0])
+    } as Parameters<ReturnType<typeof useSynraEnvelope>['send']>[0])
     const parsed = toLogicalFromPluginWireEvent(out.event)
     return { ...out, event: parsed?.event ?? out.event }
   }
 
-  function onMessage(
-    handler: (message: SynraEventInbound) => void | Promise<void>,
-    filter?: SynraEventOnFilter
+  function subscribe(
+    handler: (message: SynraInboundEnvelope) => void | Promise<void>,
+    filter?: SynraInboundFilter
   ): () => void {
-    return ev.onMessage((m) => {
+    return ev.subscribe((m) => {
       const logical = mapPluginInbound(m)
       if (!logical) {
         return
@@ -63,8 +63,8 @@ export function useSynraPluginEvent(pluginPackageNameOrSlug: string) {
   function request(
     partial: Partial<SynraMessageEnvelope> &
       Pick<SynraMessageEnvelope, 'event' | 'target' | 'payload'>,
-    options?: UseSynraEventRequestOptions
-  ): Promise<SynraEventInbound> {
+    options?: UseSynraEnvelopeRequestOptions
+  ): Promise<SynraInboundEnvelope> {
     return ev
       .request({ ...partial, event: toPluginWireEvent(slug, partial.event) } as never, options)
       .then((m) => {
@@ -81,8 +81,8 @@ export function useSynraPluginEvent(pluginPackageNameOrSlug: string) {
   return {
     getRuntimeSurface: () => ev.getRuntimeSurface(),
     pluginWireSlug: slug,
-    postMessage,
-    onMessage,
+    send,
+    subscribe,
     request
   }
 }

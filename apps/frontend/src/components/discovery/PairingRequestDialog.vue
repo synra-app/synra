@@ -38,7 +38,7 @@ async function onAccept(): Promise<void> {
           }
         : recordBase
     )
-    await synra.postMessage({
+    await synra.send({
       requestId: crypto.randomUUID(),
       from: current.target,
       target: current.from,
@@ -69,7 +69,7 @@ async function onReject(): Promise<void> {
   }
   busy.value = true
   try {
-    await synra.postMessage({
+    await synra.send({
       requestId: crypto.randomUUID(),
       from: current.target,
       target: current.from,

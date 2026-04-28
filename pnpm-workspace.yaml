@@ -25,6 +25,7 @@ catalogs:
     '@capacitor/core': ^8.3.1
     '@capacitor/docgen': ^0.3.1
     '@capacitor/ios': ^8.3.1
+    xmlbuilder: ^15.1.1
   cli:
     '@inquirer/prompts': ^8.4.2
     consola: ^3.4.2

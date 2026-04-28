@@ -11,6 +11,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./electron": "./src/electron.ts",
+    "./envelope": "./src/envelope/index.ts",
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -18,6 +19,7 @@
     "exports": {
       ".": "./dist/index.mjs",
       "./electron": "./dist/electron.mjs",
+      "./envelope": "./dist/envelope/index.mjs",
       "./package.json": "./package.json"
     }
   },
@@ -33,6 +35,7 @@
     "@synra/capacitor-device-connection": "workspace:*",
     "@synra/capacitor-lan-discovery": "workspace:*",
     "@synra/capacitor-preferences": "workspace:*",
+    "@synra/envelope": "workspace:*",
     "@synra/protocol": "workspace:*",
     "@synra/transport-events": "workspace:*",
     "@synra/utils": "workspace:*",

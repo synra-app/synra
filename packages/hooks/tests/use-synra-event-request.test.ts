@@ -180,7 +180,7 @@ test('useSynraEvent request rejects on timeout when no reply', async () => {
   const result = await outcome
   expect(result.ok).toBe(true)
   expect(result.error).toBeInstanceOf(Error)
-  expect((result.error as Error).message).toBe('useEvent request timeout')
+  expect((result.error as Error).message).toBe('useSynraEnvelope request timeout')
 
   vi.useRealTimers()
   resetHooksRuntimeOptions()

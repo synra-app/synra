@@ -1,4 +1,3 @@
-import type { SynraConnectionSendInput, SynraLanWireSendInput } from '../types'
 import type { LanWireEventName } from '@synra/protocol'
 
 /** Whitelist: same as cross-platform message envelope (no extra fields on the wire). */
@@ -12,8 +11,30 @@ export type SynraMessageEnvelope = {
   timestamp?: number
 }
 
-export type SynraEventInbound = SynraMessageEnvelope & {
+/** Inbound frame unified across LAN, TCP connection, or Electron host IPC. */
+export type SynraInboundEnvelope = SynraMessageEnvelope & {
   kind: 'lan' | 'connection' | 'host'
+}
+
+/** Payload shape used by the connection `sendMessage` adapter path. */
+export type SynraConnectionSendInput = {
+  requestId: string
+  event: string
+  target: string
+  from: string
+  replyRequestId?: string
+  payload: unknown
+  timestamp?: number
+}
+
+export type SynraLanWireSendInput = {
+  requestId: string
+  event: LanWireEventName
+  target: string
+  from: string
+  replyRequestId?: string
+  payload?: unknown
+  timestamp?: number
 }
 
 const ENVELOPE_KEYS = new Set([

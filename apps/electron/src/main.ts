@@ -209,7 +209,7 @@ function registerWindowControlBridge(): void {
 
 /**
  * Scheme B: whitelisted host↔renderer envelope over dedicated IPC
- * (see `useEvent` + preload `__synraHostEnvelope`).
+ * (see `useSynraEnvelope` + preload `__synraHostEnvelope`).
  * SYNRA-COMM::MESSAGE_ENVELOPE::SEND::ELECTRON_HOST_ENVELOPE_IPC
  */
 function registerSynraHostEnvelopeBridge(): void {

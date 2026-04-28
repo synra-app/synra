@@ -5,7 +5,7 @@ export {
   parseSynraMessageEnvelope,
   isWhitelistedEnvelopeRecord,
   type SynraMessageEnvelope
-} from './synra/synra-envelope'
+} from '@synra/envelope'
 export { setSynraHostEnvelopeMainDispatch } from './synra/host-envelope-main-dispatch'
 export {
   SYNRA_HOST_ENVELOPE_PUSH_CHANNEL,

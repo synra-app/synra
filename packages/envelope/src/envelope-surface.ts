@@ -1,17 +1,17 @@
-import { isElectronMainProcess } from '../runtime/is-electron-main-process'
+import { isElectronMainProcess } from './electron-main-process'
 
 /**
- * Where `useSynraEvent` is running. Uses the same Electron-main probe as
- * {@link resolveRuntimeAdapter} (`isElectronMainProcess`); non-main surfaces map to the Capacitor adapter path.
- * SYNRA-COMM::MESSAGE_ENVELOPE::CONNECT::SYNRA_EVENT_RUNTIME_SURFACE
+ * Where `useSynraEnvelope` / `useSynraEvent` is running. Uses the same Electron-main probe as
+ * runtime adapter selection (`isElectronMainProcess`); non-main surfaces map to the Capacitor adapter path.
+ * SYNRA-COMM::MESSAGE_ENVELOPE::CONNECT::SYNRA_ENVELOPE_RUNTIME_SURFACE
  */
-export type SynraEventRuntimeSurface =
+export type SynraEnvelopeRuntimeSurface =
   | 'electron-main'
   | 'electron-renderer'
   | 'capacitor-native'
   | 'web'
 
-export function getSynraEventRuntimeSurface(): SynraEventRuntimeSurface {
+export function getSynraEnvelopeRuntimeSurface(): SynraEnvelopeRuntimeSurface {
   const g = globalThis as {
     process?: { versions?: { electron?: string }; type?: string }
     Capacitor?: { isNativePlatform?: () => boolean; getPlatform?: () => string }

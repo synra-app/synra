@@ -192,7 +192,7 @@ export function useConnectPage() {
         initiator
       }
       try {
-        await synra.postMessage({
+        await synra.send({
           requestId,
           from: initiator.deviceId,
           target: targetDeviceId,
@@ -209,7 +209,7 @@ export function useConnectPage() {
         if (!retriedTargetDeviceId) {
           throw error
         }
-        await synra.postMessage({
+        await synra.send({
           requestId,
           from: initiator.deviceId,
           target: retriedTargetDeviceId,
@@ -243,7 +243,7 @@ export function useConnectPage() {
         const requestId = crypto.randomUUID()
         const localDeviceId = await ensureDeviceInstanceUuid()
         await synra
-          .postMessage({
+          .send({
             requestId,
             from: localDeviceId,
             target: device.deviceId,

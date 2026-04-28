@@ -13,7 +13,7 @@ function isTransportLive(link: { transport: string }): boolean {
 
 /**
  * Discovery + connection orchestration (`startScan`, `connectToDevice`). Host apps use this for the
- * device screen. Send/receive app messages via `useSynraEvent` / `useSynraPluginEvent` (or `useEvent`
+ * device screen. Send/receive app messages via `useSynraEvent` / `useSynraPluginEvent` (or `useSynraEnvelope`
  * for raw wire names). Plugins must not call discovery APIs; use `usePairedDevices` for device lists
  * instead (see `@synra/plugin-sdk/hooks`).
  */

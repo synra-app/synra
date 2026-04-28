@@ -1,6 +1,8 @@
 import type { SynraLanConnectType } from '@synra/capacitor-device-connection'
 import type { LanWireEventName } from '@synra/protocol'
 
+export type { SynraConnectionSendInput, SynraLanWireSendInput } from '@synra/envelope'
+
 export type RuntimePrimaryTransportState = {
   state: 'idle' | 'connecting' | 'open' | 'closed' | 'error'
   deviceId?: string
@@ -75,16 +77,6 @@ export type SynraConnectionFilter = {
   event?: string
 }
 
-export type SynraConnectionSendInput = {
-  requestId: string
-  event: string
-  target: string
-  from: string
-  replyRequestId?: string
-  payload: unknown
-  timestamp?: number
-}
-
 export type SendMessageToReadyDeviceInput = {
   deviceId: string
   event: string
@@ -115,14 +107,4 @@ export type SynraLanWireFilter = {
   requestId?: string
   deviceId?: string
   event?: LanWireEventName
-}
-
-export type SynraLanWireSendInput = {
-  requestId: string
-  event: LanWireEventName
-  target: string
-  from: string
-  replyRequestId?: string
-  payload?: unknown
-  timestamp?: number
 }

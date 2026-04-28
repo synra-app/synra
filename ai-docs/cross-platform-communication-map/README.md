@@ -21,10 +21,10 @@
 - `TRANSPORT_HEARTBEAT`
 - `TRANSPORT_ERROR`
 - `PAIRING_DISCOVERY_RESYNC_AFTER_WIRE`（PLUGIN_BRIDGE / RECEIVE；hooks 解配 wire 后补回 discovery）
-- `SYNRA_EVENT_RUNTIME_SURFACE`（MESSAGE_ENVELOPE / CONNECT）
-- `SYNRA_EVENT_POST_ROUTE`（MESSAGE_ENVELOPE / SEND；`resolveSynraPostTransport`；应用层业务发系统/插件事件优先经 `useSynraEvent` / `useSynraPluginEvent`，不再经由已收敛的 `useTransport` 并行消息 API）
-- `USE_EVENT_POST`（MESSAGE_ENVELOPE / SEND）
-- `USE_EVENT_ON_MESSAGE`（MESSAGE_ENVELOPE / RECEIVE）
+- `SYNRA_ENVELOPE_RUNTIME_SURFACE`（MESSAGE_ENVELOPE / CONNECT）
+- `SYNRA_EVENT_POST_ROUTE`（MESSAGE_ENVELOPE / SEND；`resolveSynraPostTransport`（`@synra/envelope`）；应用层业务发系统/插件事件优先经 `useSynraEvent` / `useSynraPluginEvent`，不再经由已收敛的 `useTransport` 并行消息 API）
+- `SYNRA_ENVELOPE_POST`（MESSAGE_ENVELOPE / SEND）
+- `SYNRA_ENVELOPE_SUBSCRIBE`（MESSAGE_ENVELOPE / RECEIVE）
 - `USE_SYNRA_EVENT_POST`（MESSAGE_ENVELOPE / SEND）
 - `ELECTRON_HOST_ENVELOPE_IPC`（MESSAGE_ENVELOPE / SEND；Electron `apps/electron` 方案 B）
 
@@ -42,3 +42,7 @@
 - `device-handshake.md`
 - `plugin-bridge.md`
 - `message-envelope-and-validation.md`
+
+## 相关扩展
+
+- [大对象分块传输与会话封装](../file-transfer/README.md)（`FILE_TRANSFER` 建议与 `SYNRA-COMM` 节点对齐时见该目录说明）

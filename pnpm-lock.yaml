@@ -31,6 +31,9 @@ catalogs:
     '@capacitor/ios':
       specifier: ^8.3.1
       version: 8.3.1
+    xmlbuilder:
+      specifier: ^15.1.1
+      version: 15.1.1
   cli:
     '@inquirer/prompts':
       specifier: ^8.4.2
@@ -312,6 +315,9 @@ importers:
       esno:
         specifier: ^4.8.0
         version: 4.8.0
+      xmlbuilder:
+        specifier: catalog:capacitor
+        version: 15.1.1
 
   packages/capacitor-device-connection:
     dependencies:
@@ -451,6 +457,22 @@ importers:
         specifier: catalog:vite
         version: 0.1.19(@tsdown/css@0.21.9)(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(typescript@6.0.3)(vite@8.0.8(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(yaml@2.8.3))(yaml@2.8.3)
 
+  packages/envelope:
+    dependencies:
+      '@synra/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+    devDependencies:
+      '@types/node':
+        specifier: catalog:types
+        version: 25.6.0
+      typescript:
+        specifier: catalog:types
+        version: 6.0.3
+      vite-plus:
+        specifier: catalog:vite
+        version: 0.1.19(@tsdown/css@0.21.9)(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(typescript@6.0.3)(vite@8.0.8(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(sass@1.99.0)(tsx@4.21.0)(yaml@2.8.3))(yaml@2.8.3)
+
   packages/hooks:
     dependencies:
       '@capacitor/app':
@@ -465,6 +487,9 @@ importers:
       '@synra/capacitor-preferences':
         specifier: workspace:*
         version: link:../capacitor-preferences
+      '@synra/envelope':
+        specifier: workspace:*
+        version: link:../envelope
       '@synra/protocol':
         specifier: workspace:*
         version: link:../protocol

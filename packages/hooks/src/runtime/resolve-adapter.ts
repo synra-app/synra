@@ -3,7 +3,7 @@ import { createElectronMainRuntimeAdapter } from './adapters/electron-main-adapt
 import { createUnsupportedMainAdapter } from './adapters/unsupported-main-adapter'
 import type { ConnectionRuntimeAdapter } from './adapter'
 import { getHooksRuntimeOptions } from './config'
-import { isElectronMainProcess } from './is-electron-main-process'
+import { isElectronMainProcess } from '@synra/envelope'
 
 export function resolveRuntimeAdapter(): ConnectionRuntimeAdapter {
   const options = getHooksRuntimeOptions()
