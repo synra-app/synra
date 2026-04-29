@@ -3,6 +3,7 @@ import type { Router } from 'vue-router'
 import type { PluginRuntimeState } from './types'
 import { PluginRegistry } from './plugin-registry'
 import { PluginRouteBinder } from './plugin-route-binder'
+import { toPluginAssetUrl } from './plugin-asset-url'
 
 export class PluginLifecycleManager {
   private readonly pluginStates = new Map<string, PluginRuntimeState>()
@@ -35,9 +36,15 @@ export class PluginLifecycleManager {
       throw new Error(`Plugin '${pluginId}' metadata is not registered.`)
     }
     this.pluginStates.set(pluginId, 'entering')
-    this.injectInstalledPluginStyleOnce(pluginRecord.artifactRoot)
+    this.injectInstalledPluginStyleOnce(pluginId, pluginRecord.artifactRoot)
     await plugin.onPluginEnter()
-    await this.routeBinder.attachRoutes(router, pluginId, pluginRecord.artifactRoot)
+    await this.routeBinder.attachRoutes(
+      router,
+      pluginId,
+      pluginRecord.artifactRoot,
+      metadata.defaultPage,
+      metadata.entries?.ui
+    )
     this.pluginStates.set(pluginId, 'active')
   }
 
@@ -52,28 +59,46 @@ export class PluginLifecycleManager {
     this.pluginStates.set(pluginId, 'idle')
   }
 
-  private injectInstalledPluginStyleOnce(artifactRoot?: string): void {
+  private injectInstalledPluginStyleOnce(pluginId: string, artifactRoot?: string): void {
     if (!artifactRoot) {
       return
     }
-    const normalizedRoot = artifactRoot.replace(/\\/g, '/')
-    const stylePath = `${normalizedRoot}/package/dist/ui/style.css`
-    if (this.loadedStylePaths.has(stylePath)) {
+    const stylePaths = [
+      toPluginAssetUrl(pluginId, 'dist/style.css'),
+      toPluginAssetUrl(pluginId, 'dist/ui/style.css')
+    ]
+    if (stylePaths.some((path) => this.loadedStylePaths.has(path))) {
       return
     }
-    const href = this.toFileUrl(stylePath)
     const link = document.createElement('link')
     link.rel = 'stylesheet'
-    link.href = href
-    document.head.appendChild(link)
-    this.loadedStylePaths.add(stylePath)
-  }
-
-  private toFileUrl(filePath: string): string {
-    const normalized = filePath.replace(/\\/g, '/')
-    if (/^[a-zA-Z]:\//.test(normalized)) {
-      return `file:///${normalized}`
+    let currentPath: string | null = null
+    link.addEventListener(
+      'load',
+      () => {
+        if (currentPath) {
+          this.loadedStylePaths.add(currentPath)
+        }
+      },
+      { once: false }
+    )
+    let index = 0
+    const tryNext = (): void => {
+      if (index >= stylePaths.length) {
+        return
+      }
+      currentPath = stylePaths[index]
+      link.href = currentPath
+      index += 1
     }
-    return `file://${normalized}`
+    link.addEventListener(
+      'error',
+      () => {
+        tryNext()
+      },
+      { once: false }
+    )
+    tryNext()
+    document.head.appendChild(link)
   }
 }

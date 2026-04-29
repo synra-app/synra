@@ -10,6 +10,7 @@ defineProps<{
 
 const emit = defineEmits<{
   search: []
+  localInstall: []
 }>()
 </script>
 
@@ -21,6 +22,16 @@ const emit = defineEmits<{
       :placeholder="placeholder ?? 'Search plugin package (name or slug)'"
       @keyup.enter="emit('search')"
     />
-    <AppButton :disabled="loading" @click="emit('search')"> Refresh </AppButton>
+    <div class="flex items-center gap-2">
+      <AppButton :disabled="loading" @click="emit('search')"> Refresh </AppButton>
+      <AppButton
+        size="icon"
+        :disabled="loading"
+        title="Install local plugin"
+        @click="emit('localInstall')"
+      >
+        <span class="i-lucide-folder-plus h-4 w-4" />
+      </AppButton>
+    </div>
   </div>
 </template>

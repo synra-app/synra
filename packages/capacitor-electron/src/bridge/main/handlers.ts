@@ -55,9 +55,13 @@ export function createBridgeHandlers(deps: BridgeHandlerDependencies): BridgeHan
       deps.pluginCatalogService.getCatalog(request.payload),
     [BRIDGE_METHODS.pluginInstall]: async (request) =>
       deps.pluginManagementService.install(request.payload),
+    [BRIDGE_METHODS.pluginInstallLocal]: async (request) =>
+      deps.pluginManagementService.installFromLocalPath(request.payload),
     [BRIDGE_METHODS.pluginUninstall]: async (request) =>
       deps.pluginManagementService.uninstall(request.payload),
     [BRIDGE_METHODS.pluginListInstalled]: async () => deps.pluginManagementService.listInstalled(),
+    [BRIDGE_METHODS.pluginRegisterInstalled]: async (request) =>
+      deps.pluginManagementService.registerInstalled(request.payload),
     [BRIDGE_METHODS.pluginSyncToDevice]: async (request) => {
       // SYNRA-COMM::PLUGIN_BRIDGE::SEND::PLUGIN_SYNC_TO_DEVICE
       // Receive side reassembly: SYNRA-COMM::FILE_TRANSFER::RECEIVE::ASSEMBLE_BUFFER (see @synra/protocol PluginBundleTransferAssembly).

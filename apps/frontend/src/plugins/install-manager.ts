@@ -9,6 +9,7 @@ export type PluginInstallStage =
   | 'download-assets'
   | 'validate-assets'
   | 'cache-assets'
+  | 'register-plugin'
   | 'activate-plugin'
 
 export type PluginInstallRecord = {
@@ -21,6 +22,13 @@ export type PluginInstallRecord = {
 }
 
 type PluginInstallMap = Record<string, PluginInstallRecord>
+
+function createDiagRequestId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `plugin-install-${Date.now()}`
+}
 
 function readInstallCache(): PluginInstallMap {
   try {
@@ -58,6 +66,7 @@ export async function installPluginOnClient(options: {
   assetKey?: string
   onStageChange?: (stage: PluginInstallStage) => void
 }): Promise<PluginInstallRecord> {
+  const requestId = createDiagRequestId()
   options.onStageChange?.('sync-catalog')
   if (!window.__synraCapElectron?.invoke) {
     throw new Error('Electron bridge is unavailable. Dynamic plugin installation is not supported.')
@@ -69,25 +78,62 @@ export async function installPluginOnClient(options: {
     version: options.version,
     registryUrl: options.registryUrl
   })
-  options.onStageChange?.('cache-assets')
-  const cache = readInstallCache()
-  const record: PluginInstallRecord = {
-    pluginId: installed.pluginId,
-    packageName: installed.packageName,
-    version: installed.version,
-    checksum: await sha256(`${installed.pluginId}:${installed.version}:${installed.artifactRoot}`),
-    installedAt: installed.installedAt,
-    assetKey: installed.artifactRoot
+  const rollbackInstall = async (): Promise<void> => {
+    await bridge.uninstallPlugin({ pluginId: installed.pluginId }).catch(() => undefined)
+    removeInstalledPluginRecord(installed.pluginId)
   }
-  cache[record.pluginId] = record
-  writeInstallCache(cache)
-  await syncInstalledPlugins([installed])
 
-  options.onStageChange?.('activate-plugin')
-  await activatePlugin(options.router, options.pluginId)
-  return record
+  try {
+    options.onStageChange?.('cache-assets')
+    const cache = readInstallCache()
+    const record: PluginInstallRecord = {
+      pluginId: installed.pluginId,
+      packageName: installed.packageName,
+      version: installed.version,
+      checksum: await sha256(
+        `${installed.pluginId}:${installed.version}:${installed.artifactRoot}`
+      ),
+      installedAt: installed.installedAt,
+      assetKey: installed.artifactRoot
+    }
+    cache[record.pluginId] = record
+    writeInstallCache(cache)
+    options.onStageChange?.('register-plugin')
+    const syncReport = await syncInstalledPlugins([installed], requestId)
+    const failedForCurrent = syncReport.failedPlugins.find(
+      (item) => item.pluginId === installed.pluginId
+    )
+    if (options.pluginId !== installed.pluginId) {
+      throw new Error(
+        `Installed plugin id '${installed.pluginId}' does not match requested id '${options.pluginId}'.`
+      )
+    }
+    const failed = failedForCurrent
+    if (failed) {
+      throw new Error(`Failed to register plugin '${installed.pluginId}': ${failed.message}`)
+    }
+    if (!syncReport.registeredPluginIds.includes(installed.pluginId)) {
+      throw new Error(`Plugin '${installed.pluginId}' is not registered after installation.`)
+    }
+
+    options.onStageChange?.('activate-plugin')
+    await activatePlugin(options.router, installed.pluginId)
+    return record
+  } catch (error) {
+    await rollbackInstall()
+    throw error
+  }
 }
 
 export function getInstalledPluginRecord(pluginId: string): PluginInstallRecord | null {
   return readInstallCache()[pluginId] ?? null
+}
+
+export function removeInstalledPluginRecord(pluginId: string): void {
+  const cache = readInstallCache()
+  if (!cache[pluginId]) {
+    return
+  }
+  delete cache[pluginId]
+  writeInstallCache(cache)
 }

@@ -1,7 +1,7 @@
 import type { Router } from 'vue-router'
 import type { SynraUiManifestMetadata } from '@synra/plugin-sdk'
 import type { InstalledPluginSummary } from '@synra/capacitor-electron'
-import type { RegisteredPlugin } from './types'
+import type { PluginSyncReport, RegisteredPlugin } from './types'
 import { PluginHostFacade } from './plugin-host-facade'
 
 export type { RegisteredPlugin } from './types'
@@ -17,8 +17,15 @@ export function registerPlugin(plugin: RegisteredPlugin): void {
   defaultHostFacade.registerPlugin(plugin)
 }
 
-export function syncInstalledPlugins(plugins: InstalledPluginSummary[]): Promise<void> {
-  return defaultHostFacade.syncInstalledPlugins(plugins)
+export function syncInstalledPlugins(
+  plugins: InstalledPluginSummary[],
+  requestId?: string
+): Promise<PluginSyncReport> {
+  return defaultHostFacade.syncInstalledPlugins(plugins, requestId)
+}
+
+export function isPluginRegistered(pluginId: string): boolean {
+  return defaultHostFacade.isPluginRegistered(pluginId)
 }
 
 export function activatePlugin(router: Router, pluginId: string): Promise<void> {

@@ -1,5 +1,8 @@
-import { join, resolve } from 'pathe'
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { extname } from 'node:path'
+import { homedir } from 'node:os'
+import { existsSync, readFileSync } from 'node:fs'
+import { join, normalize, resolve } from 'pathe'
+import { app, BrowserWindow, ipcMain, protocol, shell } from 'electron'
 import {
   parseSynraMessageEnvelope,
   setSynraHostEnvelopeMainDispatch,
@@ -33,6 +36,28 @@ type MainHooksGlobal = typeof globalThis & {
 }
 
 const mainLogger = createLogger('electron-main')
+const PLUGIN_ASSET_SCHEME = 'synra-plugin'
+const PLUGIN_ROOT_DIR = join(homedir(), '.synra', 'plugins')
+const PLUGIN_INSTALL_STORE_PATH = join(homedir(), '.synra', 'plugins', 'installed.json')
+const PLUGIN_MIME_BY_EXT: Record<string, string> = {
+  '.mjs': 'application/javascript; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.map': 'application/json; charset=utf-8'
+}
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: PLUGIN_ASSET_SCHEME,
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true
+    }
+  }
+])
 
 const WINDOW_CONTROL_CHANNELS = {
   minimize: 'synra:window:minimize',
@@ -44,6 +69,87 @@ const WINDOW_CONTROL_CHANNELS = {
 
 let stopDiscoveryOnQuit: (() => Promise<unknown>) | undefined
 let isQuittingAfterCleanup = false
+
+type InstalledPluginStoreDoc = {
+  installed?: Array<{ pluginId?: string; artifactRoot?: string }>
+}
+
+function resolveInstalledArtifactRoot(pluginId: string): string | null {
+  if (!existsSync(PLUGIN_INSTALL_STORE_PATH)) {
+    return null
+  }
+  try {
+    const parsed = JSON.parse(
+      readFileSync(PLUGIN_INSTALL_STORE_PATH, 'utf-8')
+    ) as InstalledPluginStoreDoc
+    const records = Array.isArray(parsed.installed) ? parsed.installed : []
+    const matched = records.find((item) => item.pluginId === pluginId)
+    if (!matched?.artifactRoot || typeof matched.artifactRoot !== 'string') {
+      return null
+    }
+    return normalize(matched.artifactRoot.replace(/\\/g, '/'))
+  } catch {
+    return null
+  }
+}
+
+function toPluginAssetFilePath(requestUrl: string): string | null {
+  let parsed: URL
+  try {
+    parsed = new URL(requestUrl)
+  } catch {
+    return null
+  }
+  const pluginId = decodeURIComponent(parsed.hostname || '').trim()
+  if (!pluginId) {
+    return null
+  }
+  const artifactRoot = resolveInstalledArtifactRoot(pluginId)
+  if (!artifactRoot) {
+    return null
+  }
+  const relativePath = decodeURIComponent(parsed.pathname || '').replace(/^\/+/, '')
+  if (!relativePath) {
+    return null
+  }
+  const packageRoot = resolve(artifactRoot, 'package')
+  const resolvedFilePath = resolve(packageRoot, relativePath)
+  const normalizedPackageRoot = normalize(packageRoot).toLowerCase()
+  const normalizedResolvedPath = normalize(resolvedFilePath).toLowerCase()
+  if (
+    normalizedResolvedPath !== normalizedPackageRoot &&
+    !normalizedResolvedPath.startsWith(`${normalizedPackageRoot}/`)
+  ) {
+    return null
+  }
+  const ext = extname(resolvedFilePath).toLowerCase()
+  if (!PLUGIN_MIME_BY_EXT[ext]) {
+    return null
+  }
+  if (!existsSync(resolvedFilePath)) {
+    return null
+  }
+  return resolvedFilePath
+}
+
+function registerPluginAssetProtocol(): void {
+  protocol.handle(PLUGIN_ASSET_SCHEME, (request) => {
+    const filePath = toPluginAssetFilePath(request.url)
+    if (!filePath) {
+      return new Response('Not Found', { status: 404 })
+    }
+    const ext = extname(filePath).toLowerCase()
+    const contentType = PLUGIN_MIME_BY_EXT[ext] ?? 'application/octet-stream'
+    const body = readFileSync(filePath)
+    return new Response(body, {
+      status: 200,
+      headers: {
+        'content-type': contentType,
+        'cache-control': 'no-cache'
+      }
+    })
+  })
+}
 
 function buildWindowState(window: BrowserWindow): { maximized: boolean; focused: boolean } {
   return {
@@ -140,7 +246,7 @@ function registerCapacitorElectronBridge(): void {
         await shell.openExternal(url)
       }
     },
-    allowedFileRoots: [app.getAppPath()],
+    allowedFileRoots: [app.getAppPath(), PLUGIN_ROOT_DIR],
     preferencesStorePath: join(app.getPath('userData'), 'synra-preferences-store.json'),
     capacitorVersion: '8.x',
     electronVersion: process.versions.electron,
@@ -234,6 +340,7 @@ function registerSynraHostEnvelopeBridge(): void {
 }
 
 void app.whenReady().then(() => {
+  registerPluginAssetProtocol()
   registerCapacitorElectronBridge()
   registerWindowControlBridge()
   registerSynraHostEnvelopeBridge()

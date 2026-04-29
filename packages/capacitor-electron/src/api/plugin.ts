@@ -16,8 +16,11 @@ import type {
   MethodResultMap,
   OpenExternalOptions,
   PluginInstallOptions,
+  PluginInstallLocalOptions,
   PluginInstallResult,
   PluginListInstalledResult,
+  PluginRegisterInstalledOptions,
+  PluginRegisterInstalledResult,
   PluginSyncToDeviceOptions,
   PluginSyncToDeviceResult,
   PluginUninstallOptions,
@@ -60,6 +63,10 @@ export interface ElectronBridgePlugin {
     options: PluginInstallOptions,
     invokeOptions?: { timeoutMs?: number; signal?: AbortSignal }
   ): Promise<PluginInstallResult>
+  installPluginFromLocalPath(
+    options: PluginInstallLocalOptions,
+    invokeOptions?: { timeoutMs?: number; signal?: AbortSignal }
+  ): Promise<PluginInstallResult>
   uninstallPlugin(
     options: PluginUninstallOptions,
     invokeOptions?: { timeoutMs?: number; signal?: AbortSignal }
@@ -68,6 +75,10 @@ export interface ElectronBridgePlugin {
     timeoutMs?: number
     signal?: AbortSignal
   }): Promise<PluginListInstalledResult>
+  registerInstalledPlugins(
+    options: PluginRegisterInstalledOptions,
+    invokeOptions?: { timeoutMs?: number; signal?: AbortSignal }
+  ): Promise<PluginRegisterInstalledResult>
   syncPluginToDevice(
     options: PluginSyncToDeviceOptions,
     invokeOptions?: { timeoutMs?: number; signal?: AbortSignal }
@@ -170,6 +181,13 @@ export function createElectronBridgePlugin(invoke: BridgeInvoke): ElectronBridge
       ensureObject(options, 'installPlugin options must be an object.')
       return invoke(API_METHODS.installPlugin, options, invokeOptions)
     },
+    async installPluginFromLocalPath(
+      options: PluginInstallLocalOptions,
+      invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {}
+    ): Promise<PluginInstallResult> {
+      ensureObject(options, 'installPluginFromLocalPath options must be an object.')
+      return invoke(API_METHODS.installPluginFromLocalPath, options, invokeOptions)
+    },
     async uninstallPlugin(
       options: PluginUninstallOptions,
       invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {}
@@ -181,6 +199,13 @@ export function createElectronBridgePlugin(invoke: BridgeInvoke): ElectronBridge
       invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {}
     ): Promise<PluginListInstalledResult> {
       return invoke(API_METHODS.listInstalledPlugins, {}, invokeOptions)
+    },
+    async registerInstalledPlugins(
+      options: PluginRegisterInstalledOptions,
+      invokeOptions: { timeoutMs?: number; signal?: AbortSignal } = {}
+    ): Promise<PluginRegisterInstalledResult> {
+      ensureObject(options, 'registerInstalledPlugins options must be an object.')
+      return invoke(API_METHODS.registerInstalledPlugins, options, invokeOptions)
     },
     async syncPluginToDevice(
       options: PluginSyncToDeviceOptions,

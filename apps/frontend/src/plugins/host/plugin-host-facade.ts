@@ -1,9 +1,14 @@
 import type { SynraUiManifestMetadata } from '@synra/plugin-sdk'
 import { getSynraUiManifestMetadata, type SynraPluginManifest } from '@synra/plugin-sdk'
-import { resolveSynraPluginUiEntryAbsolutePath } from '@synra/plugin-system'
+import { createElectronBridgePluginFromGlobal } from '@synra/capacitor-electron/api/plugin'
 import type { Router } from 'vue-router'
 import type { InstalledPluginSummary } from '@synra/capacitor-electron'
-import type { RegisteredPlugin } from './types'
+import type {
+  PluginSyncFailure,
+  PluginSyncReport,
+  RegisteredPlugin,
+  PluginSyncFailureKind
+} from './types'
 import { PluginRegistry } from './plugin-registry'
 import { PluginRouteBinder } from './plugin-route-binder'
 import { PluginLifecycleManager } from './plugin-lifecycle-manager'
@@ -27,36 +32,57 @@ export class PluginHostFacade {
     this.metadataByPluginId.set(plugin.metadata.pluginId, plugin.metadata)
   }
 
-  async syncInstalledPlugins(plugins: InstalledPluginSummary[]): Promise<void> {
+  async syncInstalledPlugins(
+    plugins: InstalledPluginSummary[],
+    requestId?: string
+  ): Promise<PluginSyncReport> {
+    const registeredPluginIds: string[] = []
+    const failedPlugins: PluginSyncFailure[] = []
+    const byPluginId = new Map<string, InstalledPluginSummary>()
     for (const plugin of plugins) {
-      const manifest: SynraPluginManifest = {
-        name: plugin.packageName,
-        version: plugin.version,
-        synra: {
-          title: plugin.title,
-          defaultPage: plugin.defaultPage,
-          icon: plugin.icon,
-          builtin: plugin.builtin,
-          entries: plugin.entries
-        }
+      byPluginId.set(plugin.pluginId, plugin)
+    }
+    if (!window.__synraCapElectron?.invoke) {
+      return {
+        registeredPluginIds,
+        failedPlugins
       }
-      const metadata = getSynraUiManifestMetadata(manifest)
-      if (this.registry.get(metadata.pluginId)) {
+    }
+    const bridge = createElectronBridgePluginFromGlobal()
+    const registerReport = await bridge.registerInstalledPlugins({ plugins, requestId })
+    for (const pluginId of registerReport.registeredPluginIds) {
+      const plugin = byPluginId.get(pluginId)
+      if (!plugin) {
         continue
       }
-
-      const uiEntryPath = resolveSynraPluginUiEntryAbsolutePath(plugin.artifactRoot, plugin.entries)
-      const imported = await import(/* @vite-ignore */ this.toFileModuleUrl(uiEntryPath))
-      const PluginCtor = imported.default as (new () => RegisteredPlugin['plugin']) | undefined
-      if (typeof PluginCtor !== 'function') {
+      const metadata = this.toMetadata(plugin)
+      if (this.registry.get(metadata.pluginId)) {
+        registeredPluginIds.push(metadata.pluginId)
         continue
       }
       this.registerPlugin({
-        plugin: new PluginCtor(),
+        plugin: this.createNoopPlugin(),
         metadata,
         artifactRoot: plugin.artifactRoot
       })
+      registeredPluginIds.push(metadata.pluginId)
     }
+    for (const failed of registerReport.failedPlugins) {
+      failedPlugins.push({
+        pluginId: failed.pluginId,
+        reason: failed.reason as PluginSyncFailureKind,
+        message: failed.message,
+        cleanupRecommended: failed.cleanupRecommended
+      })
+    }
+    return {
+      registeredPluginIds,
+      failedPlugins
+    }
+  }
+
+  isPluginRegistered(pluginId: string): boolean {
+    return Boolean(this.registry.get(pluginId))
   }
 
   activatePlugin(router: Router, pluginId: string): Promise<void> {
@@ -80,11 +106,25 @@ export class PluginHostFacade {
     })
   }
 
-  private toFileModuleUrl(filePath: string): string {
-    const normalized = filePath.replace(/\\/g, '/')
-    if (/^[a-zA-Z]:\//.test(normalized)) {
-      return `file:///${normalized}`
+  private toMetadata(plugin: InstalledPluginSummary): SynraUiManifestMetadata {
+    const manifest: SynraPluginManifest = {
+      name: plugin.packageName,
+      version: plugin.version,
+      synra: {
+        title: plugin.title,
+        defaultPage: plugin.defaultPage,
+        icon: plugin.icon,
+        builtin: plugin.builtin,
+        entries: plugin.entries
+      }
     }
-    return `file://${normalized}`
+    return getSynraUiManifestMetadata(manifest)
+  }
+
+  private createNoopPlugin(): RegisteredPlugin['plugin'] {
+    return {
+      async onPluginEnter(): Promise<void> {},
+      async onPluginExit(): Promise<void> {}
+    }
   }
 }

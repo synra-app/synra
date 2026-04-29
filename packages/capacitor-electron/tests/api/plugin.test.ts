@@ -102,6 +102,36 @@ describe('api/plugin', () => {
     expect(result.plugins).toHaveLength(1)
   })
 
+  test('registers installed plugins through invoke', async () => {
+    const invoke: BridgeInvoke = async (method, payload) => {
+      expect(method).toBe(BRIDGE_METHODS.pluginRegisterInstalled)
+      expect(payload).toMatchObject({
+        plugins: [{ pluginId: 'chat' }]
+      })
+      return {
+        registeredPluginIds: ['chat'],
+        failedPlugins: []
+      } as unknown as MethodResultMap[typeof method]
+    }
+    const plugin = createElectronBridgePlugin(invoke)
+    const result = await plugin.registerInstalledPlugins({
+      plugins: [
+        {
+          pluginId: 'chat',
+          packageName: '@synra-plugin/chat',
+          version: '0.1.2',
+          title: 'Chat',
+          defaultPage: 'home',
+          builtin: false,
+          installedAt: Date.now(),
+          artifactRoot: 'C:/Users/test/.synra/plugins/chat/0.1.2',
+          entries: {}
+        }
+      ]
+    })
+    expect(result.registeredPluginIds).toContain('chat')
+  })
+
   test('starts and lists device discovery through invoke', async () => {
     const invoke: BridgeInvoke = async (method, payload) => {
       if (method === BRIDGE_METHODS.discoveryStart) {

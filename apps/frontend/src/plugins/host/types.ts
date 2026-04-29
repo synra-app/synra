@@ -2,6 +2,24 @@ import type { SynraPlugin, SynraUiManifestMetadata } from '@synra/plugin-sdk'
 
 export type PluginRuntimeState = 'idle' | 'entering' | 'active' | 'exiting'
 
+export type PluginSyncFailureKind =
+  | 'artifactBroken'
+  | 'registrationFailed'
+  | 'activationFailed'
+  | 'cleanupFailed'
+
+export type PluginSyncFailure = {
+  pluginId: string
+  reason: PluginSyncFailureKind
+  message: string
+  cleanupRecommended: boolean
+}
+
+export type PluginSyncReport = {
+  registeredPluginIds: string[]
+  failedPlugins: PluginSyncFailure[]
+}
+
 export type RegisteredPage = {
   pagePath: string
   routeName: string

@@ -132,6 +132,10 @@ export type PluginInstallOptions = {
 
 export type PluginInstallResult = InstalledPluginSummary
 
+export type PluginInstallLocalOptions = {
+  path: string
+}
+
 export type PluginUninstallOptions = {
   pluginId: string
 }
@@ -144,6 +148,25 @@ export type PluginListInstalledOptions = Record<string, never>
 
 export type PluginListInstalledResult = {
   plugins: InstalledPluginSummary[]
+}
+
+export type PluginRegisterFailureReason = 'artifactBroken' | 'registrationFailed'
+
+export type PluginRegisterFailure = {
+  pluginId: string
+  reason: PluginRegisterFailureReason
+  message: string
+  cleanupRecommended: boolean
+}
+
+export type PluginRegisterInstalledOptions = {
+  plugins: InstalledPluginSummary[]
+  requestId?: string
+}
+
+export type PluginRegisterInstalledResult = {
+  registeredPluginIds: string[]
+  failedPlugins: PluginRegisterFailure[]
 }
 
 export type PluginSyncToDeviceOptions = {
@@ -325,8 +348,10 @@ export type MethodPayloadMap = {
   'runtime.execute': RuntimeExecuteOptions
   'plugin.catalog.get': PluginCatalogRequestPayload
   'plugin.install': PluginInstallOptions
+  'plugin.installLocal': PluginInstallLocalOptions
   'plugin.uninstall': PluginUninstallOptions
   'plugin.listInstalled': PluginListInstalledOptions
+  'plugin.registerInstalled': PluginRegisterInstalledOptions
   'plugin.syncToDevice': PluginSyncToDeviceOptions
   'external.open': OpenExternalOptions
   'file.read': ReadFileOptions
@@ -349,8 +374,10 @@ export type MethodResultMap = {
   'runtime.execute': RuntimeExecuteResult
   'plugin.catalog.get': PluginCatalogResult
   'plugin.install': PluginInstallResult
+  'plugin.installLocal': PluginInstallResult
   'plugin.uninstall': PluginUninstallResult
   'plugin.listInstalled': PluginListInstalledResult
+  'plugin.registerInstalled': PluginRegisterInstalledResult
   'plugin.syncToDevice': PluginSyncToDeviceResult
   'external.open': OperationResult
   'file.read': ReadFileResult

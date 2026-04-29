@@ -2,6 +2,7 @@ export {
   activatePlugin,
   deactivatePlugin,
   listPlugins,
+  isPluginRegistered,
   openPluginPage,
   registerPlugin,
   syncInstalledPlugins,

@@ -27,10 +27,19 @@ watch(
 )
 
 const actionLabel = computed(() => {
-  if (props.plugin.installState === 'installing') {
+  if (props.plugin.status === 'installing') {
     return 'Installing...'
   }
-  return props.plugin.status === 'installed' ? 'Open' : 'Install'
+  if (props.plugin.status === 'registering') {
+    return 'Registering...'
+  }
+  if (props.plugin.status === 'removing') {
+    return 'Removing...'
+  }
+  if (props.plugin.status === 'broken') {
+    return 'Repair'
+  }
+  return props.plugin.status === 'ready' ? 'Open' : 'Install'
 })
 </script>
 
@@ -69,13 +78,17 @@ const actionLabel = computed(() => {
       <AppButton
         variant="solid"
         block
-        :disabled="plugin.installState === 'installing'"
+        :disabled="
+          plugin.status === 'installing' ||
+          plugin.status === 'registering' ||
+          plugin.status === 'removing'
+        "
         @click="emit('open', plugin)"
       >
         {{ actionLabel }}
       </AppButton>
-      <p v-if="plugin.installState === 'failed'" class="mt-2 text-xs text-error-7">
-        Install failed. Try installing again.
+      <p v-if="plugin.failure" class="mt-2 text-xs text-error-7">
+        {{ plugin.failure.message }}
       </p>
     </div>
   </article>

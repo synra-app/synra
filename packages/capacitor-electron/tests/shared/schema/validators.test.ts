@@ -47,6 +47,7 @@ describe('shared/schema/validators', () => {
     expect(isSupportedProtocolVersion('9.9')).toBe(false)
     expect(isSupportedMethod(BRIDGE_METHODS.fileRead)).toBe(true)
     expect(isSupportedMethod(BRIDGE_METHODS.discoveryStart)).toBe(true)
+    expect(isSupportedMethod(BRIDGE_METHODS.pluginRegisterInstalled)).toBe(true)
     expect(isSupportedMethod(BRIDGE_METHODS.connectionOpenTransport)).toBe(true)
     expect(isSupportedMethod(BRIDGE_METHODS.connectionSendMessage)).toBe(true)
     expect(isSupportedMethod(BRIDGE_METHODS.connectionSendLanEvent)).toBe(true)
