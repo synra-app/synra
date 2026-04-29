@@ -1,6 +1,6 @@
 # Synra 插件系统（实现规范）
 
-本目录描述从零构建「发现 → 安装 → 桌面激活 → 手机同步」插件系统时应遵循的目标能力、模块边界、协议与实施顺序。**不以既有代码为准**，实现时可对照本文校验完备性。
+本目录描述从零构建「发现 → 安装 → 桌面激活 → 手机同步」插件系统时应遵循的目标能力、模块边界、协议与实施顺序。**以本文档为能力规范**；对照实现时可用 **`@synra/protocol`**（分块与 payload 类型）、**`@synra/hooks`**（`useSynraEnvelope` / `useSynraSystemEnvelope` / `useSynraPluginEnvelope` / `useFileTransfer` 等）作为一致性校验锚点。
 
 ## 能力范围
 
@@ -18,9 +18,13 @@
 
 ## 与跨端通讯 / hooks
 
-日常业务侧收发 Synra 消息应使用 **`useSynraSystemEnvelope`**（系统侧逻辑事件名）或 **`useSynraPluginEnvelope`**（插件事件）；需完整控制线上 `event` 字符串时使用底层 **`useSynraEnvelope`**（或 `@synra/hooks/envelope`）。三层差异与 **`_synra.`** / **`_plugin.{slug}.`** 前缀规则见 [10-synra-envelope-hooks-and-prefixes.md](./10-synra-envelope-hooks-and-prefixes.md)。
+日常业务侧收发 Synra 消息：系统侧用 **`useSynraSystemEnvelope`**，插件侧用 **`useSynraPluginEnvelope`**，需完整控制线上 `event` 时用 **`useSynraEnvelope`**。**`_synra.`** / **`_plugin.{slug}.`** 前缀规则见 [10-synra-envelope-hooks-and-prefixes.md](./10-synra-envelope-hooks-and-prefixes.md)。
 
-宿主进程、渲染进程与原生桥之间的**消息信封**、白名单字段及 **Electron IPC** 等约定见 [communication-use-event-refactor/README.md](../communication-use-event-refactor/README.md)。**宿主侧事件仅通过实时通道投递**；插件系统实现遵守本节 hooks 与前缀约定即可，传输与信封细节以前述文档为准。
+**消息信封**白名单、宿主 / 渲染 / 原生桥与 **Electron IPC** 见 [communication-use-event-refactor/README.md](../communication-use-event-refactor/README.md)。
+
+## 文件传输与插件包同步
+
+跨设备大对象与插件包推送的数据面事件族为 **`file.transfer.*`**（唯一）；**`transferId` 与信封 `requestId` 的分工**、**payload** 形状、插件侧逻辑名与线上 `_plugin.{slug}.file.transfer.*` 的关系以 [file-transfer](../file-transfer/) 与 [cross-platform-communication-map/README.md](../cross-platform-communication-map/README.md) 为准。手机同步业务流程见 [05-sync-to-mobile.md](./05-sync-to-mobile.md)。本目录不重复 payload 字段表。
 
 ## 与独立 npm 包的关系
 
@@ -57,6 +61,6 @@
 8. [插件 importx 加载器（Node 单例与 layer 形参）](./08-plugin-import-loader.md)
 9. [前端设置：Plugin 页签与 npm 源](./09-frontend-plugin-settings.md)
 10. [useSynraEnvelope / useSynraSystemEnvelope / 前缀与插件 event 约定](./10-synra-envelope-hooks-and-prefixes.md)
-11. [文件传输封装（分块会话、hooks 与 plugin-sdk）](../file-transfer/README.md)
+11. [文件传输封装（分块会话、hooks 与协议）](../file-transfer/README.md)
 
 参考实现仓库：[synra-app/synra-plugin-chat](https://github.com/synra-app/synra-plugin-chat)（多入口 `exports` 与 `synra.entries`）。

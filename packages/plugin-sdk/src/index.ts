@@ -86,11 +86,6 @@ export type { SynraPluginManifest, SynraPluginManifestEntries, SynraPluginEntryK
 export { parsePluginIdFromPackageName }
 
 export { normalizePluginPagePath, pluginFilePathToPagePath } from './page-path'
-export {
-  createSynraPluginEnvelope,
-  type SynraPluginEnvelope,
-  type SynraPluginEnvelopeSpec
-} from './transport/create-synra-plugin-envelope'
 
 export type {
   PluginWorkerActionInvokeInput,

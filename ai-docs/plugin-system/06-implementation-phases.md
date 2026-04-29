@@ -26,8 +26,9 @@
 
 ## Phase 5 — 手机同步
 
-- 定义 **`file.transfer.*`** 消息（见 [file-transfer](../file-transfer/README.md)）；发送端从 `artifactRoot` 读 tgz 分片，`payload.kind === 'plugin-bundle'`。
-- 接收端：组包、校验、落盘、复用 Phase 4 激活；可写目录抽象与错误面。
+- 定义并贯通 **`file.transfer.*`** 数据面（见 [file-transfer](../file-transfer/README.md)）：发送端从 `artifactRoot` 读 **`package.tgz`**（或等价位流），按协议分块后经 **`file.transfer.request` / `chunk` / `complete`** 发出，`payload.kind === 'plugin-bundle'`。
+- 接收端：组包（如 `PluginBundleTransferAssembly`）、校验、落盘、复用 Phase 4 激活；可写目录抽象与错误面。
+- **完成定义（可验收）**：端到端仅使用 **`file.transfer.*`**；实现中与 **`SYNRA-COMM::FILE_TRANSFER::*`** 注释一致（NodeId 索引见 [cross-platform-communication-map/README.md](../cross-platform-communication-map/README.md)）。
 
 ## Phase 6 — 观测、回滚与产品化
 

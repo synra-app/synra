@@ -24,6 +24,10 @@
 - 显式用户操作：在已选设备上「同步此插件」。
 - 隐式：若产品需要，可在成功连接后按策略拉取 catalog 差异后自动推（需防刷与确认策略）。
 
+## 实现对照（可选读）
+
+与 [file-transfer/02-hooks-and-plugin-sdk.md](../file-transfer/02-hooks-and-plugin-sdk.md) 一致：**`@synra/protocol`** 提供 `iteratePluginBundleChunks`、`PluginBundleTransferAssembly`、`fileTransferChunkCount` 等；宿主或工具链若发送裸逻辑 `event`，可用 **`@synra/hooks`** 的 **`useFileTransfer`**（内部基于 `useSynraEnvelope`）；插件 UI 侧用 **`useSynraPluginEnvelope`** + 逻辑名 **`file.transfer.*`**（线上带 **`_plugin.{slug}.`** 前缀）。
+
 ## 桥接 / 宿主侧（发送端）建议流程
 
 1. 根据 `pluginId` 查本地 install 记录，得到 `artifactRoot` 与 `version`。
@@ -44,6 +48,7 @@
 ## 失败与重试
 
 - 分片丢、序错、timeout：可要求**同 version 全量重传**；实现上为每轮传参 `syncSessionId` 避免块混用。
+- 用户取消或会话中途终止：发送 **`file.transfer.abort`**（见 [file-transfer/04-protocol-events-and-payload.md](../file-transfer/04-protocol-events-and-payload.md)）。
 - 空间不足、签名校验失败：不进入激活，保留上**一版**可回滚（见 [plugin-page-loading-and-mobile-install.md](../plugin-chat-sdk/plugin-page-loading-and-mobile-install.md) 中的回滚建议）。
 
 ## 可选方案：手机落盘位置

@@ -18,13 +18,14 @@
 
 - **插件与宿主共用同一套逻辑事件名**：协议层始终是 **`file.transfer.*`**。插件内使用 **`useSynraPluginEnvelope`** 时，传入的 `event` 仍为 **`file.transfer.chunk`** 等逻辑名；线网自动带 **`_plugin.{slug}.`** 前缀，与 **`useSynraEnvelope` / `useSynraSystemEnvelope`** 的前缀规则同一套机制，**不需要**为插件另做传输协议或额外字段。
 - **底层仍为信封收发**：**`useFileTransfer`** 内部基于 **`useSynraEnvelope`**，对逻辑名 **`file.transfer.*`** 提供薄封装；宿主侧亦可 **`useSynraPluginEnvelope` + 逻辑名** 自行发送，或直接使用 **`useSynraEnvelope`** 发送裸逻辑名。
+- **插件命名空间**：插件身份**只**体现在 **`SynraMessageEnvelope.event`**（线上一帧的完整 `event` 字符串，含 **`_plugin.{slug}.`** 前缀）上；通过 **`useSynraPluginEnvelope`** 传入逻辑名即可，由 hooks 映射到 **`useSynraEnvelope`** 发送。**不在**信封或 payload 里为「谁在传」单独增加字段。若日后增加 **`usePluginFileTransfer`**，也应仅为「对逻辑 **`file.transfer.*`** 做与 **`useSynraPluginEnvelope`** 一致的前缀封装」，而非新协议。
 - **协议无关工具**：`iteratePluginBundleChunks`、`PluginBundleTransferAssembly`、`fileTransferChunkCount` 由 **`@synra/protocol`** 提供；**`@synra/hooks`** 再导出以便应用侧单一入口。
 - **hooks 职责**：维护会话状态（进度数据、错误、取消）、把 Blob / 文件句柄（或主进程代理传入的描述符）转为分块 payload、订阅对端 `chunk` / `complete`；进度 **UI 可后置**，进度 **数据**本期就要可用于日志或可观测接口。
 - **Electron**：大文件读盘、分片节流可在 **主进程**完成（例如 `pluginSyncToDevice` bridge 使用 `iteratePluginBundleChunks`），经既有 bridge 把「已切好的块」交给连接层发送；细节由宿主选型，本目录只要求**边界清晰**。
 
 ## `plugin-sdk`
 
-- **职责**：为第三方插件提供稳定入口，例如 **`transfer.send(options)`**、**`transfer.onIncoming(handler)`**，内部调用与宿主应用相同的会话实现（`file.transfer.*` + `kind`）。
+- **当前**：第三方插件应使用 **`useSynraPluginEnvelope`** 配合 **`@synra/protocol`** 中的 **`FileTransfer*`** 类型收发；或直接从 **`@synra/hooks`** 使用 **`useFileTransfer`**、`iteratePluginBundleChunks`、`PluginBundleTransferAssembly` 等与宿主相同的会话工具（见 `packages/hooks/src/index.ts` 导出）。**`@synra/plugin-sdk`** 尚未提供独立的 **`transfer.send`** / **`onIncoming`** 薄封装；若日后增加，仅作为 DX 包装，**不改变** `file.transfer.*` 事件族与[信封白名单](../cross-platform-communication-map/message-envelope-and-validation.md)。
 - **约束**：插件只能使用宿主允许的 **`kind`**、大小上限与目标设备集合；不得在插件内绕过宿主自行拼装未登记的 `event`（防止滥用传输通道）。
 
 ## 协议（`packages/protocol`）

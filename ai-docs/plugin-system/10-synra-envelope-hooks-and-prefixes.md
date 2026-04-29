@@ -22,6 +22,10 @@ LAN 有线路径仍只接受 `packages/protocol` 中注册的 `LanWireEventName`
 
 包名、`pluginId`、分层目录仍见 [01-package-and-manifest.md](./01-package-and-manifest.md) 与 [07-plugin-runtime-layers.md](./07-plugin-runtime-layers.md)。本节只约束 **事件名字符串在 hooks 三层的拼法**。
 
+## 与 `file.transfer.*`
+
+文件传输协议中的**逻辑** `event` 名为 **`file.transfer.request`** / **`chunk`** / **`complete`** / **`abort`**（及可选 **`progress`**）。插件代码经 **`useSynraPluginEnvelope`** 收发时仍传入上述逻辑名；线上 `event` 为 **`_plugin.{slug}.file.transfer.*`**。**不在**信封或 payload 内为插件身份增加单独字段；若将来引入 **`usePluginFileTransfer`**，也只应对 **`file.transfer.*`** 套用与 **`useSynraPluginEnvelope`** 相同的前缀逻辑。`transferId`、`payload` 字段及 **`requestId` 与会话 id 的分工**见 [file-transfer/04-protocol-events-and-payload.md](../file-transfer/04-protocol-events-and-payload.md)，本节不重复字段表。
+
 ## 实现位置（代码导航）
 
 - 前缀与 slug 规范化：`packages/envelope/src/event-prefix.ts`
