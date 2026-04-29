@@ -11,9 +11,10 @@ export type SynraMessageEnvelope = {
   timestamp?: number
 }
 
-/** Inbound frame unified across LAN, TCP connection, or Electron host IPC. */
-export type SynraInboundEnvelope = SynraMessageEnvelope & {
+/** Inbound frame unified across LAN, TCP connection, or Electron host IPC (TS-only; not on the wire). */
+export type SynraInboundEnvelope = {
   kind: 'lan' | 'connection' | 'host'
+  envelope: SynraMessageEnvelope
 }
 
 /** Payload shape used by the connection `sendMessage` adapter path. */

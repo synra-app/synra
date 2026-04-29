@@ -20,17 +20,18 @@ export function matchesFilter(
   if (!filter) {
     return true
   }
-  if (filter.requestId !== undefined && filter.requestId !== message.requestId) {
+  const e = message.envelope
+  if (filter.requestId !== undefined && filter.requestId !== e.requestId) {
     return false
   }
-  if (filter.replyRequestId !== undefined && filter.replyRequestId !== message.replyRequestId) {
+  if (filter.replyRequestId !== undefined && filter.replyRequestId !== e.replyRequestId) {
     return false
   }
-  if (filter.event !== undefined && filter.event !== message.event) {
+  if (filter.event !== undefined && filter.event !== e.event) {
     return false
   }
   if (filter.deviceId !== undefined) {
-    if (filter.deviceId !== message.from && filter.deviceId !== message.target) {
+    if (filter.deviceId !== e.from && filter.deviceId !== e.target) {
       return false
     }
   }

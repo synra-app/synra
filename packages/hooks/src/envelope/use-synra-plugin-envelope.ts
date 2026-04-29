@@ -9,6 +9,10 @@ import {
   type SynraInboundFilter,
   type UseSynraEnvelopeRequestOptions
 } from './use-synra-envelope-helpers'
+import {
+  synraInboundEnvelopeWithEnvelope,
+  synraMessageEnvelopeWithEvent
+} from './synra-inbound-envelope-utils'
 import { useSynraEnvelope } from './use-synra-envelope'
 
 export type { SynraInboundEnvelope, SynraMessageEnvelope } from '@synra/envelope'
@@ -26,11 +30,11 @@ export function useSynraPluginEnvelope(pluginPackageNameOrSlug: string) {
   const ev = useSynraEnvelope()
 
   function mapPluginInbound(m: SynraInboundEnvelope): SynraInboundEnvelope | null {
-    const p = toLogicalFromPluginWireEvent(m.event)
+    const p = toLogicalFromPluginWireEvent(m.envelope.event)
     if (!p || p.slug !== slug) {
       return null
     }
-    return { ...m, event: p.event }
+    return synraInboundEnvelopeWithEnvelope(m, synraMessageEnvelopeWithEvent(m.envelope, p.event))
   }
 
   async function send(
@@ -41,7 +45,7 @@ export function useSynraPluginEnvelope(pluginPackageNameOrSlug: string) {
       event: toPluginWireEvent(slug, partial.event)
     } as Parameters<ReturnType<typeof useSynraEnvelope>['send']>[0])
     const parsed = toLogicalFromPluginWireEvent(out.event)
-    return { ...out, event: parsed?.event ?? out.event }
+    return synraMessageEnvelopeWithEvent(out, parsed?.event ?? out.event)
   }
 
   function subscribe(

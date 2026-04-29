@@ -20,27 +20,30 @@ export function createMessageListenersRegistry(): MessageListenersRegistry {
         eventName: event.event,
         timestamp: event.timestamp
       }),
-      requestId: event.requestId,
-      event: event.event,
-      from: event.from,
-      target: event.target,
-      replyRequestId: event.replyRequestId,
-      payload: event.payload,
-      timestamp: event.timestamp
+      envelope: {
+        requestId: event.requestId,
+        event: event.event,
+        from: event.from,
+        target: event.target,
+        replyRequestId: event.replyRequestId,
+        payload: event.payload,
+        timestamp: event.timestamp
+      }
     }
 
     for (const listener of listeners) {
-      if (listener.filter?.requestId && listener.filter.requestId !== normalized.requestId) {
+      const e = normalized.envelope
+      if (listener.filter?.requestId && listener.filter.requestId !== e.requestId) {
         continue
       }
       if (
         listener.filter?.deviceId &&
-        listener.filter.deviceId !== normalized.from &&
+        listener.filter.deviceId !== e.from &&
         listener.filter.deviceId !== deviceId
       ) {
         continue
       }
-      if (listener.filter?.event && listener.filter.event !== normalized.event) {
+      if (listener.filter?.event && listener.filter.event !== e.event) {
         continue
       }
       void Promise.resolve(listener.handler(normalized))

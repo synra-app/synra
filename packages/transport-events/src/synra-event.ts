@@ -7,7 +7,7 @@ export type SynraWireEventContext = {
   from: string
   target: string
   replyRequestId?: string
-  /** Inner wire payload (same role as `SynraLanWireEvent.payload` in hooks). */
+  /** Inner wire payload (same role as `SynraLanWireEvent.envelope.payload` in hooks). */
   payload: unknown
   transport: string
 }

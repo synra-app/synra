@@ -59,35 +59,25 @@ export function useSynraEnvelope() {
 
   function toInboundFromConnection(m: SynraConnectionMessage): SynraInboundEnvelope {
     return {
-      requestId: m.requestId,
-      event: m.event,
-      target: m.target,
-      from: m.from,
-      replyRequestId: m.replyRequestId,
-      payload: m.payload,
-      timestamp: m.timestamp,
-      kind: 'connection'
+      kind: 'connection',
+      envelope: m.envelope
     }
   }
 
   function toInboundFromLan(w: SynraLanWireEvent): SynraInboundEnvelope {
     return {
-      requestId: w.requestId,
-      event: w.event,
-      target: w.target,
-      from: w.from,
-      replyRequestId: w.replyRequestId,
-      payload: w.payload,
-      timestamp: w.timestamp,
-      kind: 'lan'
+      kind: 'lan',
+      envelope: w.envelope
     }
   }
 
   function toInboundFromHost(m: SynraMessageEnvelope): SynraInboundEnvelope {
     return {
-      ...m,
-      timestamp: m.timestamp ?? Date.now(),
-      kind: 'host'
+      kind: 'host',
+      envelope: {
+        ...m,
+        timestamp: m.timestamp ?? Date.now()
+      }
     }
   }
 
@@ -170,7 +160,10 @@ export function useSynraEnvelope() {
       runtime.onLanWireEvent(
         (ev) => {
           const m = toInboundFromLan(ev)
-          if (filter?.replyRequestId !== undefined && filter.replyRequestId !== m.replyRequestId) {
+          if (
+            filter?.replyRequestId !== undefined &&
+            filter.replyRequestId !== m.envelope.replyRequestId
+          ) {
             return
           }
           if (matchesFilter(m, filter)) {
@@ -188,7 +181,10 @@ export function useSynraEnvelope() {
       runtime.onMessage(
         (msg) => {
           const m = toInboundFromConnection(msg)
-          if (filter?.replyRequestId !== undefined && filter.replyRequestId !== m.replyRequestId) {
+          if (
+            filter?.replyRequestId !== undefined &&
+            filter.replyRequestId !== m.envelope.replyRequestId
+          ) {
             return
           }
           if (matchesFilter(m, filter)) {
@@ -212,7 +208,10 @@ export function useSynraEnvelope() {
             return
           }
           const m = toInboundFromHost(parsed)
-          if (filter?.replyRequestId !== undefined && filter.replyRequestId !== m.replyRequestId) {
+          if (
+            filter?.replyRequestId !== undefined &&
+            filter.replyRequestId !== m.envelope.replyRequestId
+          ) {
             return
           }
           if (matchesFilter(m, filter)) {
@@ -263,7 +262,7 @@ export function useSynraEnvelope() {
       }
       const off = subscribe(
         (m) => {
-          if (m.replyRequestId === requestId) {
+          if (m.envelope.replyRequestId === requestId) {
             cleanup()
             resolve(m)
           }

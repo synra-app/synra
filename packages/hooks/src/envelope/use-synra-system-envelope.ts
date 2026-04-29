@@ -5,6 +5,10 @@ import {
   type SynraInboundFilter,
   type UseSynraEnvelopeRequestOptions
 } from './use-synra-envelope-helpers'
+import {
+  synraInboundEnvelopeWithEnvelope,
+  synraMessageEnvelopeWithEvent
+} from './synra-inbound-envelope-utils'
 import { useSynraEnvelope } from './use-synra-envelope'
 
 export type { SynraInboundEnvelope, SynraMessageEnvelope } from '@synra/envelope'
@@ -12,10 +16,10 @@ export type { SynraEnvelopeRuntimeSurface } from '@synra/envelope'
 export type { SynraInboundFilter, UseSynraEnvelopeRequestOptions }
 
 function mapSystemInbound(m: SynraInboundEnvelope): SynraInboundEnvelope {
-  return {
-    ...m,
-    event: toLogicalFromSystemWireEvent(m.event)
-  }
+  return synraInboundEnvelopeWithEnvelope(
+    m,
+    synraMessageEnvelopeWithEvent(m.envelope, toLogicalFromSystemWireEvent(m.envelope.event))
+  )
 }
 
 /**
@@ -34,7 +38,7 @@ export function useSynraSystemEnvelope() {
       ...partial,
       event: toSystemWireEvent(partial.event)
     } as Parameters<ReturnType<typeof useSynraEnvelope>['send']>[0])
-    return { ...out, event: toLogicalFromSystemWireEvent(out.event) }
+    return synraMessageEnvelopeWithEvent(out, toLogicalFromSystemWireEvent(out.event))
   }
 
   function subscribe(

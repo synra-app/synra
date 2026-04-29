@@ -128,7 +128,7 @@ test('useSynraSystemEnvelope delivers connection-layer messages after connect', 
   const seen: unknown[] = []
   const cleanup = synra.subscribe(
     (message) => {
-      seen.push(message.payload)
+      seen.push(message.envelope.payload)
     },
     { event: 'custom.chat.text' }
   )

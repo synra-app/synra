@@ -134,7 +134,7 @@ test('useSynraSystemEnvelope request resolves when LAN reply matches replyReques
     payload: { ping: true }
   })
 
-  expect(inbound.replyRequestId).toBeDefined()
+  expect(inbound.envelope.replyRequestId).toBeDefined()
   expect(inbound.kind).toBe('lan')
 
   resetHooksRuntimeOptions()

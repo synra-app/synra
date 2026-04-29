@@ -1,4 +1,5 @@
-import type { SynraLanConnectType } from '@synra/capacitor-device-connection'
+import type { ConnectionTransport, SynraLanConnectType } from '@synra/capacitor-device-connection'
+import type { SynraMessageEnvelope } from '@synra/envelope'
 import type { LanWireEventName } from '@synra/protocol'
 
 export type { SynraConnectionSendInput, SynraLanWireSendInput } from '@synra/envelope'
@@ -60,15 +61,10 @@ export type SynraDiscoveryStartOptions = {
   probeConnectWirePayload?: Record<string, unknown>
 }
 
+/** TCP path: listener dedupe id + whitelist envelope (runtime only). */
 export type SynraConnectionMessage = {
   eventId: string
-  requestId: string
-  event: string
-  target: string
-  from: string
-  replyRequestId?: string
-  payload: unknown
-  timestamp: number
+  envelope: SynraMessageEnvelope
 }
 
 export type SynraConnectionFilter = {
@@ -92,15 +88,10 @@ export type TransportBroadcastMessageInput = {
   from?: string
 }
 
+/** LAN wire path: transport metadata + whitelist envelope (runtime only). */
 export type SynraLanWireEvent = {
-  requestId: string
-  event: LanWireEventName
-  target: string
-  from: string
-  replyRequestId?: string
-  payload: unknown
-  timestamp: number
-  transport: 'tcp'
+  transport: ConnectionTransport
+  envelope: SynraMessageEnvelope & { event: LanWireEventName }
 }
 
 export type SynraLanWireFilter = {
