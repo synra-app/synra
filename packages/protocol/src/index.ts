@@ -1,6 +1,15 @@
+import type {
+  FileTransferAbortPayload,
+  FileTransferChunkPayload,
+  FileTransferCompletePayload,
+  FileTransferProgressPayload,
+  FileTransferRequestPayload
+} from './file-transfer.js'
+
 export * from './lan-events'
 export * from './event-names'
 export * from './discovery-timing'
+export * from './file-transfer'
 
 export const PROTOCOL_VERSION = '1.0' as const
 
@@ -57,9 +66,11 @@ export type RuntimeMessageType =
 export type PluginSyncMessageType =
   | 'plugin.catalog.request'
   | 'plugin.catalog.response'
-  | 'plugin.bundle.request'
-  | 'plugin.bundle.chunk'
-  | 'plugin.bundle.complete'
+  | 'file.transfer.request'
+  | 'file.transfer.chunk'
+  | 'file.transfer.complete'
+  | 'file.transfer.abort'
+  | 'file.transfer.progress'
 
 export type ProtocolMessageType = RuntimeMessageType | PluginSyncMessageType
 
@@ -337,26 +348,6 @@ export type PluginCatalogResponsePayload = {
   generatedAt: number
 }
 
-export type PluginBundleRequestPayload = {
-  pluginId: string
-  version: string
-}
-
-export type PluginBundleChunkPayload = {
-  pluginId: string
-  version: string
-  chunkIndex: number
-  totalChunks: number
-  chunkBase64: string
-}
-
-export type PluginBundleCompletePayload = {
-  pluginId: string
-  version: string
-  totalChunks: number
-  sha256?: string
-}
-
 export type ProtocolPayloadByType = {
   'runtime.request': RuntimeRequestPayload
   'runtime.received': RuntimeReceivedPayload
@@ -365,9 +356,11 @@ export type ProtocolPayloadByType = {
   'runtime.error': RuntimeErrorPayload
   'plugin.catalog.request': PluginCatalogRequestPayload
   'plugin.catalog.response': PluginCatalogResponsePayload
-  'plugin.bundle.request': PluginBundleRequestPayload
-  'plugin.bundle.chunk': PluginBundleChunkPayload
-  'plugin.bundle.complete': PluginBundleCompletePayload
+  'file.transfer.request': FileTransferRequestPayload
+  'file.transfer.chunk': FileTransferChunkPayload
+  'file.transfer.complete': FileTransferCompletePayload
+  'file.transfer.abort': FileTransferAbortPayload
+  'file.transfer.progress': FileTransferProgressPayload
 }
 
 type MessageByType<K extends keyof ProtocolPayloadByType> = ProtocolEnvelope<
@@ -385,9 +378,11 @@ export type SynraRuntimeMessage =
 export type SynraPluginSyncMessage =
   | MessageByType<'plugin.catalog.request'>
   | MessageByType<'plugin.catalog.response'>
-  | MessageByType<'plugin.bundle.request'>
-  | MessageByType<'plugin.bundle.chunk'>
-  | MessageByType<'plugin.bundle.complete'>
+  | MessageByType<'file.transfer.request'>
+  | MessageByType<'file.transfer.chunk'>
+  | MessageByType<'file.transfer.complete'>
+  | MessageByType<'file.transfer.abort'>
+  | MessageByType<'file.transfer.progress'>
 
 export type SynraProtocolMessage = SynraRuntimeMessage | SynraPluginSyncMessage
 

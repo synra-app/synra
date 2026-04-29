@@ -2,8 +2,10 @@ import { expect, test } from 'vite-plus/test'
 import {
   DEFAULT_SYNRA_SCAN_BUDGET_MS,
   PROTOCOL_VERSION,
+  PluginBundleTransferAssembly,
   createMessage,
   createProtocolMessage,
+  iteratePluginBundleChunks,
   synraDiscoveryTimeoutsFromBudget
 } from '../src/index.ts'
 import {
@@ -76,6 +78,53 @@ test('runtime.finished failed status carries structured error', () => {
   const payload = finished.payload as { status?: string; error?: { code?: string } }
   expect(payload.status).toBe('failed')
   expect(payload.error?.code).toBe('RUNTIME_EXECUTION_FAILED')
+})
+
+test('plugin-bundle file transfer chunks round-trip through assembly', () => {
+  const transferId = 't1'
+  const encoder = new TextEncoder()
+  const raw = encoder.encode('hello-world-payload')
+  const chunks = [
+    ...iteratePluginBundleChunks({
+      transferId,
+      buffer: raw,
+      chunkSize: 4,
+      pluginId: 'p1',
+      version: '1.0.0'
+    })
+  ]
+  expect(chunks.length).toBeGreaterThan(0)
+
+  const asm = new PluginBundleTransferAssembly(transferId)
+  for (const c of chunks) {
+    expect(asm.push(c)).toBeUndefined()
+  }
+  expect(asm.isComplete()).toBe(true)
+  const snap = asm.getProgressSnapshot()
+  expect(snap.chunksReceived).toBe(chunks.length)
+  expect(snap.totalChunks).toBe(chunks[0]?.totalChunks)
+  expect(snap.bytesReceived).toBeGreaterThan(0)
+  const decoded = new TextDecoder().decode(asm.concat())
+  expect(decoded).toBe('hello-world-payload')
+})
+
+test('createProtocolMessage supports file.transfer.chunk', () => {
+  const m = createProtocolMessage({
+    requestId: 'r1',
+    event: 'file.transfer.chunk',
+    timestamp: Date.now(),
+    payload: {
+      transferId: 'tf-1',
+      kind: 'plugin-bundle',
+      pluginId: 'pi',
+      version: '1',
+      chunkIndex: 0,
+      totalChunks: 1,
+      chunkBase64: Buffer.from('x').toString('base64')
+    }
+  })
+  expect(m.event).toBe('file.transfer.chunk')
+  expect(m.payload.kind).toBe('plugin-bundle')
 })
 
 test('LAN wire event whitelist stays aligned with shared constants', () => {

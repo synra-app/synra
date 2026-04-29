@@ -17,9 +17,8 @@ flowchart LR
   member[Member] --> catalogReq[plugin.catalog.request]
   catalogReq --> host[Host]
   host --> catalogResp[plugin.catalog.response]
-  member --> bundleReq[plugin.bundle.request]
-  bundleReq --> host
-  host --> bundleResp[plugin.bundle.response]
+  member --> transferWire[file.transfer.*]
+  transferWire --> host
   member --> rulesReq[plugin.rules.request]
   rulesReq --> host
   host --> rulesResp[plugin.rules.response]

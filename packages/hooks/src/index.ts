@@ -62,6 +62,19 @@ export {
   pairedDevicesStorageEpoch
 } from './runtime/paired-devices-storage-epoch'
 export {
+  fileTransferChunkCount,
+  iteratePluginBundleChunks,
+  PluginBundleTransferAssembly,
+  useFileTransfer,
+  type PluginBundleTransferProgressSnapshot,
+  type FileTransferAbortPayload,
+  type FileTransferChunkPayload,
+  type FileTransferCompletePayload,
+  type FileTransferKind,
+  type FileTransferProgressPayload,
+  type FileTransferRequestPayload
+} from './file-transfer/index'
+export {
   getPairAwaitingAcceptDeviceIds,
   setPairAwaitingAccept
 } from './runtime/pair-awaiting-accept'

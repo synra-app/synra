@@ -5,9 +5,14 @@
 ## 统一注释规则
 
 - 前缀：`SYNRA-COMM::<Domain>::<Stage>::<NodeId>`
-- Domain：`TCP`、`UDP_DISCOVERY`、`DEVICE_HANDSHAKE`、`PLUGIN_BRIDGE`、`MESSAGE_ENVELOPE`
+- Domain：`TCP`、`UDP_DISCOVERY`、`DEVICE_HANDSHAKE`、`PLUGIN_BRIDGE`、`MESSAGE_ENVELOPE`、**`FILE_TRANSFER`**
 - Stage：`CONNECT`、`SEND`、`RECEIVE`、`ACK`、`HEARTBEAT`、`CLOSE`、`ERROR`
 - 约束：同一逻辑节点在三端必须复用同一 `Domain/Stage/NodeId`
+
+### `FILE_TRANSFER` 说明
+
+- **含义**：跨设备**大对象分块会话**（`transferId`、chunk、assemble），语义仅在 **`payload`** 内表达；**信封字段仍遵守白名单**。
+- **主要落点**：TypeScript（`@synra/protocol`、`@synra/hooks`、`apps/electron` bridge）；原生连接层若无独立「文件模块」，可不新增源码文件，注释仍可标在**会话组装或转发路径**上以便检索。
 
 ## 常用 NodeId
 
@@ -27,6 +32,10 @@
 - `SYNRA_ENVELOPE_SUBSCRIBE`（MESSAGE_ENVELOPE / RECEIVE）
 - `USE_SYNRA_EVENT_POST`（MESSAGE_ENVELOPE / SEND）
 - `ELECTRON_HOST_ENVELOPE_IPC`（MESSAGE_ENVELOPE / SEND；Electron `apps/electron` 方案 B）
+- **`CHUNK_ENCODE`**（FILE_TRANSFER / SEND； outbound chunk → base64 payload，见 `@synra/protocol` `iteratePluginBundleChunks`）
+- **`ASSEMBLE_BUFFER`**（FILE_TRANSFER / RECEIVE；内存组装，`PluginBundleTransferAssembly`）
+- **`SESSION_RESUME_POLICY`**（FILE_TRANSFER / SEND 或 RECEIVE；断点/checkpoint 策略，见 [file-transfer/03-reliability-and-resume.md](../file-transfer/03-reliability-and-resume.md)）
+- **`HOOK_FILE_TRANSFER_POST`**（FILE_TRANSFER / SEND；`useFileTransfer` 经 `useSynraEnvelope` 发送 `file.transfer.*`）
 
 ## 使用流程
 
@@ -45,4 +54,4 @@
 
 ## 相关扩展
 
-- [大对象分块传输与会话封装](../file-transfer/README.md)（`FILE_TRANSFER` 建议与 `SYNRA-COMM` 节点对齐时见该目录说明）
+- [大对象分块传输与会话封装](../file-transfer/README.md)（`FILE_TRANSFER` 与 payload 规范）

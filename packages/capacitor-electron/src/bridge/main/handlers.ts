@@ -8,6 +8,7 @@ import type { PluginCatalogService } from '../../host/services/plugin-catalog.se
 import type { PluginManagementService } from '../../host/services/plugin-management.service'
 import type { PluginRuntimeService } from '../../host/services/plugin-runtime.service'
 import type { PreferencesService } from '../../host/services/preferences.service'
+import { fileTransferChunkCount, iteratePluginBundleChunks } from '@synra/protocol'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -72,32 +73,50 @@ export function createBridgeHandlers(deps: BridgeHandlerDependencies): BridgeHan
       const localDeviceId = deps.preferencesService.ensureDeviceInstanceUuid()
       const bundleBuffer = readFileSync(bundlePath)
       const chunkSize = 64 * 1024
-      const totalChunks = Math.max(1, Math.ceil(bundleBuffer.length / chunkSize))
-
-      for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex += 1) {
-        const start = chunkIndex * chunkSize
-        const chunk = bundleBuffer.subarray(start, Math.min(bundleBuffer.length, start + chunkSize))
-        await deps.connectionService.sendMessage({
-          requestId: crypto.randomUUID(),
-          target: synced.deviceId,
-          from: localDeviceId,
-          event: 'plugin.bundle.chunk',
-          payload: {
-            pluginId: synced.pluginId,
-            version: synced.version,
-            chunkIndex,
-            totalChunks,
-            chunkBase64: chunk.toString('base64')
-          }
-        })
-      }
+      const transferId = crypto.randomUUID()
+      const bytes = new Uint8Array(bundleBuffer)
 
       await deps.connectionService.sendMessage({
         requestId: crypto.randomUUID(),
         target: synced.deviceId,
         from: localDeviceId,
-        event: 'plugin.bundle.complete',
+        event: 'file.transfer.request',
         payload: {
+          transferId,
+          kind: 'plugin-bundle',
+          pluginId: synced.pluginId,
+          version: synced.version,
+          byteLength: bytes.length
+        }
+      })
+
+      for (const chunkPayload of iteratePluginBundleChunks({
+        transferId,
+        buffer: bytes,
+        chunkSize,
+        pluginId: synced.pluginId,
+        version: synced.version
+      })) {
+        // SYNRA-COMM::FILE_TRANSFER::SEND::CHUNK_ENCODE (iteratePluginBundleChunks)
+        await deps.connectionService.sendMessage({
+          requestId: crypto.randomUUID(),
+          target: synced.deviceId,
+          from: localDeviceId,
+          event: 'file.transfer.chunk',
+          payload: chunkPayload
+        })
+      }
+
+      const totalChunks = fileTransferChunkCount(bytes.length, chunkSize)
+
+      await deps.connectionService.sendMessage({
+        requestId: crypto.randomUUID(),
+        target: synced.deviceId,
+        from: localDeviceId,
+        event: 'file.transfer.complete',
+        payload: {
+          transferId,
+          kind: 'plugin-bundle',
           pluginId: synced.pluginId,
           version: synced.version,
           totalChunks
