@@ -18,7 +18,7 @@ const emit = defineEmits<{
     <input
       v-model="keyword"
       class="app-focus-ring w-full rounded-lg border border-white/15 bg-white/6 px-3 py-2 text-sm text-slate-100 placeholder:text-muted-4"
-      :placeholder="placeholder ?? 'Search plugins'"
+      :placeholder="placeholder ?? 'Search plugin package (name or slug)'"
       @keyup.enter="emit('search')"
     />
     <AppButton :disabled="loading" @click="emit('search')"> Refresh </AppButton>

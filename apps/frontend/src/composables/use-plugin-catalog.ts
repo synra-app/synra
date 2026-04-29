@@ -1,5 +1,6 @@
 import { createElectronBridgePluginFromGlobal } from '@synra/capacitor-electron/api/plugin'
 import { unknownToErrorMessage } from '@synra/protocol'
+import { resolveCurrentPluginRegistryUrl } from '../lib/plugin-registry-preferences'
 import { getInstalledPluginRecord, installPluginOnClient } from '../plugins/install-manager'
 import { listPlugins, openPluginPage, syncInstalledPlugins } from '../plugins/host'
 
@@ -48,6 +49,7 @@ export function usePluginCatalog() {
       return (
         plugin.name.toLowerCase().includes(key) ||
         plugin.pluginId.toLowerCase().includes(key) ||
+        plugin.packageName?.toLowerCase().includes(key) ||
         plugin.version.toLowerCase().includes(key)
       )
     })
@@ -65,9 +67,11 @@ export function usePluginCatalog() {
 
       const bridge = createElectronBridgePluginFromGlobal()
       const query = keyword.value.trim()
+      const registryUrl = await resolveCurrentPluginRegistryUrl()
       const [result, installed] = await Promise.all([
         bridge.getPluginCatalog({
-          query: query.length > 0 ? query : undefined
+          query: query.length > 0 ? query : undefined,
+          registryUrl
         }),
         bridge.listInstalledPlugins()
       ])
@@ -124,24 +128,28 @@ export function usePluginCatalog() {
   }
 
   async function openPlugin(plugin: PluginCardItem): Promise<void> {
-    plugin.installState = 'installing'
-    try {
-      if (!plugin.packageName) {
-        throw new Error(`Plugin '${plugin.pluginId}' packageName is missing.`)
+    if (plugin.status !== 'installed') {
+      plugin.installState = 'installing'
+      try {
+        if (!plugin.packageName) {
+          throw new Error(`Plugin '${plugin.pluginId}' packageName is missing.`)
+        }
+        await installPluginOnClient({
+          router,
+          pluginId: plugin.pluginId,
+          packageName: plugin.packageName,
+          version: plugin.version,
+          registryUrl: await resolveCurrentPluginRegistryUrl()
+        })
+        plugin.status = 'installed'
+        plugin.installState = 'idle'
+      } catch (unknownError) {
+        plugin.installState = 'failed'
+        throw unknownError
       }
-      await installPluginOnClient({
-        router,
-        pluginId: plugin.pluginId,
-        packageName: plugin.packageName,
-        version: plugin.version
-      })
-      plugin.status = 'installed'
-      plugin.installState = 'idle'
-    } catch (unknownError) {
-      plugin.installState = 'failed'
-      throw unknownError
     }
 
+    plugin.installState = 'idle'
     await openPluginPage(router, plugin.pluginId, `/${plugin.defaultPage}`)
   }
 

@@ -54,6 +54,7 @@ export async function installPluginOnClient(options: {
   pluginId: string
   packageName: string
   version: string
+  registryUrl?: string
   assetKey?: string
   onStageChange?: (stage: PluginInstallStage) => void
 }): Promise<PluginInstallRecord> {
@@ -65,7 +66,8 @@ export async function installPluginOnClient(options: {
   options.onStageChange?.('download-assets')
   const installed = await bridge.installPlugin({
     packageName: options.packageName,
-    version: options.version
+    version: options.version,
+    registryUrl: options.registryUrl
   })
   options.onStageChange?.('cache-assets')
   const cache = readInstallCache()

@@ -5,11 +5,13 @@ import type { SynraTabItem } from '../../components/base/SynraTabs.vue'
 import AboutPage from './about.vue'
 import BasicPage from './basic.vue'
 import DevelopmentPage from './development.vue'
+import PluginPage from './plugin.vue'
 
-type SettingsTabName = 'basic' | 'about' | 'development'
+type SettingsTabName = 'basic' | 'plugin' | 'about' | 'development'
 
 const settingsTabs: SynraTabItem[] = [
   { name: 'basic', label: 'Basic Info' },
+  { name: 'plugin', label: 'Plugin' },
   { name: 'about', label: 'About' },
   { name: 'development', label: 'Development' }
 ]
@@ -22,6 +24,9 @@ const activeSettingsTab = ref<SettingsTabName>('basic')
     <SynraTabs v-model="activeSettingsTab" :tabs="settingsTabs" aria-label="Settings sections" />
     <SynraTabPanel name="basic" :active-name="activeSettingsTab">
       <BasicPage />
+    </SynraTabPanel>
+    <SynraTabPanel name="plugin" :active-name="activeSettingsTab">
+      <PluginPage />
     </SynraTabPanel>
     <SynraTabPanel name="about" :active-name="activeSettingsTab">
       <AboutPage />

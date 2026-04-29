@@ -20,6 +20,7 @@ import type {
   PluginUninstallOptions,
   PluginUninstallResult
 } from '../../shared/protocol/types'
+import { resolvePluginRegistryUrl } from './plugin-registry'
 
 export type PluginManagementService = {
   install(options: PluginInstallOptions): Promise<PluginInstallResult>
@@ -39,18 +40,6 @@ type NpmPackageMetadataDoc = {
   name: string
   'dist-tags'?: Record<string, string>
   versions?: Record<string, NpmPackageVersionDoc>
-}
-
-function resolveDefaultRegistryUrl(): string {
-  return process.env.SYNRA_PLUGIN_REGISTRY_URL?.trim() || 'https://registry.npmjs.org'
-}
-
-function normalizeRegistryUrl(input?: string): string {
-  const normalized = (input?.trim() || resolveDefaultRegistryUrl()).replace(/\/+$/, '')
-  if (!/^https?:\/\//.test(normalized)) {
-    throw new Error(`Invalid registry url '${normalized}'.`)
-  }
-  return normalized
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -103,7 +92,7 @@ export function createPluginManagementService(
         )
       }
 
-      const registryUrl = normalizeRegistryUrl(input.registryUrl)
+      const registryUrl = resolvePluginRegistryUrl(input.registryUrl)
       const metadata = await fetchJson<NpmPackageMetadataDoc>(
         `${registryUrl}/${encodeURIComponent(packageName)}`
       )

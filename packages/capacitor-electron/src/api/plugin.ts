@@ -52,6 +52,7 @@ export interface ElectronBridgePlugin {
   getPluginCatalog(options?: {
     knownPluginIds?: string[]
     query?: string
+    registryUrl?: string
     timeoutMs?: number
     signal?: AbortSignal
   }): Promise<PluginCatalogResult>
@@ -147,6 +148,7 @@ export function createElectronBridgePlugin(invoke: BridgeInvoke): ElectronBridge
       options: {
         knownPluginIds?: string[]
         query?: string
+        registryUrl?: string
         timeoutMs?: number
         signal?: AbortSignal
       } = {}
@@ -155,7 +157,8 @@ export function createElectronBridgePlugin(invoke: BridgeInvoke): ElectronBridge
         API_METHODS.getPluginCatalog,
         {
           knownPluginIds: options.knownPluginIds,
-          query: options.query
+          query: options.query,
+          registryUrl: options.registryUrl
         },
         options
       )

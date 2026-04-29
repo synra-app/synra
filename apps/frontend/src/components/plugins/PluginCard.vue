@@ -25,6 +25,13 @@ watch(
     iconLoadFailed.value = false
   }
 )
+
+const actionLabel = computed(() => {
+  if (props.plugin.installState === 'installing') {
+    return 'Installing...'
+  }
+  return props.plugin.status === 'installed' ? 'Open' : 'Install'
+})
 </script>
 
 <template>
@@ -65,10 +72,10 @@ watch(
         :disabled="plugin.installState === 'installing'"
         @click="emit('open', plugin)"
       >
-        {{ plugin.installState === 'installing' ? 'Installing...' : 'Open' }}
+        {{ actionLabel }}
       </AppButton>
       <p v-if="plugin.installState === 'failed'" class="mt-2 text-xs text-error-7">
-        Install failed. Try opening again.
+        Install failed. Try installing again.
       </p>
     </div>
   </article>

@@ -4,7 +4,10 @@ const { error, filteredPlugins, keyword, loading, openPlugin, refreshCatalog } =
 
 <template>
   <section class="space-y-4">
-    <PanelCard title="Plugins" description="Browse built-in and installed plugins.">
+    <PanelCard
+      title="Plugins"
+      description="Search Synra npm plugin packages and browse built-in or installed plugins."
+    >
       <PluginSearchBar v-model:keyword="keyword" :loading="loading" @search="refreshCatalog" />
     </PanelCard>
     <PanelCard v-if="error">

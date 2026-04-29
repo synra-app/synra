@@ -331,6 +331,8 @@ export type PluginCatalogRequestPayload = {
   knownPluginIds?: string[]
   /** Registry keyword or full Synra package name; triggers npm metadata merge when non-empty. */
   query?: string
+  /** Optional registry base URL used for npm metadata lookup. */
+  registryUrl?: string
 }
 
 export type SynraPluginManifestEntriesWire = Partial<

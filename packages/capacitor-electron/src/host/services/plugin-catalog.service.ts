@@ -13,6 +13,7 @@ import { homedir } from 'node:os'
 import { join } from 'pathe'
 import type { PluginCatalogResult } from '../../shared/protocol/types'
 import type { PluginRuntimeService } from './plugin-runtime.service'
+import { resolvePluginRegistryUrl } from './plugin-registry'
 
 type CatalogPluginRecord = {
   pluginId: string
@@ -36,14 +37,6 @@ type NpmPackageMetadataDoc = {
   name: string
   'dist-tags'?: Record<string, string>
   versions?: Record<string, NpmPackageVersionDoc>
-}
-
-function resolveDefaultRegistryUrl(): string {
-  return process.env.SYNRA_PLUGIN_REGISTRY_URL?.trim() || 'https://registry.npmjs.org'
-}
-
-function normalizeRegistryUrlForCatalog(): string {
-  return resolveDefaultRegistryUrl().replace(/\/+$/, '')
 }
 
 async function fetchNpmPackageMetadata(
@@ -200,7 +193,7 @@ export function createPluginCatalogService(
       await mergeRegistryQueryIntoCatalog(
         catalogMap,
         request.query,
-        normalizeRegistryUrlForCatalog()
+        resolvePluginRegistryUrl(request.registryUrl)
       )
 
       const known = new Set(request.knownPluginIds ?? [])
