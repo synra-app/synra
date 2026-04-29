@@ -1,11 +1,8 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "noEmit": false,
-    "outDir": "dist",
     "module": "esnext",
-    "moduleResolution": "bundler",
-    "allowImportingTsExtensions": false
+    "moduleResolution": "bundler"
   },
-  "include": ["src", "capacitor.config.ts"]
+  "include": ["src", "scripts", "capacitor.config.ts"]
 }

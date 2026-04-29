@@ -1,12 +1,12 @@
 import { describe, expect, test } from 'vite-plus/test'
 import type { SynraActionPlugin } from '@synra/plugin-sdk'
 import os from 'node:os'
-import path from 'node:path'
+import { join } from 'pathe'
 import { createPluginCatalogService } from '../../../src/host/services/plugin-catalog.service'
 import { createPluginRuntimeService } from '../../../src/host/services/plugin-runtime.service'
 
 function createEmptyInstallStorePath(testName: string): string {
-  return path.join(os.tmpdir(), `synra-plugin-catalog-${testName}-${Date.now()}.json`)
+  return join(os.tmpdir(), `synra-plugin-catalog-${testName}-${Date.now()}.json`)
 }
 
 describe('host/services/plugin-catalog.service', () => {
@@ -53,7 +53,7 @@ describe('host/services/plugin-catalog.service', () => {
     expect(catalog.generatedAt).toBeTypeOf('number')
     expect(catalog.plugins).toEqual(
       expect.arrayContaining([
-        {
+        expect.objectContaining({
           pluginId: 'catalog-fixture',
           version: '0.1.0',
           displayName: 'Catalog Fixture',
@@ -62,7 +62,7 @@ describe('host/services/plugin-catalog.service', () => {
           defaultPage: 'home',
           icon: undefined,
           packageName: 'synra-plugin-catalog-fixture'
-        }
+        })
       ])
     )
   })

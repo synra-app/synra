@@ -1,10 +1,10 @@
 import os from 'node:os'
-import path from 'node:path'
+import { join } from 'pathe'
 import { afterEach, describe, expect, test, vi } from 'vite-plus/test'
 import { createPluginManagementService } from '../../../src/host/services/plugin-management.service'
 
 function createTempRootDir(testName: string): string {
-  return path.join(os.tmpdir(), `synra-plugin-management-${testName}-${Date.now()}`)
+  return join(os.tmpdir(), `synra-plugin-management-${testName}-${Date.now()}`)
 }
 
 describe('host/services/plugin-management.service', () => {

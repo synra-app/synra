@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, join } from 'pathe'
 import { SYNRA_DEVICE_INSTANCE_UUID_KEY } from '@synra/capacitor-preferences'
 
 const NAMESPACED_PREFIX = 'synra.preferences.'

@@ -5,7 +5,7 @@
   "description": "Synra desktop application package.",
   "author": "Synra Team",
   "type": "module",
-  "main": "dist/src/main.cjs",
+  "main": "dist/src/main.mjs",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "package:windows": "vp run build && vp exec electron-builder --win nsis --publish never --config.directories.output=release/windows",
@@ -26,6 +26,8 @@
     "electron": "catalog:electron",
     "electron-builder": "catalog:electron",
     "esbuild": "catalog:build",
+    "esno": "catalog:cli",
+    "pathe": "catalog:build",
     "typescript": "catalog:types",
     "vite-plugin-synra-electron": "workspace:*",
     "vite-plus": "catalog:vite"

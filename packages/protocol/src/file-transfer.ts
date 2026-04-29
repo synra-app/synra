@@ -136,10 +136,6 @@ function base64ToUint8(base64: string): Uint8Array {
   return out
 }
 
-/**
- * Assembles plugin-bundle transfer chunks in memory (receive path).
- * SYNRA-COMM::FILE_TRANSFER::RECEIVE::ASSEMBLE_BUFFER
- */
 /** Observable receive progress for UI/analytics later; no wire event required. */
 export type PluginBundleTransferProgressSnapshot = {
   transferId: string
@@ -150,6 +146,10 @@ export type PluginBundleTransferProgressSnapshot = {
   bytesReceived: number
 }
 
+/**
+ * Assembles plugin-bundle transfer chunks in memory (receive path).
+ * SYNRA-COMM::FILE_TRANSFER::RECEIVE::ASSEMBLE_BUFFER
+ */
 export class PluginBundleTransferAssembly {
   private readonly chunks = new Map<number, Uint8Array>()
   private expectedTotalChunks = 0
@@ -190,7 +190,6 @@ export class PluginBundleTransferAssembly {
 
   /**
    * Chunk/session stats for progress bars or logging without `file.transfer.progress` on the wire.
-   * SYNRA-COMM::FILE_TRANSFER::RECEIVE::ASSEMBLE_BUFFER
    */
   getProgressSnapshot(): PluginBundleTransferProgressSnapshot {
     let bytesReceived = 0

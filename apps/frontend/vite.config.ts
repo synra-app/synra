@@ -1,5 +1,5 @@
 import { execSync } from 'node:child_process'
-import { dirname, resolve as pathResolve } from 'node:path'
+import { dirname, resolve as pathResolve } from 'pathe'
 import { fileURLToPath } from 'node:url'
 import UnoCSS from '@unocss/vite'
 import Vue from '@vitejs/plugin-vue'

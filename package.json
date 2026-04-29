@@ -24,7 +24,8 @@
     "@inquirer/prompts": "catalog:cli",
     "@types/node": "catalog:types",
     "bumpp": "catalog:release",
-    "esno": "^4.8.0",
+    "esno": "catalog:cli",
+    "pathe": "catalog:build",
     "unconfig": "catalog:cli",
     "vite-plus": "catalog:vite"
   },

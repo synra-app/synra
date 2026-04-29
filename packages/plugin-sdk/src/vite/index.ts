@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { builtinModules } from 'node:module'
-import { resolve } from 'node:path'
+import { resolve } from 'pathe'
 import { loadConfig } from '@unocss/config'
 import { createGenerator } from 'unocss'
 import VueRolldown from 'unplugin-vue/rolldown'

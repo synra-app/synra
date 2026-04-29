@@ -29,7 +29,8 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
-    "@synra/protocol": "workspace:*"
+    "@synra/protocol": "workspace:*",
+    "pathe": "catalog:build"
   },
   "devDependencies": {
     "@types/node": "catalog:types",

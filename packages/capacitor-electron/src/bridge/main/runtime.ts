@@ -15,7 +15,7 @@ import { createPreferencesService } from '../../host/services/preferences.servic
 import type { DeviceDiscoveryHostEvent } from '../../shared/protocol/types'
 import type { BridgeLogger } from '../../shared/observability/logger'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { join } from 'pathe'
 import { createMainDispatcher } from './dispatch'
 import { createBridgeHandlers } from './handlers'
 import { registerBridgeHandlers, type IpcMainLike } from './register'

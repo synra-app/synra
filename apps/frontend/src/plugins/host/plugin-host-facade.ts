@@ -1,5 +1,6 @@
 import type { SynraUiManifestMetadata } from '@synra/plugin-sdk'
 import { getSynraUiManifestMetadata, type SynraPluginManifest } from '@synra/plugin-sdk'
+import { resolveSynraPluginUiEntryAbsolutePath } from '@synra/plugin-system'
 import type { Router } from 'vue-router'
 import type { InstalledPluginSummary } from '@synra/capacitor-electron'
 import type { RegisteredPlugin } from './types'
@@ -35,7 +36,8 @@ export class PluginHostFacade {
           title: plugin.title,
           defaultPage: plugin.defaultPage,
           icon: plugin.icon,
-          builtin: plugin.builtin
+          builtin: plugin.builtin,
+          entries: plugin.entries
         }
       }
       const metadata = getSynraUiManifestMetadata(manifest)
@@ -43,7 +45,7 @@ export class PluginHostFacade {
         continue
       }
 
-      const uiEntryPath = `${plugin.artifactRoot.replace(/\\/g, '/')}/package/dist/ui/index.mjs`
+      const uiEntryPath = resolveSynraPluginUiEntryAbsolutePath(plugin.artifactRoot, plugin.entries)
       const imported = await import(/* @vite-ignore */ this.toFileModuleUrl(uiEntryPath))
       const PluginCtor = imported.default as (new () => RegisteredPlugin['plugin']) | undefined
       if (typeof PluginCtor !== 'function') {

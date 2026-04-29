@@ -1,7 +1,7 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { access, readFile, writeFile } from 'node:fs/promises'
 import { networkInterfaces } from 'node:os'
-import { dirname, resolve } from 'node:path'
+import { dirname, resolve } from 'pathe'
 import { createInterface } from 'node:readline'
 import { fileURLToPath } from 'node:url'
 import { select } from '@inquirer/prompts'

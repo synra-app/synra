@@ -329,7 +329,13 @@ export type RuntimeErrorPayload = {
 
 export type PluginCatalogRequestPayload = {
   knownPluginIds?: string[]
+  /** Registry keyword or full Synra package name; triggers npm metadata merge when non-empty. */
+  query?: string
 }
+
+export type SynraPluginManifestEntriesWire = Partial<
+  Record<'ui' | 'host' | 'worker' | 'shared', string>
+>
 
 export type PluginCatalogItem = {
   pluginId: string
@@ -341,6 +347,7 @@ export type PluginCatalogItem = {
   icon?: string
   logoPath?: string
   packageName?: string
+  entries?: SynraPluginManifestEntriesWire
 }
 
 export type PluginCatalogResponsePayload = {

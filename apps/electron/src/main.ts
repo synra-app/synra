@@ -1,4 +1,4 @@
-import { join, resolve } from 'node:path'
+import { join, resolve } from 'pathe'
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import {
   parseSynraMessageEnvelope,

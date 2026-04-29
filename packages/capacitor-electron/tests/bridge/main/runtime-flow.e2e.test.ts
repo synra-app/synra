@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from 'vite-plus/test'
 import os from 'node:os'
-import path from 'node:path'
+import { join } from 'pathe'
 import { createLoopbackTransportPair } from '../../../../transport-core/src/index.ts'
 import { createBridgeHandlers } from '../../../src/bridge/main/handlers'
 import { createMainDispatcher } from '../../../src/bridge/main/dispatch'
@@ -13,7 +13,7 @@ import type { MethodResultMap } from '../../../src/shared/protocol/types'
 import type { RuntimeExecuteOptions } from '../../../src/shared/protocol/types'
 
 function createEmptyInstallStorePath(testName: string): string {
-  return path.join(os.tmpdir(), `synra-runtime-flow-${testName}-${Date.now()}.json`)
+  return join(os.tmpdir(), `synra-runtime-flow-${testName}-${Date.now()}.json`)
 }
 
 function createRuntimeExecuteMessage(requestId: string) {
@@ -72,7 +72,8 @@ describe('bridge/main runtime e2e flow', () => {
           builtin: false,
           icon: undefined,
           installedAt: Date.now(),
-          artifactRoot: '/tmp'
+          artifactRoot: '/tmp',
+          entries: {}
         })),
         uninstall: vi.fn(async () => ({ success: true as const })),
         listInstalled: vi.fn(async () => ({ plugins: [] })),
@@ -238,7 +239,8 @@ describe('bridge/main runtime e2e flow', () => {
           builtin: false,
           icon: undefined,
           installedAt: Date.now(),
-          artifactRoot: '/tmp'
+          artifactRoot: '/tmp',
+          entries: {}
         })),
         uninstall: vi.fn(async () => ({ success: true as const })),
         listInstalled: vi.fn(async () => ({ plugins: [] })),

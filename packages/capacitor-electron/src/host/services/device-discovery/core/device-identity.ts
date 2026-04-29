@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { join } from 'pathe'
 import {
   SYNRA_DEVICE_BASIC_INFO_KEY,
   SYNRA_PAIRED_DEVICES_KEY,

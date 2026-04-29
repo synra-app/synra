@@ -18,6 +18,7 @@
     "@synra/capacitor-preferences": "workspace:*",
     "@synra/hooks": "workspace:*",
     "@synra/plugin-sdk": "workspace:*",
+    "@synra/plugin-system": "workspace:*",
     "@synra/protocol": "workspace:*",
     "@synra/transport-events": "workspace:*",
     "@synra/utils": "workspace:*",
@@ -26,6 +27,7 @@
     "vue-router": "catalog:vue"
   },
   "devDependencies": {
+    "pathe": "catalog:build",
     "@unocss/preset-attributify": "catalog:unocss",
     "@unocss/preset-icons": "catalog:unocss",
     "@unocss/preset-typography": "catalog:unocss",

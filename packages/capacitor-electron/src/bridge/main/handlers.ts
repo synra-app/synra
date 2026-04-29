@@ -10,7 +10,7 @@ import type { PluginRuntimeService } from '../../host/services/plugin-runtime.se
 import type { PreferencesService } from '../../host/services/preferences.service'
 import { fileTransferChunkCount, iteratePluginBundleChunks } from '@synra/protocol'
 import { existsSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { join } from 'pathe'
 
 type RuntimeInfoService = ReturnType<
   typeof import('../../host/services/runtime-info.service').createRuntimeInfoService
@@ -60,6 +60,7 @@ export function createBridgeHandlers(deps: BridgeHandlerDependencies): BridgeHan
     [BRIDGE_METHODS.pluginListInstalled]: async () => deps.pluginManagementService.listInstalled(),
     [BRIDGE_METHODS.pluginSyncToDevice]: async (request) => {
       // SYNRA-COMM::PLUGIN_BRIDGE::SEND::PLUGIN_SYNC_TO_DEVICE
+      // Receive side reassembly: SYNRA-COMM::FILE_TRANSFER::RECEIVE::ASSEMBLE_BUFFER (see @synra/protocol PluginBundleTransferAssembly).
       const synced = await deps.pluginManagementService.syncToDevice(request.payload)
       if (!synced.success) {
         return synced

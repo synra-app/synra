@@ -1,4 +1,5 @@
 import type { PluginAction, ShareInput } from '@synra/plugin-sdk'
+import type { SynraPluginManifestEntries } from '@synra/plugin-system'
 import type {
   LanWireEventName,
   PluginCatalogItem,
@@ -120,6 +121,7 @@ export type InstalledPluginSummary = {
   icon?: string
   installedAt: number
   artifactRoot: string
+  entries: SynraPluginManifestEntries
 }
 
 export type PluginInstallOptions = {

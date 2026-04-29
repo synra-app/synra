@@ -11,3 +11,8 @@ export {
   type SynraPluginManifestMetadata,
   type SynraPluginEntryKind
 } from './manifest'
+export {
+  DEFAULT_SYNRA_UI_ENTRY,
+  resolveSynraPluginUiEntryAbsolutePath,
+  resolveSynraPluginUiEntryRelativePath
+} from './resolve-ui-entry'

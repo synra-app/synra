@@ -64,8 +64,11 @@ export function usePluginCatalog() {
       }
 
       const bridge = createElectronBridgePluginFromGlobal()
+      const query = keyword.value.trim()
       const [result, installed] = await Promise.all([
-        bridge.getPluginCatalog(),
+        bridge.getPluginCatalog({
+          query: query.length > 0 ? query : undefined
+        }),
         bridge.listInstalledPlugins()
       ])
       await syncInstalledPlugins(installed.plugins)

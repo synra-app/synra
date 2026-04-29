@@ -1,5 +1,5 @@
 import { rm } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { resolve } from 'pathe'
 
 const mobileDir = resolve(import.meta.dirname, '..')
 const androidDir = resolve(mobileDir, 'android')

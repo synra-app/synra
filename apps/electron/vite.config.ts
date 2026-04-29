@@ -1,4 +1,4 @@
-import { resolve } from 'node:path'
+import { resolve } from 'pathe'
 import { defineConfig } from 'vite-plus'
 import { synraElectronPlugin } from 'vite-plugin-synra-electron'
 
@@ -8,7 +8,7 @@ const capacitorElectronDistEntry = resolve(
   'packages/capacitor-electron/dist/index.mjs'
 )
 const capacitorElectronCwd = resolve(workspaceRoot, 'packages/capacitor-electron')
-const electronDistMainEntry = resolve(__dirname, 'dist/src/main.cjs')
+const electronDistMainEntry = resolve(__dirname, 'dist/src/main.mjs')
 const electronDistPreloadEntry = resolve(__dirname, 'dist/src/preload.cjs')
 
 export default defineConfig({
@@ -17,7 +17,7 @@ export default defineConfig({
     strictPort: true
   },
   pack: {
-    format: ['cjs'],
+    format: ['esm'],
     minify: true
   },
   plugins: [
@@ -40,25 +40,12 @@ export default defineConfig({
       },
       electronBuildCommand: {
         command: 'vp',
-        args: [
-          'exec',
-          'esbuild',
-          'src/main.ts',
-          'src/preload.ts',
-          '--bundle',
-          '--platform=node',
-          '--format=cjs',
-          '--external:electron',
-          '--outdir=dist/src',
-          '--out-extension:.js=.cjs',
-          '--watch',
-          '--minify'
-        ],
+        args: ['exec', 'esno', 'scripts/electron-esbuild-watch.ts'],
         cwd: __dirname
       },
       electronRuntimeCommand: {
         command: 'vp',
-        args: ['exec', 'electron', './dist/src/main.cjs'],
+        args: ['exec', 'electron', './dist/src/main.mjs'],
         cwd: __dirname,
         env: { VITE_DEV_SERVER_URL: 'http://localhost:5173' }
       },

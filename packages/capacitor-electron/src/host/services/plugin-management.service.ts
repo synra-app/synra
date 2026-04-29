@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { join } from 'pathe'
 import { x as extractTar } from 'tar'
 import {
   getSynraPluginManifestMetadata,
@@ -166,7 +166,8 @@ export function createPluginManagementService(
         builtin: installedRecord.builtin,
         icon: installedRecord.icon,
         artifactRoot: installedRecord.artifactRoot,
-        installedAt: installedRecord.installedAt
+        installedAt: installedRecord.installedAt,
+        entries: installedRecord.entries
       }
     },
     async uninstall(optionsToRemove: PluginUninstallOptions): Promise<PluginUninstallResult> {
@@ -185,7 +186,8 @@ export function createPluginManagementService(
           builtin: record.builtin,
           icon: record.icon,
           installedAt: record.installedAt,
-          artifactRoot: record.artifactRoot
+          artifactRoot: record.artifactRoot,
+          entries: record.entries ?? {}
         }))
       }
     },

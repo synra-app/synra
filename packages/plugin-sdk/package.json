@@ -39,6 +39,7 @@
     "@unocss/config": "catalog:unocss",
     "@unocss/vite": "catalog:unocss",
     "@vitejs/plugin-vue": "catalog:vite",
+    "pathe": "catalog:build",
     "tinyglobby": "catalog:build",
     "unocss": "catalog:unocss",
     "unplugin-auto-import": "catalog:vite",

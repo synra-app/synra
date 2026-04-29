@@ -46,6 +46,11 @@ export {
   type PluginManagementService
 } from './host/services/plugin-management.service'
 export {
+  getSynraImportxModule,
+  loadSynraPluginModule,
+  type SynraPluginModuleLayer
+} from './host/plugins/synra-plugin-importx'
+export {
   createFileService,
   type FileService,
   type FileServiceOptions

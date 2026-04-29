@@ -1,4 +1,4 @@
-import { resolve } from 'node:path'
+import { resolve } from 'pathe'
 import { BridgeError } from '../../shared/errors/bridge-error'
 import { BRIDGE_ERROR_CODES } from '../../shared/errors/codes'
 import type { ReadFileResult } from '../../shared/protocol/types'

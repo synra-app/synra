@@ -52,7 +52,8 @@ function createHandlers() {
         builtin: false,
         icon: undefined,
         installedAt: Date.now(),
-        artifactRoot: '/tmp'
+        artifactRoot: '/tmp',
+        entries: {}
       })),
       uninstall: vi.fn(async () => ({ success: true as const })),
       listInstalled: vi.fn(async () => ({ plugins: [] })),
@@ -223,7 +224,8 @@ describe('bridge/main/dispatch', () => {
           builtin: false,
           icon: undefined,
           installedAt: Date.now(),
-          artifactRoot: '/tmp'
+          artifactRoot: '/tmp',
+          entries: {}
         })),
         uninstall: vi.fn(async () => ({ success: true as const })),
         listInstalled: vi.fn(async () => ({ plugins: [] })),

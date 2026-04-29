@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { resolve } from 'pathe'
 import type { SynraPluginManifest, SynraPluginManifestMetadata } from './manifest'
 import { getSynraPluginManifestMetadata } from './manifest'
 

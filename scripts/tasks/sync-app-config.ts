@@ -1,5 +1,5 @@
 import { readFile, writeFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { resolve } from 'pathe'
 import { resolveRepositoryRoot } from '../common/utils.ts'
 import { loadAppConfig } from '../config/app-config.ts'
 

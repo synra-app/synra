@@ -1,5 +1,5 @@
 import os from 'node:os'
-import path from 'node:path'
+import { join } from 'pathe'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { expect, test } from 'vite-plus/test'
 import {
@@ -65,16 +65,13 @@ test('SynraPlugin provides default onPluginExit implementation', async () => {
 })
 
 test('synraVitePluginConfig generates default plugin package config', () => {
-  const tempRoot = mkdtempSync(path.join(os.tmpdir(), 'synra-plugin-sdk-'))
+  const tempRoot = mkdtempSync(join(os.tmpdir(), 'synra-plugin-sdk-'))
   const previousCwd = process.cwd()
   try {
-    mkdirSync(path.join(tempRoot, 'pages', 'home'), { recursive: true })
-    mkdirSync(path.join(tempRoot, 'pages', 'settings'), { recursive: true })
-    writeFileSync(path.join(tempRoot, 'pages', 'home', 'index.vue'), '<template>home</template>')
-    writeFileSync(
-      path.join(tempRoot, 'pages', 'settings', 'index.vue'),
-      '<template>settings</template>'
-    )
+    mkdirSync(join(tempRoot, 'pages', 'home'), { recursive: true })
+    mkdirSync(join(tempRoot, 'pages', 'settings'), { recursive: true })
+    writeFileSync(join(tempRoot, 'pages', 'home', 'index.vue'), '<template>home</template>')
+    writeFileSync(join(tempRoot, 'pages', 'settings', 'index.vue'), '<template>settings</template>')
     process.chdir(tempRoot)
 
     const config = synraVitePluginConfig()

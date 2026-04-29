@@ -46,7 +46,9 @@
     "@synra/protocol": "workspace:*",
     "@synra/utils": "workspace:*",
     "bonjour-service": "catalog:electron",
-    "tar": "^7.4.3"
+    "importx": "catalog:electron",
+    "pathe": "catalog:build",
+    "tar": "catalog:electron"
   },
   "devDependencies": {
     "@types/node": "catalog:types",

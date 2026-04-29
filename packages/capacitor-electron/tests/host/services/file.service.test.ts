@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vite-plus/test'
-import { resolve } from 'node:path'
+import { resolve } from 'pathe'
 import { createFileService } from '../../../src/host/services/file.service'
 import { BRIDGE_ERROR_CODES } from '../../../src/shared/errors/codes'
 

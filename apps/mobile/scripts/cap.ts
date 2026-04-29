@@ -1,6 +1,6 @@
 import { access, mkdir, writeFile } from 'node:fs/promises'
 import { constants } from 'node:fs'
-import { resolve } from 'node:path'
+import { resolve } from 'pathe'
 import { spawn } from 'node:child_process'
 
 const mobileDir = resolve(import.meta.dirname, '..')

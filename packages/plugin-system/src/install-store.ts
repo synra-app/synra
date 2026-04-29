@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { dirname } from 'node:path'
+import { dirname } from 'pathe'
 
 export type SynraInstalledPluginRecord = {
   pluginId: string
