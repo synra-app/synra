@@ -3,7 +3,7 @@ import {
   SynraPreferences,
   type SynraDeviceBasicInfo
 } from '@synra/capacitor-preferences'
-import { getHooksRuntimeOptions, useSynraEvent, useTransport } from '@synra/hooks'
+import { getHooksRuntimeOptions, useSynraSystemEnvelope, useTransport } from '@synra/hooks'
 import { DEVICE_DISPLAY_NAME_CHANGED_EVENT } from '@synra/protocol'
 import { ensureDeviceInstanceUuid } from '../lib/device-instance-uuid'
 import { parseDeviceNameFromBasicInfo } from '../lib/device-basic-info'
@@ -26,7 +26,7 @@ function validateDeviceName(input: string): string {
 
 export function useDeviceBasicInfo() {
   const transport = useTransport()
-  const synra = useSynraEvent()
+  const synra = useSynraSystemEnvelope()
 
   const deviceName = ref('')
   const loadStatus = ref<BasicInfoLoadStatus>('idle')

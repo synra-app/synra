@@ -8,7 +8,7 @@ import {
   parsePluginIdFromPackageName,
   SynraPlugin
 } from '../src/index.ts'
-import { useSynraEvent, useSynraPluginEvent, useTransport } from '../src/hooks/index.ts'
+import { useSynraSystemEnvelope, useSynraPluginEnvelope, useTransport } from '../src/hooks/index.ts'
 import { synraVitePluginConfig } from '../src/vite/index.ts'
 
 test('parsePluginIdFromPackageName supports scoped and unscoped names', () => {
@@ -113,9 +113,9 @@ test('plugin-sdk hooks should re-export transport and synra event helpers from @
   expect(typeof transport.connectToDevice).toBe('function')
   expect(typeof transport.disconnectDevice).toBe('function')
   expect(transport.openTransportLinks).toBeDefined()
-  const synra = useSynraEvent()
+  const synra = useSynraSystemEnvelope()
   expect(typeof synra.send).toBe('function')
   expect(typeof synra.subscribe).toBe('function')
-  const pluginEv = useSynraPluginEvent('@synra-plugin/chat')
+  const pluginEv = useSynraPluginEnvelope('@synra-plugin/chat')
   expect(typeof pluginEv.send).toBe('function')
 })

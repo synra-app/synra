@@ -1,7 +1,7 @@
 import { isElectronMainProcess } from './electron-main-process'
 
 /**
- * Where `useSynraEnvelope` / `useSynraEvent` is running. Uses the same Electron-main probe as
+ * Where `useSynraEnvelope` / `useSynraSystemEnvelope` is running. Uses the same Electron-main probe as
  * runtime adapter selection (`isElectronMainProcess`); non-main surfaces map to the Capacitor adapter path.
  * SYNRA-COMM::MESSAGE_ENVELOPE::CONNECT::SYNRA_ENVELOPE_RUNTIME_SURFACE
  */

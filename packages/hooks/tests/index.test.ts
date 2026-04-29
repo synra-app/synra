@@ -21,7 +21,7 @@ import {
   configureHooksRuntime,
   resetConnectionRuntime,
   resetHooksRuntimeOptions,
-  useSynraEvent,
+  useSynraSystemEnvelope,
   useTransport
 } from '../src/index'
 import type { ConnectionRuntimeAdapter, DeviceLostEvent } from '../src/runtime/adapter'
@@ -112,7 +112,7 @@ function createMockAdapter(): ConnectionRuntimeAdapter {
   }
 }
 
-test('useSynraEvent delivers connection-layer messages after connect', async () => {
+test('useSynraSystemEnvelope delivers connection-layer messages after connect', async () => {
   configureHooksRuntime({
     adapterFactory: () => createMockAdapter(),
     resolveSynraConnectType: () => 'paired',
@@ -120,7 +120,7 @@ test('useSynraEvent delivers connection-layer messages after connect', async () 
   })
   resetConnectionRuntime()
   const transport = useTransport()
-  const synra = useSynraEvent()
+  const synra = useSynraSystemEnvelope()
   await transport.ensureReady()
   await transport.startScan()
   expect(transport.peers.value.length).toBe(1)
@@ -150,7 +150,7 @@ test('cleanup runtime options', () => {
   resetConnectionRuntime()
 })
 
-test('useSynraEvent send rejects non-uuid from', async () => {
+test('useSynraSystemEnvelope send rejects non-uuid from', async () => {
   configureHooksRuntime({
     adapterFactory: () => createMockAdapter(),
     resolveSynraConnectType: () => 'paired',
@@ -158,7 +158,7 @@ test('useSynraEvent send rejects non-uuid from', async () => {
   })
   resetConnectionRuntime()
   const transport = useTransport()
-  const synra = useSynraEvent()
+  const synra = useSynraSystemEnvelope()
   await transport.ensureReady()
   await transport.startScan()
   await transport.connectToDevice(PEER_UUID)
@@ -458,7 +458,7 @@ test('transport is not open error marks transport dead and reconnects', async ()
   await transport.ensureReady()
   await transport.startScan()
 
-  const synra = useSynraEvent()
+  const synra = useSynraSystemEnvelope()
   const firstDeviceId = await transport.connectToDevice('device-a')
   expect(firstDeviceId).toBe('device-a')
   await expect(

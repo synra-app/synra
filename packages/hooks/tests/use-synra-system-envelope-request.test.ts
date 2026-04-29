@@ -19,7 +19,7 @@ import {
   configureHooksRuntime,
   resetConnectionRuntime,
   resetHooksRuntimeOptions,
-  useSynraEvent
+  useSynraSystemEnvelope
 } from '../src/index'
 import type { ConnectionRuntimeAdapter, DeviceLostEvent } from '../src/runtime/adapter'
 
@@ -118,7 +118,7 @@ function stubElectronRenderer(): void {
   })
 }
 
-test('useSynraEvent request resolves when LAN reply matches replyRequestId', async () => {
+test('useSynraSystemEnvelope request resolves when LAN reply matches replyRequestId', async () => {
   stubElectronRenderer()
   configureHooksRuntime({
     adapterFactory: () => createLanReplyMockAdapter(),
@@ -127,7 +127,7 @@ test('useSynraEvent request resolves when LAN reply matches replyRequestId', asy
   })
   resetConnectionRuntime()
 
-  const synra = useSynraEvent()
+  const synra = useSynraSystemEnvelope()
   const inbound = await synra.request({
     event: DEVICE_PAIRING_REQUEST_EVENT,
     target: PEER_UUID,
@@ -142,7 +142,7 @@ test('useSynraEvent request resolves when LAN reply matches replyRequestId', asy
   vi.unstubAllGlobals()
 })
 
-test('useSynraEvent request rejects on timeout when no reply', async () => {
+test('useSynraSystemEnvelope request rejects on timeout when no reply', async () => {
   vi.useFakeTimers()
   stubElectronRenderer()
 
@@ -161,7 +161,7 @@ test('useSynraEvent request rejects on timeout when no reply', async () => {
   })
   resetConnectionRuntime()
 
-  const synra = useSynraEvent()
+  const synra = useSynraSystemEnvelope()
   const outcome = synra
     .request(
       {

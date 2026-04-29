@@ -30,7 +30,7 @@
 
 协议与本文中的 **`file.transfer.*`** 指**逻辑事件名**：`packages/protocol` 类型、`payload` 字段与跨端对齐均以该字符串为准。
 
-插件侧**不必**单独定义一套文件传输协议。插件代码通过 **`useSynraPluginEvent`** 收发时，传入的仍是逻辑名 **`file.transfer.request`** / **`chunk`** / **`complete`** 等；与 **`useSynraEnvelope`** 体系相同，由 **`toPluginWireEvent`** 在 **`event` 字符串上自动加 `_plugin.{slug}.`**，线上形如 **`_plugin.{slug}.file.transfer.chunk`**。入站时在回调里会得到去掉前缀后的逻辑名，便于与协议类型对照。
+插件侧**不必**单独定义一套文件传输协议。插件代码通过 **`useSynraPluginEnvelope`** 收发时，传入的仍是逻辑名 **`file.transfer.request`** / **`chunk`** / **`complete`** 等；与 **`useSynraEnvelope`** 体系相同，由 **`toPluginWireEvent`** 在 **`event` 字符串上自动加 `_plugin.{slug}.`**，线上形如 **`_plugin.{slug}.file.transfer.chunk`**。入站时在回调里会得到去掉前缀后的逻辑名，便于与协议类型对照。
 
 宿主直连连接层、不经插件前缀封装的路径，仍可使用裸逻辑名 **`file.transfer.*`** 作为 **`event`**。
 

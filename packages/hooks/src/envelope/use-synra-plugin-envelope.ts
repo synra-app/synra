@@ -16,12 +16,12 @@ export type { SynraEnvelopeRuntimeSurface } from '@synra/envelope'
 export type { SynraInboundFilter, UseSynraEnvelopeRequestOptions }
 
 /**
- * Plugin event helper: same as `useSynraEvent` but with `_plugin.{pluginSlug}.{logicalEvent}` on the wire
+ * Plugin envelope helper: same as `useSynraSystemEnvelope` but with `_plugin.{pluginSlug}.{logicalEvent}` on the wire
  * (e.g. package `@synra-plugin/chat` + `send({ event: 'send' })` → `_plugin.chat.send`).
  * Inbound `event` in the callback is the **logical** tail (e.g. `send`).
- * SYNRA-COMM::MESSAGE_ENVELOPE::SEND::USE_SYNRA_PLUGIN_EVENT_POST
+ * SYNRA-COMM::MESSAGE_ENVELOPE::SEND::USE_SYNRA_PLUGIN_ENVELOPE_POST
  */
-export function useSynraPluginEvent(pluginPackageNameOrSlug: string) {
+export function useSynraPluginEnvelope(pluginPackageNameOrSlug: string) {
   const slug = normalizePluginPackageNameToWireSlug(pluginPackageNameOrSlug)
   const ev = useSynraEnvelope()
 
@@ -71,7 +71,7 @@ export function useSynraPluginEvent(pluginPackageNameOrSlug: string) {
         const logical = mapPluginInbound(m)
         if (!logical) {
           throw new Error(
-            'useSynraPluginEvent request: response event does not match plugin scope.'
+            'useSynraPluginEnvelope request: response event does not match plugin scope.'
           )
         }
         return logical

@@ -1,16 +1,16 @@
 /**
- * Raw wire names use `useSynraEnvelope`. `useSynraEvent` / `useSynraPluginEvent` add or strip
- * `event` string prefixes (no separate `system` / `plugin` domain type; routing is by prefix on the wire `event` string).
+ * Raw wire names use `useSynraEnvelope`. `useSynraSystemEnvelope` / `useSynraPluginEnvelope` add or strip
+ * `event` string prefixes (no separate system/plugin domain type; routing is by prefix on the wire `event` string).
  * SYNRA-COMM::MESSAGE_ENVELOPE::CONNECT::SYNRA_EVENT_PREFIX
  */
 
-/** App-level system events on the wire (useSynraEvent → useSynraEnvelope). */
-export const SYSTEM_WIRE_EVENT_PREFIX = '_system.' as const
+/** App-level system events on the wire (useSynraSystemEnvelope → useSynraEnvelope). */
+export const SYSTEM_WIRE_EVENT_PREFIX = '_synra.' as const
 
-/** App-level plugin events: `_plugin.{pluginSlug}.{logicalEvent}` (useSynraPluginEvent → useSynraEnvelope). */
+/** App-level plugin events: `_plugin.{pluginSlug}.{logicalEvent}` (useSynraPluginEnvelope → useSynraEnvelope). */
 const PLUGIN_WIRE_RE = /^_plugin\.([^.]+)\.(.+)$/s
 
-/** Host-only (Electron main↔renderer) — not the same as `_system.`. */
+/** Host-only (Electron main↔renderer) — not the same as `SYSTEM_WIRE_EVENT_PREFIX`. */
 export const SYNRA_HOST_ONLY_EVENT_PREFIX = 'synra.internal.host.' as const
 
 /**
@@ -39,7 +39,7 @@ export function toSystemWireEvent(logical: string): string {
 }
 
 /**
- * Inbound: strip `_system.` for useSynraEvent user callbacks when present; otherwise pass through (e.g. legacy LAN names).
+ * Inbound: strip `SYSTEM_WIRE_EVENT_PREFIX` for useSynraSystemEnvelope user callbacks when present; otherwise pass through (e.g. legacy LAN names).
  */
 export function toLogicalFromSystemWireEvent(wire: string): string {
   if (wire.startsWith(SYSTEM_WIRE_EVENT_PREFIX)) {
@@ -51,7 +51,7 @@ export function toLogicalFromSystemWireEvent(wire: string): string {
 export function toPluginWireEvent(pluginSlug: string, logical: string): string {
   const slug = normalizePluginPackageNameToWireSlug(pluginSlug)
   if (slug.length === 0) {
-    throw new Error('useSynraPluginEvent: empty plugin slug.')
+    throw new Error('useSynraPluginEnvelope: empty plugin slug.')
   }
   if (logical.startsWith('_plugin.')) {
     return logical
@@ -68,7 +68,7 @@ export function toLogicalFromPluginWireEvent(wire: string): { slug: string; even
 }
 
 /**
- * Strips `useSynraEvent` / `useSynraPluginEvent` prefixes to recover protocol names for
+ * Strips `useSynraSystemEnvelope` / `useSynraPluginEnvelope` prefixes to recover protocol names for
  * `isLanWireEventName` and native `sendLanEvent` (LAN only accepts `LanWireEventName`).
  */
 export function stripForTransportRouting(wire: string): string {

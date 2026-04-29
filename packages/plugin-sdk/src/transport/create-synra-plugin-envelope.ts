@@ -3,14 +3,14 @@
  * aligned with `SynraRuntimePlatform`, and integrate with the shared `SynraEvent` dispatch
  * registry from `@synra/transport-events`. Not implemented in this iteration.
  */
-export type SynraPluginEventSpec = {
+export type SynraPluginEnvelopeSpec = {
   /** Logical event name within the plugin (before namespacing). */
   event: string
   /** Per-platform or shared handler wiring; shape TBD. */
   handlers?: unknown
 }
 
-export type SynraPluginEvent = {
+export type SynraPluginEnvelope = {
   readonly pluginId: string
   readonly event: string
   unregister(): void
@@ -19,10 +19,10 @@ export type SynraPluginEvent = {
 /**
  * Placeholder factory for plugin-scoped LAN wire events. See module TODO.
  */
-export function createSynraPluginEvent(
+export function createSynraPluginEnvelope(
   pluginId: string,
-  _spec: SynraPluginEventSpec
-): SynraPluginEvent {
+  _spec: SynraPluginEnvelopeSpec
+): SynraPluginEnvelope {
   return {
     pluginId,
     event: _spec.event,

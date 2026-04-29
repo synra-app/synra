@@ -2,8 +2,8 @@ export { useTransport, type ConnectToDeviceOptions } from './hooks/use-transport
 export {
   USE_SYNRA_ENVELOPE_DEFAULT_TIMEOUT_MS,
   useSynraEnvelope,
-  useSynraEvent,
-  useSynraPluginEvent,
+  useSynraSystemEnvelope,
+  useSynraPluginEnvelope,
   type SynraEnvelopeRuntimeSurface,
   type SynraInboundEnvelope,
   type SynraInboundFilter,

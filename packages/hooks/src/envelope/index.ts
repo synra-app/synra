@@ -7,5 +7,5 @@ export {
   type SynraMessageEnvelope,
   type UseSynraEnvelopeRequestOptions
 } from './use-synra-envelope'
-export { useSynraEvent } from './use-synra-event'
-export { useSynraPluginEvent } from './use-synra-plugin-event'
+export { useSynraSystemEnvelope } from './use-synra-system-envelope'
+export { useSynraPluginEnvelope } from './use-synra-plugin-envelope'

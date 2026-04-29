@@ -11,7 +11,7 @@ type SendBase = Partial<SynraMessageEnvelope> & Pick<SynraMessageEnvelope, 'targ
 
 /**
  * Session-layer helpers for logical `file.transfer.*` events over `useSynraEnvelope`.
- * Plugin UI should use `useSynraPluginEvent` instead: pass the same logical names (`file.transfer.chunk`, …);
+ * Plugin UI should use `useSynraPluginEnvelope` instead: pass the same logical names (`file.transfer.chunk`, …);
  * wire `event` becomes `_plugin.{slug}.file.transfer.*` via `toPluginWireEvent`, same as other plugin events.
  * SYNRA-COMM::FILE_TRANSFER::SEND::HOOK_FILE_TRANSFER_POST
  * SYNRA-COMM::MESSAGE_ENVELOPE::SEND::SYNRA_ENVELOPE_POST

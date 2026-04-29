@@ -4,7 +4,7 @@ import {
   mergePairedAndDiscoveredDevices,
   setPairAwaitingAccept,
   setPairedDeviceConnecting,
-  useSynraEvent,
+  useSynraSystemEnvelope,
   type DisplayDevice
 } from '@synra/hooks'
 import { DEVICE_PAIRING_REQUEST_EVENT, DEVICE_PAIRING_UNPAIR_REQUIRED_EVENT } from '@synra/protocol'
@@ -38,7 +38,7 @@ function isTransportNotOpenError(error: unknown): boolean {
 }
 
 export function useConnectPage() {
-  const synra = useSynraEvent()
+  const synra = useSynraSystemEnvelope()
   const store = useLanDiscoveryStore()
   const pairingStore = usePairingStore()
   const pairingProtocol = usePairingProtocolContext()

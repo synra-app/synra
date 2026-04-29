@@ -19,12 +19,12 @@ function mapSystemInbound(m: SynraInboundEnvelope): SynraInboundEnvelope {
 }
 
 /**
- * System / app event helper: `send({ event: 'device.pairing.request' })` is sent on the wire as
- * `_system.device.pairing.request` via `useSynraEnvelope`. Inbound delivers **logical** `event` (prefix stripped when present).
- * This is a thin layer over `useSynraEnvelope`; the same pattern applies to `useSynraPluginEvent` with a `_plugin.{slug}.` prefix.
- * SYNRA-COMM::MESSAGE_ENVELOPE::SEND::USE_SYNRA_EVENT_POST
+ * System / app envelope helper: `send({ event: 'device.pairing.request' })` is sent on the wire as
+ * `_synra.device.pairing.request` via `useSynraEnvelope`. Inbound delivers **logical** `event` (prefix stripped when present).
+ * Thin layer over `useSynraEnvelope`; same pattern as `useSynraPluginEnvelope` with a `_plugin.{slug}.` prefix.
+ * SYNRA-COMM::MESSAGE_ENVELOPE::SEND::USE_SYNRA_SYSTEM_ENVELOPE_POST
  */
-export function useSynraEvent() {
+export function useSynraSystemEnvelope() {
   const ev = useSynraEnvelope()
 
   async function send(

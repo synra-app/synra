@@ -87,10 +87,10 @@ export { parsePluginIdFromPackageName }
 
 export { normalizePluginPagePath, pluginFilePathToPagePath } from './page-path'
 export {
-  createSynraPluginEvent,
-  type SynraPluginEvent,
-  type SynraPluginEventSpec
-} from './transport/create-synra-plugin-event'
+  createSynraPluginEnvelope,
+  type SynraPluginEnvelope,
+  type SynraPluginEnvelopeSpec
+} from './transport/create-synra-plugin-envelope'
 
 export type {
   PluginWorkerActionInvokeInput,

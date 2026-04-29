@@ -25,7 +25,7 @@ flowchart TB
 ## 传输层
 
 - **职责**：保证单帧消息按 Synra 约定送达对端；**不**解析「这是第几块文件」。
-- **实现形态**：各端现有的连接服务、`capacitor-device-connection` 桥接等；前端栈上最终仍落在 **`useSynraEnvelope`**（及 `useSynraEvent` / `useSynraPluginEvent` 等前缀封装）所驱动的收发路径。
+- **实现形态**：各端现有的连接服务、`capacitor-device-connection` 桥接等；前端栈上最终仍落在 **`useSynraEnvelope`**（及 `useSynraSystemEnvelope` / `useSynraPluginEnvelope` 等前缀封装）所驱动的收发路径。
 - **约束**：信封字段仍遵守白名单；分块二进制、文件名、hash、`transferId` 等**全部放在 `payload`**。
 
 ## 会话层（文件传输封装的核心）

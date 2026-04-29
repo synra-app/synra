@@ -16,8 +16,8 @@
 
 ## 前端 / hooks
 
-- **插件与宿主共用同一套逻辑事件名**：协议层始终是 **`file.transfer.*`**。插件内使用 **`useSynraPluginEvent`** 时，传入的 `event` 仍为 **`file.transfer.chunk`** 等逻辑名；线网自动带 **`_plugin.{slug}.`** 前缀，与 **`useSynraEnvelope` / `useSynraEvent`** 的前缀规则同一套机制，**不需要**为插件另做传输协议或额外字段。
-- **底层仍为信封收发**：**`useFileTransfer`** 内部基于 **`useSynraEnvelope`**，对逻辑名 **`file.transfer.*`** 提供薄封装；宿主侧亦可 **`useSynraPluginEvent` + 逻辑名** 自行发送，或直接使用 **`useSynraEnvelope`** 发送裸逻辑名。
+- **插件与宿主共用同一套逻辑事件名**：协议层始终是 **`file.transfer.*`**。插件内使用 **`useSynraPluginEnvelope`** 时，传入的 `event` 仍为 **`file.transfer.chunk`** 等逻辑名；线网自动带 **`_plugin.{slug}.`** 前缀，与 **`useSynraEnvelope` / `useSynraSystemEnvelope`** 的前缀规则同一套机制，**不需要**为插件另做传输协议或额外字段。
+- **底层仍为信封收发**：**`useFileTransfer`** 内部基于 **`useSynraEnvelope`**，对逻辑名 **`file.transfer.*`** 提供薄封装；宿主侧亦可 **`useSynraPluginEnvelope` + 逻辑名** 自行发送，或直接使用 **`useSynraEnvelope`** 发送裸逻辑名。
 - **协议无关工具**：`iteratePluginBundleChunks`、`PluginBundleTransferAssembly`、`fileTransferChunkCount` 由 **`@synra/protocol`** 提供；**`@synra/hooks`** 再导出以便应用侧单一入口。
 - **hooks 职责**：维护会话状态（进度数据、错误、取消）、把 Blob / 文件句柄（或主进程代理传入的描述符）转为分块 payload、订阅对端 `chunk` / `complete`；进度 **UI 可后置**，进度 **数据**本期就要可用于日志或可观测接口。
 - **Electron**：大文件读盘、分片节流可在 **主进程**完成（例如 `pluginSyncToDevice` bridge 使用 `iteratePluginBundleChunks`），经既有 bridge 把「已切好的块」交给连接层发送；细节由宿主选型，本目录只要求**边界清晰**。

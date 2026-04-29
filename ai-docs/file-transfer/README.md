@@ -8,11 +8,11 @@
 
 ## 与其它文档的关系
 
-| 文档                                                                                                                                          | 关系                                                                                       |
-| --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| [cross-platform-communication-map/message-envelope-and-validation.md](../cross-platform-communication-map/message-envelope-and-validation.md) | 信封字段白名单；文件元数据、分块内容均在 **`payload`** 内表达。                            |
-| [plugin-system/05-sync-to-mobile.md](../plugin-system/05-sync-to-mobile.md)                                                                   | 插件同步是本文「业务会话」层的一类用法；实现上应对齐通用传输会话，而非单独造一套分块规则。 |
-| [communication-use-event-refactor/README.md](../communication-use-event-refactor/README.md)                                                   | 渲染侧收发路径仍以 `useSynraEnvelope` / `useSynraEvent` 等为表面；文件封装构建在其上。     |
+| 文档                                                                                                                                          | 关系                                                                                            |
+| --------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| [cross-platform-communication-map/message-envelope-and-validation.md](../cross-platform-communication-map/message-envelope-and-validation.md) | 信封字段白名单；文件元数据、分块内容均在 **`payload`** 内表达。                                 |
+| [plugin-system/05-sync-to-mobile.md](../plugin-system/05-sync-to-mobile.md)                                                                   | 插件同步是本文「业务会话」层的一类用法；实现上应对齐通用传输会话，而非单独造一套分块规则。      |
+| [communication-use-event-refactor/README.md](../communication-use-event-refactor/README.md)                                                   | 渲染侧收发路径仍以 `useSynraEnvelope` / `useSynraSystemEnvelope` 等为表面；文件封装构建在其上。 |
 
 ## 文档索引
 
@@ -33,4 +33,4 @@
 
 实现落地沿用 [`SYNRA-COMM`](../cross-platform-communication-map/README.md)；**`FILE_TRANSFER`** 域及首批 NodeId 见该索引「Domain 列表」与 [常用 NodeId](../cross-platform-communication-map/README.md#常用-nodeid)。
 
-类型与编解码实现参见 `@synra/protocol`（`packages/protocol/src/file-transfer.ts`）、会话封装 **`useFileTransfer`**（`@synra/hooks`）。插件内逻辑事件名仍为 **`file.transfer.*`**，经 **`useSynraPluginEvent`** 自动加 **`_plugin.{slug}.`** 前缀，无单独插件传输协议。
+类型与编解码实现参见 `@synra/protocol`（`packages/protocol/src/file-transfer.ts`）、会话封装 **`useFileTransfer`**（`@synra/hooks`）。插件内逻辑事件名仍为 **`file.transfer.*`**，经 **`useSynraPluginEnvelope`** 自动加 **`_plugin.{slug}.`** 前缀，无单独插件传输协议。

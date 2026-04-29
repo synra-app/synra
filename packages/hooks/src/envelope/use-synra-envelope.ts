@@ -41,8 +41,8 @@ type HostEnvelopeWindow = typeof globalThis & {
 }
 
 /**
- * Core transport: `event` is the **on-wire** name (e.g. `_system.device.*`, `_plugin.{slug}.*`, or legacy protocol names without prefix).
- * Use `useSynraEvent` / `useSynraPluginEvent` for app/plugin code; they add prefixes and map logical `event` in callbacks.
+ * Core transport: `event` is the **on-wire** name (e.g. `_synra.device.*`, `_plugin.{slug}.*`, or legacy protocol names without prefix).
+ * Use `useSynraSystemEnvelope` / `useSynraPluginEnvelope` for app/plugin code; they add prefixes and map logical `event` in callbacks.
  * SYNRA-COMM::MESSAGE_ENVELOPE::SEND::SYNRA_ENVELOPE_POST
  * SYNRA-COMM::MESSAGE_ENVELOPE::RECEIVE::SYNRA_ENVELOPE_SUBSCRIBE
  */
