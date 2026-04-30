@@ -1,6 +1,6 @@
 {
   "name": "@synra/envelope",
-  "version": "0.0.1",
+  "version": "0.0.7",
   "description": "Synra message envelope types, wire prefixes, and transport routing (framework-agnostic).",
   "license": "MIT",
   "files": [

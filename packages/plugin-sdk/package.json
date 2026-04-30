@@ -1,6 +1,6 @@
 {
   "name": "@synra/plugin-sdk",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "Plugin contracts for Synra cross-device runtime.",
   "license": "MIT",
   "files": [
