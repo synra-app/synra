@@ -5,7 +5,8 @@ export default createPackageViteConfig({
     entry: {
       index: './src/index.ts',
       plugin: './src/plugin/index.ts',
-      capacitor: './src/capacitor/index.ts'
+      capacitor: './src/capacitor/index.ts',
+      protocol: './src/protocol-public.ts'
     },
     dts: {
       tsgo: false

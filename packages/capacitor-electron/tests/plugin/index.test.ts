@@ -125,7 +125,8 @@ describe('plugin', () => {
           builtin: false,
           installedAt: Date.now(),
           artifactRoot: 'C:/Users/test/.synra/plugins/chat/0.1.2',
-          entries: {}
+          entries: {},
+          installSource: 'registry' as const
         }
       ]
     })

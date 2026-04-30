@@ -1,5 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname } from 'pathe'
+import type { SynraPluginInstallSource } from './install-metadata'
+
+export type { SynraPluginInstallSource } from './install-metadata'
 
 export type SynraInstalledPluginRecord = {
   pluginId: string
@@ -13,6 +16,9 @@ export type SynraInstalledPluginRecord = {
   artifactRoot: string
   entries: Partial<Record<'ui' | 'worker' | 'shared' | 'host', string>>
   hash?: string
+  installSource: SynraPluginInstallSource
+  /** Absolute package root; only when installSource is `local`. */
+  localSourcePath?: string
 }
 
 export type SynraPluginInstallStore = {
@@ -26,6 +32,30 @@ type InstallStoreDocument = {
   installed: SynraInstalledPluginRecord[]
 }
 
+const INSTALL_SOURCES = new Set<SynraPluginInstallSource>(['registry', 'local', 'git'])
+
+function parseInstallSource(raw: unknown): SynraPluginInstallSource | undefined {
+  return typeof raw === 'string' && INSTALL_SOURCES.has(raw as SynraPluginInstallSource)
+    ? (raw as SynraPluginInstallSource)
+    : undefined
+}
+
+function sanitizeInstalledRows(rows: SynraInstalledPluginRecord[]): SynraInstalledPluginRecord[] {
+  const next: SynraInstalledPluginRecord[] = []
+  for (const row of rows) {
+    const installSource = parseInstallSource(row.installSource)
+    if (!installSource) {
+      continue
+    }
+    let localSourcePath = row.localSourcePath
+    if (installSource !== 'local') {
+      localSourcePath = undefined
+    }
+    next.push({ ...row, installSource, localSourcePath })
+  }
+  return next
+}
+
 function readStoreDocument(filePath: string): InstallStoreDocument {
   if (!existsSync(filePath)) {
     return { installed: [] }
@@ -35,7 +65,7 @@ function readStoreDocument(filePath: string): InstallStoreDocument {
     if (!Array.isArray(parsed.installed)) {
       return { installed: [] }
     }
-    return parsed
+    return { installed: sanitizeInstalledRows(parsed.installed) }
   } catch {
     return { installed: [] }
   }

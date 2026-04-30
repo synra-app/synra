@@ -1,4 +1,4 @@
-import { createElectronBridgePluginFromGlobal } from '@synra/capacitor-electron/plugin'
+import { getSynraPluginRuntimeBridgeOrThrow } from './bridge/synra-plugin-host-bridge'
 import type { Router } from 'vue-router'
 import { activatePlugin, syncInstalledPlugins } from './host'
 
@@ -68,10 +68,7 @@ export async function installPluginOnClient(options: {
 }): Promise<PluginInstallRecord> {
   const requestId = createDiagRequestId()
   options.onStageChange?.('sync-catalog')
-  if (!window.__synraCapElectron?.invoke) {
-    throw new Error('Electron bridge is unavailable. Dynamic plugin installation is not supported.')
-  }
-  const bridge = createElectronBridgePluginFromGlobal()
+  const bridge = getSynraPluginRuntimeBridgeOrThrow()
   options.onStageChange?.('download-assets')
   const installed = await bridge.installPlugin({
     packageName: options.packageName,

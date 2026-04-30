@@ -1,5 +1,6 @@
 export {
   USE_SYNRA_ENVELOPE_DEFAULT_TIMEOUT_MS,
+  onSynraMessage,
   useSynraEnvelope,
   type SynraEnvelopeRuntimeSurface,
   type SynraInboundEnvelope,

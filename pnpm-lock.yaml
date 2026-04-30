@@ -9,6 +9,9 @@ catalogs:
     esbuild:
       specifier: ^0.28.0
       version: 0.28.0
+    fflate:
+      specifier: ^0.8.2
+      version: 0.8.2
     pathe:
       specifier: ^2.0.3
       version: 2.0.3
@@ -31,6 +34,9 @@ catalogs:
     '@capacitor/docgen':
       specifier: ^0.3.1
       version: 0.3.1
+    '@capacitor/filesystem':
+      specifier: ^8.1.2
+      version: 8.1.2
     '@capacitor/ios':
       specifier: ^8.3.1
       version: 8.3.1
@@ -143,6 +149,8 @@ overrides:
   vite: npm:@voidzero-dev/vite-plus-core@0.1.16
   vitest: npm:@voidzero-dev/vite-plus-test@0.1.16
 
+packageExtensionsChecksum: sha256-qH2BR7TM3KCLqC9Ni0f55w3yvvrBXN5rVWq71Gh39Vc=
+
 importers:
 
   .:
@@ -220,6 +228,9 @@ importers:
       '@capacitor/core':
         specifier: catalog:capacitor
         version: 8.3.1
+      '@capacitor/filesystem':
+        specifier: catalog:capacitor
+        version: 8.1.2(@capacitor/core@8.3.1)
       '@synra/capacitor-device-connection':
         specifier: workspace:*
         version: link:../../packages/capacitor-device-connection
@@ -323,6 +334,9 @@ importers:
       '@capacitor/core':
         specifier: catalog:capacitor
         version: 8.3.1
+      '@capacitor/filesystem':
+        specifier: catalog:capacitor
+        version: 8.1.2(@capacitor/core@8.3.1)
       '@capacitor/ios':
         specifier: catalog:capacitor
         version: 8.3.1(@capacitor/core@8.3.1)
@@ -606,6 +620,9 @@ importers:
       '@synra/protocol':
         specifier: workspace:*
         version: link:../protocol
+      fflate:
+        specifier: catalog:build
+        version: 0.8.2
       pathe:
         specifier: catalog:build
         version: 2.0.3
@@ -772,10 +789,18 @@ packages:
     engines: {node: '>=18.0.0'}
     hasBin: true
 
+  '@capacitor/filesystem@8.1.2':
+    resolution: {integrity: sha512-doaaMfGoFR2hWU6aV6u83I+5ZsGyJVq+Gz4r9lMpJzUKMm1eMu0hLnFdV1aXZlU9FlK/RndFrVD8oRZfNOqWgQ==}
+    peerDependencies:
+      '@capacitor/core': '>=8.0.0'
+
   '@capacitor/ios@8.3.1':
     resolution: {integrity: sha512-BEhLyYYHWJLib4mpaPMaaylbC8meqgxbNYwQJH2svsSLW7yo/hFie+Zoo66a44XnqcMd2tvmAuzimWunXZi/xA==}
     peerDependencies:
       '@capacitor/core': ^8.3.0
+
+  '@capacitor/synapse@1.0.4':
+    resolution: {integrity: sha512-/C1FUo8/OkKuAT4nCIu/34ny9siNHr9qtFezu4kxm6GY1wNFxrCFWjfYx5C1tUhVGz3fxBABegupkpjXvjCHrw==}
 
   '@develar/schema-utils@2.6.5':
     resolution: {integrity: sha512-0cp4PsWQ/9avqTVMCtZ+GirikIA36ikvjtHweU4/j8yLtgObI0+JUPhYFScgwlteveGB1rt3Cm8UhN04XayDig==}
@@ -3372,6 +3397,9 @@ packages:
       picomatch:
         optional: true
 
+  fflate@0.8.2:
+    resolution: {integrity: sha512-cPJU47OaAoCbg0pBvzsgpTPhmhqI5eJjh/JIu8tPj5q+T7iLvW/JAYUqmE7KOB4R1ZyEhzBaIQpQpardBF5z8A==}
+
   filelist@1.0.6:
     resolution: {integrity: sha512-5giy2PkLYY1cP39p17Ech+2xlpTRL9HLspOfEgm0L6CwBXBTgsK5ou0JtzYuepxkaQ/tvhCFIJ5uXo0OrM2DxA==}
 
@@ -4888,9 +4916,16 @@ snapshots:
       minimist: 1.2.8
       typescript: 4.2.4
 
+  '@capacitor/filesystem@8.1.2(@capacitor/core@8.3.1)':
+    dependencies:
+      '@capacitor/core': 8.3.1
+      '@capacitor/synapse': 1.0.4
+
   '@capacitor/ios@8.3.1(@capacitor/core@8.3.1)':
     dependencies:
       '@capacitor/core': 8.3.1
+
+  '@capacitor/synapse@1.0.4': {}
 
   '@develar/schema-utils@2.6.5':
     dependencies:
@@ -7184,6 +7219,8 @@ snapshots:
   fdir@6.5.0(picomatch@4.0.4):
     optionalDependencies:
       picomatch: 4.0.4
+
+  fflate@0.8.2: {}
 
   filelist@1.0.6:
     dependencies:

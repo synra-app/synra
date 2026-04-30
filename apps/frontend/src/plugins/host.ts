@@ -6,6 +6,7 @@ export {
   openPluginPage,
   registerPlugin,
   syncInstalledPlugins,
+  unregisterInstalledPlugin,
   PluginHostFacade,
   type RegisteredPlugin
 } from './host/index'

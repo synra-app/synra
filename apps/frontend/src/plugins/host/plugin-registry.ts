@@ -18,6 +18,10 @@ export class PluginRegistry {
     this.plugins.set(record.metadata.pluginId, record)
   }
 
+  unregister(pluginId: string): void {
+    this.plugins.delete(pluginId)
+  }
+
   get(pluginId: string): SynraPlugin | undefined {
     return this.plugins.get(pluginId)?.plugin
   }

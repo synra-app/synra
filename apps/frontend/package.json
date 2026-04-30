@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@capacitor/core": "catalog:capacitor",
+    "@capacitor/filesystem": "catalog:capacitor",
     "@synra/capacitor-device-connection": "workspace:*",
     "@synra/capacitor-electron": "workspace:*",
     "@synra/capacitor-lan-discovery": "workspace:*",
@@ -27,7 +28,6 @@
     "vue-router": "catalog:vue"
   },
   "devDependencies": {
-    "pathe": "catalog:build",
     "@unocss/preset-attributify": "catalog:unocss",
     "@unocss/preset-icons": "catalog:unocss",
     "@unocss/preset-typography": "catalog:unocss",
@@ -36,6 +36,7 @@
     "@unocss/reset": "catalog:unocss",
     "@unocss/vite": "catalog:unocss",
     "@vitejs/plugin-vue": "catalog:vite",
+    "pathe": "catalog:build",
     "sass": "catalog:style",
     "typescript": "catalog:types",
     "uno-colors": "catalog:style",

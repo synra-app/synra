@@ -8,7 +8,7 @@ import {
   parsePluginIdFromPackageName,
   SynraPlugin
 } from '../src/index.ts'
-import { useSynraSystemEnvelope, useSynraPluginEnvelope, useTransport } from '../src/hooks/index.ts'
+import { useSynraPluginEnvelope } from '../src/hooks/index.ts'
 import { synraVitePluginConfig } from '../src/vite/index.ts'
 
 test('parsePluginIdFromPackageName supports scoped and unscoped names', () => {
@@ -83,6 +83,33 @@ test('synraVitePluginConfig generates default plugin package config', () => {
       'ui/pages/settings/index': 'pages/settings/index.vue'
     })
     expect((config.pack as { dts?: boolean } | undefined)?.dts).toBe(false)
+    expect((config.pack as { minify?: boolean } | undefined)?.minify).toBe(true)
+    expect((config as { build?: { minify?: boolean } }).build?.minify).toBe(true)
+
+    const vendorGroup = (
+      config.pack as {
+        outputOptions?: { codeSplitting?: { groups?: Array<{ name?: unknown; test?: unknown }> } }
+      }
+    ).outputOptions?.codeSplitting?.groups?.[0]
+    expect(vendorGroup?.test).toBeInstanceOf(RegExp)
+    expect(typeof vendorGroup?.name).toBe('function')
+    const chunkName = vendorGroup?.name as (id: string) => string | null
+    expect(chunkName('/proj/node_modules/vue/dist/vue.runtime.esm-bundler.js')).toBe('vendor-vue')
+    expect(chunkName('/proj/node_modules/.pnpm/vue@3.0.0/node_modules/vue/dist/x.js')).toBe(
+      'vendor-vue'
+    )
+    expect(
+      chunkName(
+        '/proj/node_modules/.pnpm/@vue+runtime-core@3.0.0/node_modules/@vue/runtime-core/dist/x.js'
+      )
+    ).toBe('vendor-vue__runtime-core')
+    expect(chunkName('/proj/src/index.ts')).toBe(null)
+    expect((config.pack as { deps?: { onlyBundle?: boolean } } | undefined)?.deps?.onlyBundle).toBe(
+      false
+    )
+    expect(
+      typeof (config.pack as { deps?: { alwaysBundle?: unknown } } | undefined)?.deps?.alwaysBundle
+    ).toBe('function')
     expect((config.pack as { exports?: { devExports: boolean } } | undefined)?.exports).toEqual({
       devExports: true
     })
@@ -105,14 +132,41 @@ test('synraVitePluginConfig generates default plugin package config', () => {
   }
 })
 
-test('plugin-sdk hooks should re-export transport and synra event helpers from @synra/hooks', () => {
-  const transport = useTransport()
-  expect(typeof transport.connectToDevice).toBe('function')
-  expect(typeof transport.disconnectDevice).toBe('function')
-  expect(transport.openTransportLinks).toBeDefined()
-  const synra = useSynraSystemEnvelope()
-  expect(typeof synra.send).toBe('function')
-  expect(typeof synra.subscribe).toBe('function')
+test('synraVitePluginConfig splits Node entries into pack.format.cjs when host exists', () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), 'synra-plugin-sdk-host-'))
+  const previousCwd = process.cwd()
+  try {
+    mkdirSync(join(tempRoot, 'pages', 'home'), { recursive: true })
+    mkdirSync(join(tempRoot, 'src', 'host'), { recursive: true })
+    writeFileSync(join(tempRoot, 'pages', 'home', 'index.vue'), '<template>home</template>')
+    writeFileSync(join(tempRoot, 'src', 'index.ts'), 'export {}', 'utf8')
+    writeFileSync(join(tempRoot, 'src', 'host', 'index.ts'), 'export default {}', 'utf8')
+    process.chdir(tempRoot)
+
+    const config = synraVitePluginConfig()
+    const pack = config.pack as {
+      entry?: Record<string, string>
+      format?: {
+        esm?: { entry?: Record<string, string> }
+        cjs?: { entry?: Record<string, string> }
+      }
+    }
+
+    expect(pack.entry?.['ui/index']).toBe('src/index.ts')
+    expect(pack.entry?.['host/index']).toBe('src/host/index.ts')
+    expect(pack.format?.esm?.entry?.['ui/index']).toBe('src/index.ts')
+    expect(pack.format?.esm?.entry?.['host/index']).toBeUndefined()
+    expect(pack.format?.cjs?.entry?.['host/index']).toBe('src/host/index.ts')
+  } finally {
+    process.chdir(previousCwd)
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('plugin-sdk hooks re-exports useSynraPluginEnvelope from @synra/hooks', () => {
   const pluginEv = useSynraPluginEnvelope('@synra-plugin/chat')
   expect(typeof pluginEv.send).toBe('function')
+  expect(typeof pluginEv.subscribe).toBe('function')
+  expect(typeof pluginEv.request).toBe('function')
+  expect(pluginEv.pluginWireSlug).toBe('chat')
 })

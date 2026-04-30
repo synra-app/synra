@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { builtinModules } from 'node:module'
-import { resolve } from 'pathe'
+import { dirname, relative, resolve } from 'pathe'
 import { loadConfig } from '@unocss/config'
 import { createGenerator } from 'unocss'
 import VueRolldown from 'unplugin-vue/rolldown'
@@ -8,6 +8,14 @@ import { globSync } from 'tinyglobby'
 import Vue from '@vitejs/plugin-vue'
 import UnoCSS from '@unocss/vite'
 import type { PluginOption, UserConfig } from 'vite-plus'
+import type { UserConfig as TsdownPackUserConfig } from 'vite-plus/pack'
+
+/** Shape passed to `pack.entry` (vp pack / tsdown). */
+type TsdownPackEntry = NonNullable<TsdownPackUserConfig['entry']>
+/** Per-output runtime; tsdown only supports a single top-level `pack.platform`, so we mirror it per entry for `deps.alwaysBundle`. */
+type TsdownPackPlatform = NonNullable<TsdownPackUserConfig['platform']>
+/** When both WebView (ESM) and Node (CJS) entries exist, split builds via tsdown `format`. */
+type TsdownPackFormat = NonNullable<TsdownPackUserConfig['format']>
 
 function normalizeEntryPath(entry: string): string {
   return entry.replaceAll('\\', '/')
@@ -49,6 +57,173 @@ const NODE_BUILTINS = new Set(
 
 type RuntimeEntryKind = (typeof SYNRA_RUNTIME_ENTRY_KINDS)[number]
 
+function buildSynraPluginPackEntrySection(options: {
+  cwd: string
+  pageEntries: string[]
+  styleEntryPath?: string
+}): {
+  entry: Record<string, string>
+  platformByOutputKey: Record<string, TsdownPackPlatform>
+} {
+  const { cwd, pageEntries, styleEntryPath } = options
+  const entry: Record<string, string> = {}
+  const platformByOutputKey: Record<string, TsdownPackPlatform> = {}
+
+  const add = (outputKey: string, inputPath: string, platform: TsdownPackPlatform): void => {
+    entry[outputKey] = inputPath
+    platformByOutputKey[outputKey] = platform
+  }
+
+  const uiMainEntry = existsSync(resolve(cwd, 'src/ui/index.ts'))
+    ? 'src/ui/index.ts'
+    : 'src/index.ts'
+  add('ui/index', uiMainEntry, 'browser')
+  add(VIRTUAL_PAGES_ENTRY_NAME, VIRTUAL_PAGES_ENTRY_ID, 'browser')
+
+  for (const page of pageEntries) {
+    add(toPageEntryName(page), page, 'browser')
+  }
+
+  if (styleEntryPath) {
+    add('ui/style', styleEntryPath, 'browser')
+  }
+
+  const optionalNodeEntries: Array<{ outputKey: string; inputPath: string }> = [
+    { outputKey: 'worker/index', inputPath: 'src/worker/index.ts' },
+    { outputKey: 'shared/index', inputPath: 'src/shared/index.ts' },
+    { outputKey: 'host/index', inputPath: 'src/host/index.ts' }
+  ]
+  for (const row of optionalNodeEntries) {
+    if (existsSync(resolve(cwd, row.inputPath))) {
+      add(row.outputKey, row.inputPath, 'node')
+    }
+  }
+
+  return { entry, platformByOutputKey }
+}
+
+/**
+ * Always sets top-level `pack.entry` (tsdown runs `resolveEntry` on it before applying `format` overrides).
+ * When Node + browser entries both exist, adds `pack.format` so host/worker/shared emit CJS and UI emits ESM.
+ *
+ * @see https://tsdown.dev — `format: { esm: {...}, cjs: {...} }` with per-format `entry` + `platform`.
+ */
+function buildSynraPluginPackLayout(packEntrySection: {
+  entry: Record<string, string>
+  platformByOutputKey: Record<string, TsdownPackPlatform>
+}): { entry: TsdownPackEntry; format?: TsdownPackFormat } {
+  const { entry: fullEntryRecord, platformByOutputKey } = packEntrySection
+  const fullEntry = fullEntryRecord as TsdownPackEntry
+
+  const browserEntry: Record<string, string> = {}
+  const nodeEntry: Record<string, string> = {}
+  for (const [outputKey, inputPath] of Object.entries(fullEntryRecord)) {
+    if (platformByOutputKey[outputKey] === 'node') {
+      nodeEntry[outputKey] = inputPath
+    } else {
+      browserEntry[outputKey] = inputPath
+    }
+  }
+
+  const hasBrowser = Object.keys(browserEntry).length > 0
+  const hasNode = Object.keys(nodeEntry).length > 0
+
+  if (hasBrowser && hasNode) {
+    return {
+      entry: fullEntry,
+      format: {
+        esm: {
+          entry: browserEntry as TsdownPackEntry,
+          platform: 'browser'
+        },
+        cjs: {
+          entry: nodeEntry as TsdownPackEntry,
+          platform: 'node'
+        }
+      } as TsdownPackFormat
+    }
+  }
+
+  if (hasBrowser) {
+    return { entry: fullEntry }
+  }
+
+  if (hasNode) {
+    return {
+      entry: fullEntry,
+      format: {
+        cjs: {
+          entry: nodeEntry as TsdownPackEntry,
+          platform: 'node'
+        }
+      } as TsdownPackFormat
+    }
+  }
+
+  return { entry: fullEntry }
+}
+
+function nodeBundleDirectoryPrefixesFromPackEntry(
+  entry: Record<string, string>,
+  platformByOutputKey: Record<string, TsdownPackPlatform>
+): string[] {
+  const prefixes: string[] = []
+  for (const [outputKey, inputPath] of Object.entries(entry)) {
+    if (platformByOutputKey[outputKey] !== 'node') {
+      continue
+    }
+    if (inputPath.startsWith('virtual:')) {
+      continue
+    }
+    prefixes.push(normalizeEntryPath(dirname(inputPath)))
+  }
+  return prefixes
+}
+
+function shouldBundleNodeModulesForImporter(
+  importer: string | undefined,
+  cwd: string,
+  entry: Record<string, string>,
+  platformByOutputKey: Record<string, TsdownPackPlatform>
+): boolean {
+  if (!importer) {
+    return false
+  }
+  const n = importer.replace(/\\/g, '/')
+  if (n.includes('virtual:synra-pages-entry') || n.includes('synra-pages-entry')) {
+    return true
+  }
+  if (/\/pages\//.test(n)) {
+    return true
+  }
+
+  let rel: string
+  try {
+    rel = normalizeEntryPath(relative(cwd, importer))
+  } catch {
+    return false
+  }
+
+  if (rel.startsWith('pages/') || rel.includes('/pages/')) {
+    return true
+  }
+
+  const nodeDirPrefixes = nodeBundleDirectoryPrefixesFromPackEntry(entry, platformByOutputKey)
+
+  if (!rel.startsWith('src/')) {
+    return false
+  }
+  for (const prefix of nodeDirPrefixes) {
+    if (!prefix.startsWith('src/')) {
+      continue
+    }
+    if (rel === prefix || rel.startsWith(`${prefix}/`)) {
+      return false
+    }
+  }
+  return true
+}
+
 function createPagesManifestItems(pageEntries: string[]): PagesManifestItem[] {
   return pageEntries.map((pageEntry) => {
     return {
@@ -56,6 +231,54 @@ function createPagesManifestItems(pageEntries: string[]): PagesManifestItem[] {
       file: pageEntry
     }
   })
+}
+
+/**
+ * Resolves npm package name (e.g. `vue`, `@vue/runtime-core`) from a bundled module id.
+ * Supports flat `node_modules` and pnpm `.pnpm/<pkg>@<ver>/node_modules/` layout.
+ */
+function npmPackageNameFromModuleId(moduleId: string): string | null {
+  const id = moduleId.replace(/\\/g, '/')
+
+  const pnpmStore = id.match(/\/node_modules\/\.pnpm\/([^/]+)\/node_modules\//)
+  if (pnpmStore?.[1]) {
+    return parsePnpmVirtualStoreFolder(pnpmStore[1])
+  }
+
+  const idx = id.indexOf('/node_modules/')
+  if (idx === -1) {
+    return null
+  }
+  const rest = id.slice(idx + '/node_modules/'.length)
+  if (rest.startsWith('.pnpm/')) {
+    return null
+  }
+  const segments = rest.split('/').filter(Boolean)
+  if (segments.length === 0) {
+    return null
+  }
+  if (segments[0].startsWith('@')) {
+    return segments.length >= 2 ? `${segments[0]}/${segments[1]}` : segments[0]
+  }
+  return segments[0]
+}
+
+function parsePnpmVirtualStoreFolder(folder: string): string {
+  const versionAt = folder.lastIndexOf('@')
+  const base = versionAt === -1 ? folder : folder.slice(0, versionAt)
+  if (base.startsWith('@')) {
+    return `@${base.slice(1).replace(/\+/g, '/')}`
+  }
+  return base
+}
+
+function vendorChunkNameFromModuleId(moduleId: string): string | null {
+  const pkg = npmPackageNameFromModuleId(moduleId)
+  if (!pkg) {
+    return null
+  }
+  const safe = pkg.replace(/^@/, '').replace(/\//g, '__')
+  return `vendor-${safe}`
 }
 
 function createPagesManifestPlugin(items: PagesManifestItem[]) {
@@ -224,49 +447,20 @@ function createUnoCssGeneratePlugin(cwd: string, hasUnoConfig: boolean, unoConfi
   }
 }
 
-function resolveDefaultEntries(
-  pageEntries: string[],
-  styleEntryPath?: string
-): Record<string, string> {
-  const entries: Record<string, string> = {
-    'ui/index': existsSync(resolve(process.cwd(), 'src/ui/index.ts'))
-      ? 'src/ui/index.ts'
-      : 'src/index.ts',
-    [VIRTUAL_PAGES_ENTRY_NAME]: VIRTUAL_PAGES_ENTRY_ID
-  }
-
-  const runtimeOptionalEntries: Array<{ kind: RuntimeEntryKind; entryPath: string }> = [
-    { kind: 'worker', entryPath: 'src/worker/index.ts' },
-    { kind: 'shared', entryPath: 'src/shared/index.ts' },
-    { kind: 'host', entryPath: 'src/host/index.ts' }
-  ]
-
-  for (const entry of runtimeOptionalEntries) {
-    if (existsSync(resolve(process.cwd(), entry.entryPath))) {
-      entries[`${entry.kind}/index`] = entry.entryPath
-    }
-  }
-
-  if (styleEntryPath) {
-    entries['ui/style'] = styleEntryPath
-  }
-
-  for (const pageEntry of pageEntries) {
-    entries[toPageEntryName(pageEntry)] = pageEntry
-  }
-
-  return entries
-}
-
 export function synraVitePluginConfig(): UserConfig {
   const cwd = process.cwd()
   const pagesPattern = 'pages/**/index.vue'
   const pageEntries = globSync(pagesPattern, { cwd, onlyFiles: true }).map(normalizeEntryPath)
+  const packEntrySection = buildSynraPluginPackEntrySection({ cwd, pageEntries })
+  const packLayout = buildSynraPluginPackLayout(packEntrySection)
   const pageManifestItems = createPagesManifestItems(pageEntries)
   const unoConfigPath = normalizeEntryPath(resolve(cwd, 'uno.config.ts'))
   const hasUnoConfig = existsSync(unoConfigPath)
 
   return {
+    build: {
+      minify: true
+    },
     fmt: {
       singleQuote: true,
       semi: false,
@@ -277,13 +471,39 @@ export function synraVitePluginConfig(): UserConfig {
       hasUnoConfig ? UnoCSS({ configFile: unoConfigPath }) : null
     ],
     pack: {
-      entry: resolveDefaultEntries(pageEntries),
+      entry: packLayout.entry,
+      ...(packLayout.format ? { format: packLayout.format } : {}),
       dts: false,
+      minify: true,
       css: {
         minify: true
       },
       exports: {
         devExports: true
+      },
+      deps: {
+        alwaysBundle: (_id: string, importer?: string) =>
+          shouldBundleNodeModulesForImporter(
+            importer,
+            cwd,
+            packEntrySection.entry,
+            packEntrySection.platformByOutputKey
+          ),
+        onlyBundle: false
+      },
+      /**
+       * Split inlined `node_modules` into per-package chunks (Rolldown manual code splitting).
+       * @see https://rolldown.rs/in-depth/manual-code-splitting
+       */
+      outputOptions: {
+        codeSplitting: {
+          groups: [
+            {
+              test: /node_modules[\\/]/,
+              name: (moduleId: string) => vendorChunkNameFromModuleId(moduleId)
+            }
+          ]
+        }
       },
       plugins: [
         VueRolldown({ isProduction: true }),
@@ -291,7 +511,7 @@ export function synraVitePluginConfig(): UserConfig {
         createUnoCssGeneratePlugin(cwd, hasUnoConfig, unoConfigPath),
         createVirtualPagesEntryPlugin(cwd, pageEntries, hasUnoConfig),
         createPagesManifestPlugin(pageManifestItems)
-      ] as any
-    }
+      ]
+    } as TsdownPackUserConfig
   }
 }

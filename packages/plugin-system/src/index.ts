@@ -16,3 +16,4 @@ export {
   resolveSynraPluginUiEntryAbsolutePath,
   resolveSynraPluginUiEntryRelativePath
 } from './resolve-ui-entry'
+export type { SynraPluginInstallSource } from './install-metadata'

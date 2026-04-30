@@ -6,10 +6,10 @@ import UnoCSS from '@unocss/vite'
 import Vue from '@vitejs/plugin-vue'
 import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
+import type { Plugin } from 'vite'
 import { defineConfig, type UserConfig } from 'vite-plus'
 import VueRouter from 'vue-router/vite'
 import { loadAppConfig } from '../../scripts/config/app-config'
-
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const r = (p: string) => pathResolve(__dirname, p)
 const projectRoot = __dirname
@@ -37,7 +37,36 @@ const buildMeta = {
   gitSha: getGitSha()
 }
 
+/** Resolve @synra/* from the app/node_modules when importing from ~/.synra/plugins (Vite /@fs/ analysis). */
+function synraInstalledPluginWorkspaceResolve(options: { projectRoot: string }): Plugin {
+  const synraPluginsSegment = '/.synra/plugins/'
+
+  function touchesInstalledSynraPlugin(importer: string): boolean {
+    const n = importer.replace(/\\/g, '/')
+    return n.includes(synraPluginsSegment) || (n.includes('/@fs/') && n.includes('.synra/plugins'))
+  }
+
+  return {
+    name: 'synra-installed-plugin-workspace-resolve',
+    enforce: 'pre',
+    async resolveId(id, importer, resolveOpts) {
+      if (!importer || !id.startsWith('@synra/')) {
+        return null
+      }
+      if (!touchesInstalledSynraPlugin(importer)) {
+        return null
+      }
+      const resolved = await this.resolve(id, join(options.projectRoot, 'package.json'), {
+        skipSelf: true,
+        ...resolveOpts
+      })
+      return resolved ?? null
+    }
+  }
+}
+
 const plugins: any[] = []
+plugins.push(synraInstalledPluginWorkspaceResolve({ projectRoot }))
 plugins.push(VueRouter({ dts: r('.auto-generated/typed-router.d.ts') }))
 plugins.push(Vue())
 plugins.push(
@@ -61,8 +90,10 @@ plugins.push(
     configFile: r('uno.config.ts')
   })
 )
-
 export default defineConfig({
+  build: {
+    minify: true
+  },
   define: {
     __APP_NAME__: JSON.stringify(buildMeta.appName),
     __APP_VERSION__: JSON.stringify(buildMeta.appVersion),

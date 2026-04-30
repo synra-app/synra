@@ -1,9 +1,12 @@
 import os from 'node:os'
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
-import { join } from 'pathe'
+import { join, resolve as resolvePath } from 'pathe'
 import { c as createTar } from 'tar'
 import { afterEach, describe, expect, test, vi } from 'vite-plus/test'
-import { createPluginManagementService } from '../../../src/host/services/plugin-management.service'
+import {
+  createPluginManagementService,
+  ensurePluginBundleTarball
+} from '../../../src/host/services/plugin-management.service'
 
 function createTempRootDir(testName: string): string {
   return join(os.tmpdir(), `synra-plugin-management-${testName}-${Date.now()}`)
@@ -98,8 +101,9 @@ describe('host/services/plugin-management.service', () => {
       tarballUrl,
       tarballBuffer: await createPluginTarball({ includeUiEntry: true })
     })
+    const rootDir = registerRootDir('happy-path')
     const service = createPluginManagementService({
-      rootDir: registerRootDir('happy-path')
+      rootDir
     })
 
     const installed = await service.install({
@@ -109,6 +113,8 @@ describe('host/services/plugin-management.service', () => {
     expect(installed.version).toBe('1.2.3')
     expect(installed.title).toBe('Test Chat')
     expect(installed.defaultPage).toBe('home')
+    expect(installed.installSource).toBe('registry')
+    expect(installed.localSourcePath).toBeUndefined()
 
     const listed = await service.listInstalled()
     expect(listed.plugins).toEqual([installed])
@@ -186,6 +192,62 @@ describe('host/services/plugin-management.service', () => {
     const listed = await service.listInstalled()
     expect(listed.plugins).toEqual([])
     expect(existsSync(join(rootDir, 'test-chat', '1.2.3'))).toBe(false)
+  })
+
+  test('installFromLocalPath copies only package.json and dist (excludes node_modules and src)', async () => {
+    const srcRoot = registerRootDir('local-slim-src')
+    const storeRoot = registerRootDir('local-slim-store')
+    const src = join(srcRoot, 'plugin-src')
+    mkdirSync(join(src, 'dist', 'ui'), { recursive: true })
+    writeFileSync(
+      join(src, 'package.json'),
+      JSON.stringify({
+        name: '@synra-plugin/test-chat',
+        version: '2.0.0',
+        synra: {
+          title: 'Local',
+          defaultPage: 'home',
+          builtin: false,
+          icon: 'mdi:chat'
+        }
+      }),
+      'utf8'
+    )
+    writeFileSync(join(src, 'dist', 'ui', 'index.mjs'), 'export default {}', 'utf8')
+    writeFileSync(join(src, 'dist', 'ui', 'pages.json'), JSON.stringify({ pages: [] }), 'utf8')
+    mkdirSync(join(src, 'node_modules', 'heavy'), { recursive: true })
+    writeFileSync(join(src, 'node_modules', 'heavy', 'blob'), 'x'.repeat(50_000), 'utf8')
+    mkdirSync(join(src, 'src'), { recursive: true })
+    writeFileSync(join(src, 'src', 'main.ts'), 'export 1', 'utf8')
+
+    const service = createPluginManagementService({ rootDir: storeRoot })
+    const installed = await service.installFromLocalPath({ path: src })
+
+    expect(installed.pluginId).toBe('test-chat')
+    expect(installed.version).toBe('2.0.0')
+    expect(installed.installSource).toBe('local')
+    expect(installed.localSourcePath).toBe(resolvePath(src))
+
+    const pkgRoot = join(storeRoot, 'test-chat', '2.0.0', 'package')
+    expect(existsSync(join(pkgRoot, 'package.json'))).toBe(true)
+    expect(existsSync(join(pkgRoot, 'dist', 'ui', 'index.mjs'))).toBe(true)
+    expect(existsSync(join(pkgRoot, 'node_modules'))).toBe(false)
+    expect(existsSync(join(pkgRoot, 'src'))).toBe(false)
+  })
+
+  test('ensurePluginBundleTarball writes package.tgz from package directory', async () => {
+    const root = registerRootDir('ensure-tgz')
+    const artifact = join(root, 'demo-plugin', '1.0.0')
+    const pkg = join(artifact, 'package')
+    mkdirSync(join(pkg, 'dist', 'ui'), { recursive: true })
+    writeFileSync(join(pkg, 'dist', 'ui', 'index.mjs'), 'export default {}', 'utf8')
+    writeFileSync(join(pkg, 'dist', 'ui', 'pages.json'), JSON.stringify({ pages: [] }), 'utf8')
+
+    await ensurePluginBundleTarball(artifact)
+    expect(existsSync(join(artifact, 'package.tgz'))).toBe(true)
+
+    await ensurePluginBundleTarball(artifact)
+    expect(existsSync(join(artifact, 'package.tgz'))).toBe(true)
   })
 
   test('listInstalled auto-prunes broken artifact records', async () => {

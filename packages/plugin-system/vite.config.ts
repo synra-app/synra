@@ -4,6 +4,7 @@ export default createPackageViteConfig({
   pack: {
     entry: {
       index: './src/index.ts',
+      browser: './src/browser/index.ts',
       node: './src/node.ts'
     },
     exports: {

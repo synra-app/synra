@@ -1,6 +1,6 @@
 import type { Router } from 'vue-router'
 import type { SynraUiManifestMetadata } from '@synra/plugin-sdk'
-import type { InstalledPluginSummary } from '@synra/capacitor-electron'
+import type { InstalledPluginSummary } from '@synra/capacitor-electron/protocol'
 import type { PluginSyncReport, RegisteredPlugin } from './types'
 import { PluginHostFacade } from './plugin-host-facade'
 
@@ -34,6 +34,10 @@ export function activatePlugin(router: Router, pluginId: string): Promise<void> 
 
 export function deactivatePlugin(router: Router, pluginId: string): Promise<void> {
   return defaultHostFacade.deactivatePlugin(router, pluginId)
+}
+
+export function unregisterInstalledPlugin(router: Router, pluginId: string): Promise<void> {
+  return defaultHostFacade.unregisterInstalledPlugin(router, pluginId)
 }
 
 export function openPluginPage(

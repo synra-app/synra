@@ -19,6 +19,7 @@ import { DEVICE_CONNECTION_TRANSPORT_ERROR_CODES } from '@synra/capacitor-device
 import { DEVICE_PAIRING_REQUEST_EVENT } from '@synra/protocol'
 import {
   configureHooksRuntime,
+  onSynraMessage,
   resetConnectionRuntime,
   resetHooksRuntimeOptions,
   useSynraSystemEnvelope,
@@ -139,6 +140,39 @@ test('useSynraSystemEnvelope delivers connection-layer messages after connect', 
     payload: {
       channel: 'default',
       body: 'hello'
+    }
+  })
+  cleanup()
+  expect(seen.length).toBe(1)
+})
+
+test('onSynraMessage receives wired envelope events (legacy plugin-sdk compat)', async () => {
+  configureHooksRuntime({
+    adapterFactory: () => createMockAdapter(),
+    resolveSynraConnectType: () => 'paired',
+    localDiscoveryDeviceId: LOCAL_UUID
+  })
+  resetConnectionRuntime()
+  const transport = useTransport()
+  const synra = useSynraSystemEnvelope()
+  await transport.ensureReady()
+  await transport.startScan()
+  await transport.connectToDevice(PEER_UUID)
+
+  const seen: unknown[] = []
+  const cleanup = onSynraMessage(
+    (message) => {
+      seen.push(message.envelope.payload)
+    },
+    { event: '_synra.custom.chat.text' }
+  )
+
+  await synra.send({
+    target: PEER_UUID,
+    event: 'custom.chat.text',
+    payload: {
+      channel: 'default',
+      body: 'legacy-hook'
     }
   })
   cleanup()

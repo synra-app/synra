@@ -1,5 +1,5 @@
 import type { PluginAction, ShareInput } from '@synra/plugin-sdk'
-import type { SynraPluginManifestEntries } from '@synra/plugin-system'
+import type { SynraPluginInstallSource, SynraPluginManifestEntries } from '@synra/plugin-system'
 import type {
   LanWireEventName,
   PluginCatalogItem,
@@ -122,6 +122,8 @@ export type InstalledPluginSummary = {
   installedAt: number
   artifactRoot: string
   entries: SynraPluginManifestEntries
+  installSource: SynraPluginInstallSource
+  localSourcePath?: string
 }
 
 export type PluginInstallOptions = {
@@ -174,6 +176,7 @@ export type PluginSyncToDeviceOptions = {
   deviceId: string
 }
 
+/** Bridge result for pushing a plugin bundle to a peer (includes tarball transfer on Electron). */
 export type PluginSyncToDeviceResult =
   | {
       success: true
@@ -181,10 +184,12 @@ export type PluginSyncToDeviceResult =
       version: string
       deviceId: string
       artifactRoot: string
+      /** Number of file.transfer.chunk messages sent (set after transfer completes). */
       transmittedChunks?: number
     }
   | {
       success: false
+      /** e.g. missingPackageTarball, or prefixed missingPackageTarball: … */
       reason: string
     }
 

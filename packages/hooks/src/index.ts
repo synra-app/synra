@@ -1,6 +1,7 @@
 export { useTransport, type ConnectToDeviceOptions } from './hooks/use-transport'
 export {
   USE_SYNRA_ENVELOPE_DEFAULT_TIMEOUT_MS,
+  onSynraMessage,
   useSynraEnvelope,
   useSynraSystemEnvelope,
   useSynraPluginEnvelope,

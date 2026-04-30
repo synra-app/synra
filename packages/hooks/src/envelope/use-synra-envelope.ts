@@ -289,3 +289,14 @@ export function useSynraEnvelope() {
     request
   }
 }
+
+/**
+ * Legacy subscription entry for older plugin bundles that imported `onSynraMessage` from the app
+ * store. Prefer `useSynraPluginEnvelope` / `useSynraSystemEnvelope` or `useSynraEnvelope().subscribe`.
+ */
+export function onSynraMessage(
+  handler: (message: SynraInboundEnvelope) => void | Promise<void>,
+  filter?: SynraInboundFilter
+): () => void {
+  return useSynraEnvelope().subscribe(handler, filter)
+}

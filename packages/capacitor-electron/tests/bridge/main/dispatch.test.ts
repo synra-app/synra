@@ -53,7 +53,8 @@ function createHandlers() {
         icon: undefined,
         installedAt: Date.now(),
         artifactRoot: '/tmp',
-        entries: {}
+        entries: {},
+        installSource: 'registry' as const
       })),
       installFromLocalPath: vi.fn(async () => ({
         pluginId: 'chat',
@@ -65,7 +66,9 @@ function createHandlers() {
         icon: undefined,
         installedAt: Date.now(),
         artifactRoot: '/tmp',
-        entries: {}
+        entries: {},
+        installSource: 'local' as const,
+        localSourcePath: '/tmp/pkg'
       })),
       uninstall: vi.fn(async () => ({ success: true as const })),
       listInstalled: vi.fn(async () => ({ plugins: [] })),
@@ -79,7 +82,8 @@ function createHandlers() {
         version: '0.1.0',
         deviceId: 'dev-1',
         artifactRoot: '/tmp'
-      }))
+      })),
+      ensurePluginBundleTarball: vi.fn(async () => undefined)
     },
     deviceDiscoveryService: {
       startDiscovery: vi.fn(async () => ({
@@ -241,7 +245,8 @@ describe('bridge/main/dispatch', () => {
           icon: undefined,
           installedAt: Date.now(),
           artifactRoot: '/tmp',
-          entries: {}
+          entries: {},
+          installSource: 'registry' as const
         })),
         installFromLocalPath: vi.fn(async () => ({
           pluginId: 'chat',
@@ -253,7 +258,9 @@ describe('bridge/main/dispatch', () => {
           icon: undefined,
           installedAt: Date.now(),
           artifactRoot: '/tmp',
-          entries: {}
+          entries: {},
+          installSource: 'local' as const,
+          localSourcePath: '/tmp/pkg'
         })),
         uninstall: vi.fn(async () => ({ success: true as const })),
         listInstalled: vi.fn(async () => ({ plugins: [] })),
@@ -267,7 +274,8 @@ describe('bridge/main/dispatch', () => {
           version: '0.1.0',
           deviceId: 'dev-1',
           artifactRoot: '/tmp'
-        }))
+        })),
+        ensurePluginBundleTarball: vi.fn(async () => undefined)
       },
       deviceDiscoveryService: {
         startDiscovery: vi.fn(async () => ({

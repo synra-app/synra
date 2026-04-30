@@ -14,6 +14,7 @@ import {
 } from '../lib/paired-devices-storage'
 import { registerPairedAutoConnect } from '../composables/use-paired-auto-connect'
 import { registerPairingProtocol } from './register-pairing-protocol'
+import { registerPluginInboundTransportHandlers } from './register-plugin-inbound-transport'
 import type { PairingProtocolContext } from '../composables/use-pairing-protocol-context'
 import { useLanDiscoveryStore } from '../stores/lan-discovery'
 import { usePairingStore } from '../stores/pairing'
@@ -129,6 +130,7 @@ export function setupSynraRuntime(
           await downgradePairedToFresh(event.deviceId)
         }
       })
+      registerPluginInboundTransportHandlers()
       await initializeRuntime()
       await startInitialDiscovery()
     })

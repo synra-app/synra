@@ -70,9 +70,31 @@ export function createBridgeHandlers(deps: BridgeHandlerDependencies): BridgeHan
         return synced
       }
 
+      try {
+        await deps.pluginManagementService.ensurePluginBundleTarball(synced.artifactRoot)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        console.warn('[synra:bridge] plugin.syncToDevice: cannot ensure package.tgz', {
+          pluginId: synced.pluginId,
+          artifactRoot: synced.artifactRoot,
+          message
+        })
+        return {
+          success: false as const,
+          reason: `missingPackageTarball: ${message}`
+        }
+      }
+
       const bundlePath = join(synced.artifactRoot, 'package.tgz')
       if (!existsSync(bundlePath)) {
-        return synced
+        console.warn('[synra:bridge] plugin.syncToDevice: package.tgz missing after ensure', {
+          pluginId: synced.pluginId,
+          artifactRoot: synced.artifactRoot
+        })
+        return {
+          success: false as const,
+          reason: 'missingPackageTarball'
+        }
       }
 
       const localDeviceId = deps.preferencesService.ensureDeviceInstanceUuid()

@@ -34,3 +34,6 @@ export const BRIDGE_METHODS = {
 } as const
 
 export type BridgeMethod = (typeof BRIDGE_METHODS)[keyof typeof BRIDGE_METHODS]
+
+/** IPC dispatch ceiling for `plugin.syncToDevice` (many sequential TCP chunks). */
+export const BRIDGE_PLUGIN_SYNC_TO_DEVICE_TIMEOUT_MS = 30 * 60 * 1000

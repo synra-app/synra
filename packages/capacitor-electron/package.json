@@ -21,6 +21,7 @@
     ".": "./src/index.ts",
     "./capacitor": "./src/capacitor/index.ts",
     "./plugin": "./src/plugin/index.ts",
+    "./protocol": "./src/protocol-public.ts",
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -29,6 +30,7 @@
       ".": "./dist/index.mjs",
       "./capacitor": "./dist/capacitor.mjs",
       "./plugin": "./dist/plugin.mjs",
+      "./protocol": "./dist/protocol.mjs",
       "./package.json": "./package.json"
     }
   },

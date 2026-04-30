@@ -1,12 +1,16 @@
-import { createElectronBridgePluginFromGlobal } from '@synra/capacitor-electron/plugin'
+import type { InstalledPluginSummary } from '@synra/capacitor-electron/protocol'
+import type { SynraPluginInstallSource } from '@synra/plugin-system'
+import { tryGetSynraPluginRuntimeBridge } from '../plugins/bridge/synra-plugin-host-bridge'
 import { unknownToErrorMessage } from '@synra/protocol'
+import { SYNRA_PLUGIN_INSTALL_STORE_CHANGED_EVENT } from '../lib/plugin-install-store-events'
 import { resolveCurrentPluginRegistryUrl } from '../lib/plugin-registry-preferences'
 import { installPluginOnClient, removeInstalledPluginRecord } from '../plugins/install-manager'
 import {
   isPluginRegistered,
   listPlugins,
   openPluginPage,
-  syncInstalledPlugins
+  syncInstalledPlugins,
+  unregisterInstalledPlugin
 } from '../plugins/host'
 
 const DEFAULT_PLUGIN_ICON = 'material-symbols:extension-outline'
@@ -49,6 +53,23 @@ export type PluginCardItem = {
   logoUrl?: string
   builtin: boolean
   failure?: PluginFailure
+  installSource?: SynraPluginInstallSource
+  localSourcePath?: string
+}
+
+function enrichCardFromInstalled(
+  plugin: PluginCardItem,
+  installedById: Map<string, InstalledPluginSummary>
+): PluginCardItem {
+  const row = installedById.get(plugin.pluginId)
+  if (!row) {
+    return plugin
+  }
+  return {
+    ...plugin,
+    installSource: row.installSource,
+    localSourcePath: row.localSourcePath
+  }
 }
 
 function getFallbackPlugins(): PluginCardItem[] {
@@ -74,6 +95,7 @@ export function usePluginCatalog() {
   const error = ref<string | null>(null)
   const keyword = ref('')
   const plugins = ref<PluginCardItem[]>(getFallbackPlugins())
+  const reloadingPluginIds = ref<string[]>([])
 
   const filteredPlugins = computed(() => {
     const key = keyword.value.trim().toLowerCase()
@@ -86,7 +108,8 @@ export function usePluginCatalog() {
         plugin.name.toLowerCase().includes(key) ||
         plugin.pluginId.toLowerCase().includes(key) ||
         plugin.packageName?.toLowerCase().includes(key) ||
-        plugin.version.toLowerCase().includes(key)
+        plugin.version.toLowerCase().includes(key) ||
+        plugin.installSource?.toLowerCase().includes(key)
       )
     })
   })
@@ -97,15 +120,15 @@ export function usePluginCatalog() {
     error.value = null
 
     try {
-      if (!window.__synraCapElectron?.invoke) {
+      const bridge = tryGetSynraPluginRuntimeBridge()
+      if (!bridge) {
         plugins.value = getFallbackPlugins()
         return
       }
-
-      const bridge = createElectronBridgePluginFromGlobal()
       const query = keyword.value.trim()
       const registryUrl = await resolveCurrentPluginRegistryUrl()
       const installed = await bridge.listInstalledPlugins()
+      const installedById = new Map(installed.plugins.map((p) => [p.pluginId, p]))
       const syncResult = await syncInstalledPlugins(installed.plugins, requestId)
       const installedIds = new Set(installed.plugins.map((plugin) => plugin.pluginId))
       const syncFailures = new Map(
@@ -169,7 +192,7 @@ export function usePluginCatalog() {
 
       const merged = new Map<string, PluginCardItem>()
       for (const plugin of getFallbackPlugins()) {
-        merged.set(plugin.pluginId, plugin)
+        merged.set(plugin.pluginId, enrichCardFromInstalled(plugin, installedById))
       }
       for (const plugin of fetched) {
         const previous = merged.get(plugin.pluginId)
@@ -198,7 +221,7 @@ export function usePluginCatalog() {
         })
       }
 
-      plugins.value = [...merged.values()]
+      plugins.value = [...merged.values()].map((p) => enrichCardFromInstalled(p, installedById))
     } catch (unknownError) {
       error.value = unknownToErrorMessage(unknownError, 'Failed to fetch plugin catalog.')
       plugins.value = getFallbackPlugins()
@@ -258,16 +281,56 @@ export function usePluginCatalog() {
     }
   }
 
+  async function uninstallPlugin(plugin: PluginCardItem): Promise<void> {
+    error.value = null
+    const bridge = tryGetSynraPluginRuntimeBridge()
+    if (!bridge || plugin.builtin) {
+      return
+    }
+    if (
+      plugin.status !== 'ready' &&
+      plugin.status !== 'broken' &&
+      plugin.status !== 'registering'
+    ) {
+      return
+    }
+    plugin.status = 'removing'
+    plugin.failure = undefined
+    try {
+      const result = await bridge.uninstallPlugin({ pluginId: plugin.pluginId })
+      if (!result.success) {
+        plugin.status = 'broken'
+        plugin.failure = toPluginFailure(
+          'cleanupFailed',
+          `Could not remove plugin '${plugin.pluginId}'.`
+        )
+        error.value = plugin.failure.message
+        return
+      }
+      removeInstalledPluginRecord(plugin.pluginId)
+      await unregisterInstalledPlugin(router, plugin.pluginId)
+      await refreshCatalog()
+    } catch (unknownError) {
+      plugin.status = 'broken'
+      const message = unknownToErrorMessage(
+        unknownError,
+        `Failed to remove plugin '${plugin.pluginId}'.`
+      )
+      plugin.failure = toPluginFailure('cleanupFailed', message)
+      error.value = message
+    }
+  }
+
   async function installPluginFromLocalPath(localPath: string): Promise<void> {
     error.value = null
-    if (!window.__synraCapElectron?.invoke) {
-      throw new Error('Electron bridge is unavailable. Local plugin installation is not supported.')
-    }
     const path = localPath.trim()
     if (!path) {
       throw new Error('Local plugin path is required.')
     }
-    const bridge = createElectronBridgePluginFromGlobal()
+    const bridge = tryGetSynraPluginRuntimeBridge()
+    if (!bridge) {
+      throw new Error('Local plugin installation requires Electron or a supported host runtime.')
+    }
     const requestId = createDiagRequestId()
     const installed = await bridge.installPluginFromLocalPath({ path })
     const syncResult = await syncInstalledPlugins([installed], requestId)
@@ -281,17 +344,87 @@ export function usePluginCatalog() {
     await refreshCatalog()
   }
 
+  function isPluginReloading(pluginId: string): boolean {
+    return reloadingPluginIds.value.includes(pluginId)
+  }
+
+  async function reloadLocalPlugin(plugin: PluginCardItem): Promise<void> {
+    if (plugin.installSource !== 'local') {
+      error.value = 'Reload from disk is only available for plugins installed from a local folder.'
+      return
+    }
+    const path = plugin.localSourcePath?.trim()
+    if (!path) {
+      error.value = 'Missing local package path. Reinstall this plugin from a local folder.'
+      return
+    }
+    const bridge = tryGetSynraPluginRuntimeBridge()
+    if (!bridge) {
+      error.value = 'Reload requires Electron or a supported host runtime.'
+      return
+    }
+    if (plugin.builtin) {
+      return
+    }
+    if (
+      plugin.status !== 'ready' &&
+      plugin.status !== 'broken' &&
+      plugin.status !== 'registering'
+    ) {
+      return
+    }
+    if (isPluginReloading(plugin.pluginId)) {
+      return
+    }
+    error.value = null
+    reloadingPluginIds.value = [...reloadingPluginIds.value, plugin.pluginId]
+    try {
+      const requestId = createDiagRequestId()
+      const installed = await bridge.installPluginFromLocalPath({ path })
+      const syncResult = await syncInstalledPlugins([installed], requestId)
+      const failed = syncResult.failedPlugins.find((item) => item.pluginId === installed.pluginId)
+      if (failed) {
+        throw new Error(`Failed to register plugin after reload: ${failed.message}`)
+      }
+      if (!syncResult.registeredPluginIds.includes(installed.pluginId)) {
+        throw new Error(`Plugin '${installed.pluginId}' is not registered after reload.`)
+      }
+      await refreshCatalog()
+    } catch (unknownError) {
+      error.value = unknownToErrorMessage(unknownError, 'Failed to reload plugin from local path.')
+      await refreshCatalog()
+    } finally {
+      reloadingPluginIds.value = reloadingPluginIds.value.filter((id) => id !== plugin.pluginId)
+    }
+  }
+
+  function onInstallStoreChanged(): void {
+    void refreshCatalog()
+  }
+
   onMounted(() => {
     void refreshCatalog()
+    if (typeof window !== 'undefined') {
+      window.addEventListener(SYNRA_PLUGIN_INSTALL_STORE_CHANGED_EVENT, onInstallStoreChanged)
+    }
+  })
+
+  onUnmounted(() => {
+    if (typeof window !== 'undefined') {
+      window.removeEventListener(SYNRA_PLUGIN_INSTALL_STORE_CHANGED_EVENT, onInstallStoreChanged)
+    }
   })
 
   return {
     error,
     filteredPlugins,
     installPluginFromLocalPath,
+    isPluginReloading,
     keyword,
     loading,
     openPlugin,
-    refreshCatalog
+    refreshCatalog,
+    reloadLocalPlugin,
+    uninstallPlugin
   }
 }

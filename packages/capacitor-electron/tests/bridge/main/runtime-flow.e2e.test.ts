@@ -73,7 +73,8 @@ describe('bridge/main runtime e2e flow', () => {
           icon: undefined,
           installedAt: Date.now(),
           artifactRoot: '/tmp',
-          entries: {}
+          entries: {},
+          installSource: 'registry' as const
         })),
         installFromLocalPath: vi.fn(async () => ({
           pluginId: 'chat',
@@ -85,7 +86,9 @@ describe('bridge/main runtime e2e flow', () => {
           icon: undefined,
           installedAt: Date.now(),
           artifactRoot: '/tmp',
-          entries: {}
+          entries: {},
+          installSource: 'local' as const,
+          localSourcePath: '/tmp/pkg'
         })),
         uninstall: vi.fn(async () => ({ success: true as const })),
         listInstalled: vi.fn(async () => ({ plugins: [] })),
@@ -99,7 +102,8 @@ describe('bridge/main runtime e2e flow', () => {
           version: '0.1.0',
           deviceId: 'dev-e2e-1',
           artifactRoot: '/tmp'
-        }))
+        })),
+        ensurePluginBundleTarball: vi.fn(async () => undefined)
       },
       deviceDiscoveryService: {
         startDiscovery: vi.fn(async () => ({
@@ -256,7 +260,8 @@ describe('bridge/main runtime e2e flow', () => {
           icon: undefined,
           installedAt: Date.now(),
           artifactRoot: '/tmp',
-          entries: {}
+          entries: {},
+          installSource: 'registry' as const
         })),
         installFromLocalPath: vi.fn(async () => ({
           pluginId: 'chat',
@@ -268,7 +273,9 @@ describe('bridge/main runtime e2e flow', () => {
           icon: undefined,
           installedAt: Date.now(),
           artifactRoot: '/tmp',
-          entries: {}
+          entries: {},
+          installSource: 'local' as const,
+          localSourcePath: '/tmp/pkg'
         })),
         uninstall: vi.fn(async () => ({ success: true as const })),
         listInstalled: vi.fn(async () => ({ plugins: [] })),
@@ -282,7 +289,8 @@ describe('bridge/main runtime e2e flow', () => {
           version: '0.1.0',
           deviceId: 'dev-e2e-2',
           artifactRoot: '/tmp'
-        }))
+        })),
+        ensurePluginBundleTarball: vi.fn(async () => undefined)
       },
       deviceDiscoveryService: {
         startDiscovery: vi.fn(async () => ({

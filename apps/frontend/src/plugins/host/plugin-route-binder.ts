@@ -1,8 +1,19 @@
+import { Capacitor } from '@capacitor/core'
+import { Directory, Filesystem } from '@capacitor/filesystem'
 import { normalizePluginPagePath } from '@synra/plugin-sdk'
-import { createElectronBridgePluginFromGlobal } from '@synra/capacitor-electron/plugin'
+import { join } from 'pathe'
 import type { Router } from 'vue-router'
+import { tryGetSynraPluginRuntimeBridge } from '../bridge/synra-plugin-host-bridge'
 import type { PagesManifest, RegisteredPage } from './types'
 import { toPluginAssetUrl } from './plugin-asset-url'
+
+function useCapacitorFilesystemDynamicImport(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    Capacitor.isNativePlatform() &&
+    !window.__synraCapElectron?.invoke
+  )
+}
 
 export class PluginRouteBinder {
   private readonly pagesByPlugin = new Map<string, Map<string, RegisteredPage>>()
@@ -60,11 +71,16 @@ export class PluginRouteBinder {
     defaultPage: string,
     uiEntryPath?: string
   ): Promise<PagesManifest> {
-    if (!artifactRoot || !window.__synraCapElectron?.invoke) {
+    if (!artifactRoot) {
       throw new Error('Cannot resolve installed plugin pages manifest without artifactRoot.')
     }
 
-    const bridge = createElectronBridgePluginFromGlobal()
+    const bridge = tryGetSynraPluginRuntimeBridge()
+    if (!bridge) {
+      throw new Error(
+        'Cannot resolve installed plugin pages manifest without a plugin host bridge.'
+      )
+    }
     const normalizedRoot = artifactRoot.replace(/\\/g, '/')
     const manifestPaths = [
       `${normalizedRoot}/package/dist/ui/pages.json`,
@@ -115,6 +131,18 @@ export class PluginRouteBinder {
       for (let index = 0; index < candidatePaths.length; index += 1) {
         const candidatePath = candidatePaths[index]
         try {
+          if (useCapacitorFilesystemDynamicImport()) {
+            const normalizedRoot = artifactRoot.replace(/\\/g, '/')
+            const rel = join(normalizedRoot, 'package', candidatePath).replace(/^\/+/, '')
+            const { uri } = await Filesystem.getUri({
+              path: rel,
+              directory: Directory.Data
+            })
+            const url = Capacitor.convertFileSrc(uri)
+            return (await import(/* @vite-ignore */ url)) as {
+              default: unknown
+            }
+          }
           return (await import(/* @vite-ignore */ toPluginAssetUrl(pluginId, candidatePath))) as {
             default: unknown
           }
@@ -127,11 +155,16 @@ export class PluginRouteBinder {
             continue
           }
           if (isBareSpecifierFailure) {
-            return (await import(
-              /* @vite-ignore */
-              this.toPluginFsSpecifier(pluginId, candidatePath)
-            )) as {
-              default: unknown
+            if (!useCapacitorFilesystemDynamicImport()) {
+              return (await import(
+                /* @vite-ignore */
+                this.toPluginFsSpecifier(pluginId, candidatePath)
+              )) as {
+                default: unknown
+              }
+            }
+            if (hasNextCandidate) {
+              continue
             }
           }
           throw error

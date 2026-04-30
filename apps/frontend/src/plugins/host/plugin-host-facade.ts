@@ -1,8 +1,8 @@
 import type { SynraUiManifestMetadata } from '@synra/plugin-sdk'
 import { getSynraUiManifestMetadata, type SynraPluginManifest } from '@synra/plugin-sdk'
-import { createElectronBridgePluginFromGlobal } from '@synra/capacitor-electron/plugin'
+import { tryGetSynraPluginRuntimeBridge } from '../bridge/synra-plugin-host-bridge'
 import type { Router } from 'vue-router'
-import type { InstalledPluginSummary } from '@synra/capacitor-electron'
+import type { InstalledPluginSummary } from '@synra/capacitor-electron/protocol'
 import type {
   PluginSyncFailure,
   PluginSyncReport,
@@ -42,13 +42,13 @@ export class PluginHostFacade {
     for (const plugin of plugins) {
       byPluginId.set(plugin.pluginId, plugin)
     }
-    if (!window.__synraCapElectron?.invoke) {
+    const bridge = tryGetSynraPluginRuntimeBridge()
+    if (!bridge) {
       return {
         registeredPluginIds,
         failedPlugins
       }
     }
-    const bridge = createElectronBridgePluginFromGlobal()
     const registerReport = await bridge.registerInstalledPlugins({ plugins, requestId })
     for (const pluginId of registerReport.registeredPluginIds) {
       const plugin = byPluginId.get(pluginId)
@@ -104,6 +104,16 @@ export class PluginHostFacade {
       path: this.routeBinder.resolveRuntimePath(pluginId, pagePath),
       query
     })
+  }
+
+  /**
+   * Removes runtime registration and routes after the host has uninstalled plugin artifacts.
+   */
+  async unregisterInstalledPlugin(router: Router, pluginId: string): Promise<void> {
+    await this.lifecycle.deactivate(router, pluginId).catch(() => undefined)
+    this.routeBinder.detachRoutes(router, pluginId)
+    this.registry.unregister(pluginId)
+    this.metadataByPluginId.delete(pluginId)
   }
 
   private toMetadata(plugin: InstalledPluginSummary): SynraUiManifestMetadata {

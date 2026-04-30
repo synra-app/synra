@@ -9,13 +9,16 @@ import {
   writeFileSync
 } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'pathe'
-import { x as extractTar } from 'tar'
+import { dirname, join, resolve as resolvePath } from 'pathe'
+import { c as createTar, x as extractTar } from 'tar'
 import {
   getSynraPluginManifestMetadata,
   isValidSynraPluginPackageName,
   resolveSynraPluginUiEntryAbsolutePath,
-  type SynraPluginManifest
+  resolveSynraPluginUiEntryRelativePath,
+  SYNRA_PLUGIN_ENTRY_KINDS,
+  type SynraPluginManifest,
+  type SynraPluginManifestEntries
 } from '@synra/plugin-system'
 import {
   createSynraPluginInstallStore,
@@ -42,6 +45,11 @@ export type PluginManagementService = {
   listInstalled(): Promise<PluginListInstalledResult>
   registerInstalled(options: PluginRegisterInstalledOptions): Promise<PluginRegisterInstalledResult>
   syncToDevice(options: PluginSyncToDeviceOptions): Promise<PluginSyncToDeviceResult>
+  /**
+   * Ensures `artifactRoot/package.tgz` exists (creates it from `artifactRoot/package/` when missing).
+   * Used before TCP bundle transfer for peers installed via local path (no upstream tarball cached).
+   */
+  ensurePluginBundleTarball(artifactRoot: string): Promise<void>
 }
 
 type NpmPackageVersionDoc = {
@@ -103,7 +111,9 @@ function toInstallResult(record: SynraInstalledPluginRecord): PluginInstallResul
     icon: record.icon,
     artifactRoot: record.artifactRoot,
     installedAt: record.installedAt,
-    entries: record.entries
+    entries: record.entries,
+    installSource: record.installSource,
+    localSourcePath: record.localSourcePath
   }
 }
 
@@ -133,6 +143,60 @@ function readLocalPluginManifest(packageRoot: string): SynraPluginManifest {
   return parsed
 }
 
+function collectRequiredEntryRelativeSegments(entries: SynraPluginManifestEntries): string[] {
+  const set = new Set<string>()
+  set.add(resolveSynraPluginUiEntryRelativePath(entries).replace(/^[/\\]+/, ''))
+  for (const kind of SYNRA_PLUGIN_ENTRY_KINDS) {
+    if (kind === 'ui') {
+      continue
+    }
+    const value = entries[kind]?.trim()
+    if (value) {
+      set.add(value.replace(/^[/\\]+/, ''))
+    }
+  }
+  return [...set]
+}
+
+/**
+ * Copies only what Synra needs at runtime (not the full dev tree: no node_modules, src, etc.).
+ * Prefer whole `dist/` when present; then ensure manifest entry files exist (covers entries outside dist).
+ */
+function copyEssentialLocalPluginPackageContents(
+  sourcePackageRoot: string,
+  destPackageRoot: string,
+  entries: SynraPluginManifestEntries
+): void {
+  mkdirSync(destPackageRoot, { recursive: true })
+  const srcPkgJson = join(sourcePackageRoot, 'package.json')
+  cpSync(srcPkgJson, join(destPackageRoot, 'package.json'))
+
+  const distSrc = join(sourcePackageRoot, 'dist')
+  if (existsSync(distSrc)) {
+    cpSync(distSrc, join(destPackageRoot, 'dist'), { recursive: true, force: true })
+  }
+
+  for (const segment of collectRequiredEntryRelativeSegments(entries)) {
+    const srcFile = join(sourcePackageRoot, segment)
+    if (!existsSync(srcFile)) {
+      throw new Error(
+        `Local plugin is missing required path '${segment}' under '${sourcePackageRoot}'. ` +
+          (existsSync(distSrc)
+            ? "Check synra.entries and that the build wrote files under 'dist/'."
+            : "Run the plugin build so 'dist/' exists, or point synra.entries at built files.")
+      )
+    }
+    const destFile = join(destPackageRoot, segment)
+    if (!existsSync(destFile)) {
+      const relDir = dirname(segment)
+      const srcDir = relDir === '.' ? sourcePackageRoot : join(sourcePackageRoot, relDir)
+      const destDir = relDir === '.' ? destPackageRoot : join(destPackageRoot, relDir)
+      mkdirSync(destDir, { recursive: true })
+      cpSync(srcDir, destDir, { recursive: true, force: true })
+    }
+  }
+}
+
 function removeDirectoryIfEmpty(path: string): void {
   if (!existsSync(path)) {
     return
@@ -149,6 +213,36 @@ function cleanupArtifactDirectory(
 ): void {
   rmSync(artifactRoot, { recursive: true, force: true })
   removeDirectoryIfEmpty(join(pluginRootDir, pluginId))
+}
+
+/**
+ * Create `package.tgz` at the artifact root from the `package/` directory (npm-style layout).
+ */
+export async function ensurePluginBundleTarball(artifactRoot: string): Promise<void> {
+  const bundlePath = join(artifactRoot, 'package.tgz')
+  if (existsSync(bundlePath)) {
+    return
+  }
+  const packageRoot = join(artifactRoot, 'package')
+  if (!existsSync(packageRoot)) {
+    throw new Error(`Cannot build package.tgz: missing package directory at '${packageRoot}'.`)
+  }
+  const tmpPath = `${bundlePath}.tmp-${Date.now()}`
+  try {
+    await createTar(
+      {
+        gzip: true,
+        file: tmpPath,
+        cwd: artifactRoot,
+        portable: true
+      },
+      ['package']
+    )
+    renameSync(tmpPath, bundlePath)
+  } catch (error) {
+    rmSync(tmpPath, { force: true })
+    throw error
+  }
 }
 
 function ensureInstalledArtifactIntegrity(
@@ -246,7 +340,8 @@ export function createPluginManagementService(
         installedAt: Date.now(),
         artifactRoot,
         entries: manifestMetadata.entries,
-        hash: versionDoc.dist?.shasum
+        hash: versionDoc.dist?.shasum,
+        installSource: 'registry'
       }
       installStore.upsert(installedRecord)
 
@@ -262,7 +357,7 @@ export function createPluginManagementService(
       rmSync(stagingArtifactRoot, { recursive: true, force: true })
       mkdirSync(stagingArtifactRoot, { recursive: true })
       try {
-        cpSync(packageRoot, stagingPackageRoot, { recursive: true, force: true })
+        copyEssentialLocalPluginPackageContents(packageRoot, stagingPackageRoot, metadata.entries)
         ensureInstalledArtifactIntegrity(stagingArtifactRoot, metadata.entries)
         rmSync(artifactRoot, { recursive: true, force: true })
         renameSync(stagingArtifactRoot, artifactRoot)
@@ -281,7 +376,9 @@ export function createPluginManagementService(
         icon: metadata.icon,
         installedAt: Date.now(),
         artifactRoot,
-        entries: metadata.entries
+        entries: metadata.entries,
+        installSource: 'local',
+        localSourcePath: resolvePath(packageRoot)
       }
       installStore.upsert(installedRecord)
       return toInstallResult(installedRecord)
@@ -318,7 +415,9 @@ export function createPluginManagementService(
           icon: record.icon,
           installedAt: record.installedAt,
           artifactRoot: record.artifactRoot,
-          entries: record.entries ?? {}
+          entries: record.entries ?? {},
+          installSource: record.installSource,
+          localSourcePath: record.localSourcePath
         }))
       }
     },
@@ -380,6 +479,7 @@ export function createPluginManagementService(
         deviceId: optionsToSync.deviceId,
         artifactRoot: record.artifactRoot
       }
-    }
+    },
+    ensurePluginBundleTarball
   }
 }

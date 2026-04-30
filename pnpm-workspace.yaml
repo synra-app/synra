@@ -8,14 +8,13 @@ allowBuilds:
   electron: true
   electron-winstaller: true
   esbuild: true
-catalog:
-  bumpp: ^11.0.1
 catalogMode: prefer
 
 catalogs:
   build:
     '@tsdown/css': ^0.21.10
     esbuild: ^0.28.0
+    fflate: ^0.8.2
     pathe: ^2.0.3
     tinyglobby: ^0.2.16
   capacitor:
@@ -24,6 +23,7 @@ catalogs:
     '@capacitor/cli': ^8.3.1
     '@capacitor/core': ^8.3.1
     '@capacitor/docgen': ^0.3.1
+    '@capacitor/filesystem': ^8.1.2
     '@capacitor/ios': ^8.3.1
     xmlbuilder: ^15.1.1
   cli:
@@ -78,3 +78,8 @@ peerDependencyRules:
   allowedVersions:
     vite: '*'
     vitest: '*'
+
+packageExtensions:
+  plist:
+    dependencies:
+      xmlbuilder: ^15.1.1

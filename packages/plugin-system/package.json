@@ -10,6 +10,7 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./browser": "./src/browser/index.ts",
     "./node": "./src/node.ts",
     "./package.json": "./package.json"
   },
@@ -17,6 +18,7 @@
     "access": "public",
     "exports": {
       ".": "./dist/index.mjs",
+      "./browser": "./dist/browser.mjs",
       "./node": "./dist/node.mjs",
       "./package.json": "./package.json"
     }
@@ -30,6 +32,7 @@
   },
   "dependencies": {
     "@synra/protocol": "workspace:*",
+    "fflate": "catalog:build",
     "pathe": "catalog:build"
   },
   "devDependencies": {

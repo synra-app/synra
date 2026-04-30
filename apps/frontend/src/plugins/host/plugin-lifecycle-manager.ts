@@ -1,3 +1,4 @@
+import { Capacitor } from '@capacitor/core'
 import type { SynraUiManifestMetadata } from '@synra/plugin-sdk'
 import type { Router } from 'vue-router'
 import type { PluginRuntimeState } from './types'
@@ -61,6 +62,13 @@ export class PluginLifecycleManager {
 
   private injectInstalledPluginStyleOnce(pluginId: string, artifactRoot?: string): void {
     if (!artifactRoot) {
+      return
+    }
+    if (
+      typeof window !== 'undefined' &&
+      Capacitor.isNativePlatform() &&
+      !window.__synraCapElectron?.invoke
+    ) {
       return
     }
     const stylePaths = [

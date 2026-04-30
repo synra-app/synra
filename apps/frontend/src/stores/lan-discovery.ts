@@ -1,4 +1,4 @@
-import { useTransport } from '@synra/hooks'
+import { onSynraMessage, useTransport } from '@synra/hooks'
 import { defineStore } from 'pinia'
 
 export const useLanDiscoveryStore = defineStore('lan-discovery', () => {
@@ -14,6 +14,8 @@ export const useLanDiscoveryStore = defineStore('lan-discovery', () => {
     startScan: transport.startScan,
     connectToDevice: transport.connectToDevice,
     connectToDeviceAt: transport.connectToDeviceAt,
-    disconnectDevice: transport.disconnectDevice
+    disconnectDevice: transport.disconnectDevice,
+    /** Prefer `useSynraPluginEnvelope` / `useSynraEnvelope().subscribe`. Exposed for legacy plugin bundles. */
+    onSynraMessage
   }
 })

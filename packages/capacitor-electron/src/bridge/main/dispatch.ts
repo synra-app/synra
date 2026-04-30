@@ -8,6 +8,10 @@ import {
   isSupportedProtocolVersion
 } from '../../shared/schema/validators'
 import { noopBridgeLogger, type BridgeLogger } from '../../shared/observability/logger'
+import {
+  BRIDGE_METHODS,
+  BRIDGE_PLUGIN_SYNC_TO_DEVICE_TIMEOUT_MS
+} from '../../shared/protocol/constants'
 import type { BridgeHandlerMap } from './handlers'
 
 export type MainDispatcherOptions = {
@@ -85,7 +89,11 @@ export function createMainDispatcher(
 
       const method = rawRequest.method as keyof BridgeHandlerMap
       const handler = handlerMap[method]
-      const timeoutMs = rawRequest.meta?.timeoutMs ?? defaultTimeoutMs
+      const timeoutMs =
+        rawRequest.meta?.timeoutMs ??
+        (rawRequest.method === BRIDGE_METHODS.pluginSyncToDevice
+          ? BRIDGE_PLUGIN_SYNC_TO_DEVICE_TIMEOUT_MS
+          : defaultTimeoutMs)
       const data = await withTimeout(
         Promise.resolve(handler(rawRequest as never)) as Promise<unknown>,
         timeoutMs
