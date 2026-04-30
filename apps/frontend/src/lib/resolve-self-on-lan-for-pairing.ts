@@ -1,4 +1,4 @@
-import { createElectronBridgePluginFromGlobal } from '@synra/capacitor-electron/api/plugin'
+import { createElectronBridgePluginFromGlobal } from '@synra/capacitor-electron/plugin'
 import { hasElectronBridge } from '@synra/capacitor-electron/capacitor'
 import type { DiscoveredDevice } from '@synra/capacitor-lan-discovery'
 

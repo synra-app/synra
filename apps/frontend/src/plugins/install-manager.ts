@@ -1,4 +1,4 @@
-import { createElectronBridgePluginFromGlobal } from '@synra/capacitor-electron/api/plugin'
+import { createElectronBridgePluginFromGlobal } from '@synra/capacitor-electron/plugin'
 import type { Router } from 'vue-router'
 import { activatePlugin, syncInstalledPlugins } from './host'
 

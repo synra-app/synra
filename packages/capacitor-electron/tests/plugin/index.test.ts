@@ -3,12 +3,12 @@ import {
   type BridgeInvoke,
   createElectronBridgePlugin,
   createElectronBridgePluginFromGlobal
-} from '../../src/api/plugin'
+} from '../../src/plugin'
 import { BRIDGE_ERROR_CODES } from '../../src/shared/errors/codes'
 import { BRIDGE_METHODS, BRIDGE_PROTOCOL_VERSION } from '../../src/shared/protocol/constants'
 import type { MethodResultMap } from '../../src/shared/protocol/types'
 
-describe('api/plugin', () => {
+describe('plugin', () => {
   test('calls runtime.getInfo through invoke', async () => {
     const invoke: BridgeInvoke = async (method) => {
       expect(method).toBe(BRIDGE_METHODS.runtimeGetInfo)

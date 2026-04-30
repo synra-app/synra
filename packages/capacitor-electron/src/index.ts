@@ -2,8 +2,8 @@ export {
   createElectronBridgePlugin,
   createElectronBridgePluginFromGlobal,
   type ElectronBridgePlugin
-} from './api/plugin'
-export { API_METHODS } from './api/methods'
+} from './plugin'
+export { API_METHODS } from './plugin/methods'
 export { createPreloadInvoker, type IpcInvoke, type InvokeOptions } from './bridge/preload/invoke'
 export {
   exposePreloadBridge,

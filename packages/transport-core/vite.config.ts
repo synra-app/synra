@@ -1,4 +1,3 @@
-import { defineConfig } from 'vite-plus'
-import { createPackageViteConfig } from '../../scripts/vite/config'
+import { createPackageViteConfig } from '../../scripts/vite/config.ts'
 
-export default defineConfig(createPackageViteConfig())
+export default createPackageViteConfig()

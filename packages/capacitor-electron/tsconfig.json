@@ -4,5 +4,6 @@
     "module": "esnext",
     "moduleResolution": "bundler"
   },
-  "include": ["src", "tests"]
+  "include": ["src", "tests", "vite.config.ts"],
+  "exclude": ["dist"]
 }

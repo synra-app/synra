@@ -1,6 +1,6 @@
 import type { SynraUiManifestMetadata } from '@synra/plugin-sdk'
 import { getSynraUiManifestMetadata, type SynraPluginManifest } from '@synra/plugin-sdk'
-import { createElectronBridgePluginFromGlobal } from '@synra/capacitor-electron/api/plugin'
+import { createElectronBridgePluginFromGlobal } from '@synra/capacitor-electron/plugin'
 import type { Router } from 'vue-router'
 import type { InstalledPluginSummary } from '@synra/capacitor-electron'
 import type {

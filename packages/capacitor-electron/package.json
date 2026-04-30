@@ -19,16 +19,16 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./api/plugin": "./src/api/plugin.ts",
     "./capacitor": "./src/capacitor/index.ts",
+    "./plugin": "./src/plugin/index.ts",
     "./package.json": "./package.json"
   },
   "publishConfig": {
     "access": "public",
     "exports": {
       ".": "./dist/index.mjs",
-      "./api/plugin": "./dist/api/plugin.mjs",
-      "./capacitor": "./dist/capacitor/index.mjs",
+      "./capacitor": "./dist/capacitor.mjs",
+      "./plugin": "./dist/plugin.mjs",
       "./package.json": "./package.json"
     }
   },

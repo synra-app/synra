@@ -19,7 +19,7 @@
     "exports": {
       ".": "./dist/index.mjs",
       "./electron": "./dist/electron.mjs",
-      "./envelope": "./dist/envelope/index.mjs",
+      "./envelope": "./dist/envelope.mjs",
       "./package.json": "./package.json"
     }
   },

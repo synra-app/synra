@@ -1,5 +1,6 @@
 import { execSync } from 'node:child_process'
-import { dirname, resolve as pathResolve } from 'pathe'
+import { homedir } from 'node:os'
+import { dirname, join, resolve as pathResolve } from 'pathe'
 import { fileURLToPath } from 'node:url'
 import UnoCSS from '@unocss/vite'
 import Vue from '@vitejs/plugin-vue'
@@ -12,6 +13,8 @@ import { loadAppConfig } from '../../scripts/config/app-config'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const r = (p: string) => pathResolve(__dirname, p)
 const projectRoot = __dirname
+const workspaceRoot = pathResolve(__dirname, '../..')
+const synraPluginsRoot = join(homedir(), '.synra', 'plugins')
 const appConfig = loadAppConfig(import.meta.url)
 
 function getGitSha(): string {
@@ -65,6 +68,11 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify(buildMeta.appVersion),
     __APP_BUILD_TIME__: JSON.stringify(buildMeta.buildTime),
     __APP_GIT_SHA__: JSON.stringify(buildMeta.gitSha)
+  },
+  server: {
+    fs: {
+      allow: [workspaceRoot, synraPluginsRoot]
+    }
   },
   plugins
 } as UserConfig)

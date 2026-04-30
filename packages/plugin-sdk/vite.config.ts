@@ -1,16 +1,18 @@
-import { defineConfig } from 'vite-plus'
-import { createPackageViteConfig } from '../../scripts/vite/config'
+import { createPackageViteConfig } from '../../scripts/vite/config.ts'
 
-export default defineConfig(
-  createPackageViteConfig({
-    pack: {
-      entry: ['src/index.ts', 'src/vite/index.ts', 'src/hooks/index.ts', 'src/unocss/index.ts'],
-      exports: {
-        devExports: true
-      },
-      dts: {
-        tsgo: false
-      }
+export default createPackageViteConfig({
+  pack: {
+    entry: {
+      index: './src/index.ts',
+      vite: './src/vite/index.ts',
+      hooks: './src/hooks/index.ts',
+      unocss: './src/unocss/index.ts'
+    },
+    exports: {
+      devExports: true
+    },
+    dts: {
+      tsgo: false
     }
-  })
-)
+  }
+})

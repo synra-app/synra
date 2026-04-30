@@ -1,4 +1,4 @@
-import { createElectronBridgePluginFromGlobal } from '@synra/capacitor-electron/api/plugin'
+import { createElectronBridgePluginFromGlobal } from '@synra/capacitor-electron/plugin'
 import { unknownToErrorMessage } from '@synra/protocol'
 import { resolveCurrentPluginRegistryUrl } from '../lib/plugin-registry-preferences'
 import { installPluginOnClient, removeInstalledPluginRecord } from '../plugins/install-manager'

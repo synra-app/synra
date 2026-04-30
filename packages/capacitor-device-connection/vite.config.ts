@@ -1,4 +1,3 @@
-import { defineConfig } from 'vite-plus'
-import { createCapacitorPluginViteConfig } from '../../scripts/vite/config'
+import { createCapacitorPluginViteConfig } from '../../scripts/vite/config.ts'
 
-export default defineConfig(createCapacitorPluginViteConfig())
+export default createCapacitorPluginViteConfig()

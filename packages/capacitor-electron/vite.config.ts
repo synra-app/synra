@@ -1,16 +1,17 @@
-import { defineConfig } from 'vite-plus'
-import { createPackageViteConfig } from '../../scripts/vite/config'
+import { createPackageViteConfig } from '../../scripts/vite/config.ts'
 
-export default defineConfig(
-  createPackageViteConfig({
-    pack: {
-      entry: ['src/index.ts', 'src/api/plugin.ts', 'src/capacitor/index.ts'],
-      dts: {
-        tsgo: false
-      },
-      exports: {
-        devExports: true
-      }
+export default createPackageViteConfig({
+  pack: {
+    entry: {
+      index: './src/index.ts',
+      plugin: './src/plugin/index.ts',
+      capacitor: './src/capacitor/index.ts'
+    },
+    dts: {
+      tsgo: false
+    },
+    exports: {
+      devExports: true
     }
-  })
-)
+  }
+})

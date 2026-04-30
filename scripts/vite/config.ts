@@ -27,7 +27,6 @@ export function createPackageViteConfig(overrides: UserConfig = {}): UserConfig 
 export function createCapacitorPluginViteConfig(): UserConfig {
   return createPackageViteConfig({
     pack: {
-      entry: ['src/index.ts'],
       dts: {
         tsgo: false
       },

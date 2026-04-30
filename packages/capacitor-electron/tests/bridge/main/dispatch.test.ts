@@ -55,8 +55,24 @@ function createHandlers() {
         artifactRoot: '/tmp',
         entries: {}
       })),
+      installFromLocalPath: vi.fn(async () => ({
+        pluginId: 'chat',
+        packageName: '@synra-plugin/chat',
+        version: '0.1.0',
+        title: 'Chat',
+        defaultPage: 'home',
+        builtin: false,
+        icon: undefined,
+        installedAt: Date.now(),
+        artifactRoot: '/tmp',
+        entries: {}
+      })),
       uninstall: vi.fn(async () => ({ success: true as const })),
       listInstalled: vi.fn(async () => ({ plugins: [] })),
+      registerInstalled: vi.fn(async () => ({
+        registeredPluginIds: [],
+        failedPlugins: []
+      })),
       syncToDevice: vi.fn(async () => ({
         success: true as const,
         pluginId: 'chat',
@@ -227,8 +243,24 @@ describe('bridge/main/dispatch', () => {
           artifactRoot: '/tmp',
           entries: {}
         })),
+        installFromLocalPath: vi.fn(async () => ({
+          pluginId: 'chat',
+          packageName: '@synra-plugin/chat',
+          version: '0.1.0',
+          title: 'Chat',
+          defaultPage: 'home',
+          builtin: false,
+          icon: undefined,
+          installedAt: Date.now(),
+          artifactRoot: '/tmp',
+          entries: {}
+        })),
         uninstall: vi.fn(async () => ({ success: true as const })),
         listInstalled: vi.fn(async () => ({ plugins: [] })),
+        registerInstalled: vi.fn(async () => ({
+          registeredPluginIds: [],
+          failedPlugins: []
+        })),
         syncToDevice: vi.fn(async () => ({
           success: true as const,
           pluginId: 'chat',

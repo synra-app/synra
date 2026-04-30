@@ -1,5 +1,5 @@
 import { normalizePluginPagePath } from '@synra/plugin-sdk'
-import { createElectronBridgePluginFromGlobal } from '@synra/capacitor-electron/api/plugin'
+import { createElectronBridgePluginFromGlobal } from '@synra/capacitor-electron/plugin'
 import type { Router } from 'vue-router'
 import type { PagesManifest, RegisteredPage } from './types'
 import { toPluginAssetUrl } from './plugin-asset-url'
