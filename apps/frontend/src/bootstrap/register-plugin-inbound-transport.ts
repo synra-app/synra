@@ -281,12 +281,18 @@ export function registerPluginInboundTransportHandlers(): void {
             }
           }
 
-          // Plugin request: "send me whatever is currently in your OS
-          // clipboard". Backed by `clipboard.read` bridge method
-          // (Electron: `clipboard.readText()` via main). The phone's
-          // starter Clipboard tab fires this on a button tap; we read
-          // the host's clipboard and reply with `_plugin.<slug>
-          // .copy-selection.reply` carrying `{ text, ok, reason }`.
+          // Plugin request: "send me whatever is currently selected on
+          // the host (highlighted text)". Backed by `clipboard.readSelection`
+          // bridge method — Electron main triggers the platform's native
+          // copy shortcut (Ctrl+C / Cmd+C / xdotool ctrl+c), reads the
+          // resulting clipboard, and restores the original clipboard so
+          // the action is non-destructive for the user. The phone's
+          // starter "复制选中" tab fires this on a button tap; we capture
+          // the host's current text selection and reply with
+          // `_plugin.<slug>.copy-selection.reply` carrying
+          // `{ text, ok, reason }`. NOTE: this is *not* the same as
+          // `clipboard.read` — that returns the last-copied text, this
+          // returns whatever is highlighted by the cursor right now.
           if (PLUGIN_COPY_SELECTION_RE.test(ev)) {
             const slugMatch = /^_plugin\.([^.]+)\.copy-selection$/.exec(ev)
             const replyEvent = slugMatch ? `_plugin.${slugMatch[1]}.copy-selection.reply` : ''
@@ -302,13 +308,22 @@ export function registerPluginInboundTransportHandlers(): void {
                     method: string,
                     payload: unknown
                   ) => Promise<{ text?: unknown } | undefined>
-                )('clipboard.read', {})
+                )('clipboard.readSelection', {})
                 const candidateText =
                   result && typeof result === 'object' && 'text' in result
                     ? (result as { text?: unknown }).text
                     : undefined
                 text = typeof candidateText === 'string' ? candidateText : ''
                 dispatchOk = true
+                if (text.length === 0) {
+                  // captureOsTextSelection returns '' when the OS
+                  // automation tool is missing (no xdotool / no
+                  // Accessibility permission / no PowerShell) or when
+                  // nothing was selected. Surface a distinct reason so
+                  // the phone UI can show a hint instead of an empty
+                  // text bubble.
+                  dispatchReason = 'no text selected (or host automation unavailable)'
+                }
               } catch (error) {
                 const { message } = formatUnknownErrorForLog(error)
                 dispatchReason = message

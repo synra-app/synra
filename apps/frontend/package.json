@@ -13,6 +13,7 @@
   "dependencies": {
     "@capacitor/core": "catalog:capacitor",
     "@capacitor/filesystem": "catalog:capacitor",
+    "@synra/capacitor-clipboard": "workspace:*",
     "@synra/capacitor-device-connection": "workspace:*",
     "@synra/capacitor-electron": "workspace:*",
     "@synra/capacitor-lan-discovery": "workspace:*",

@@ -20,6 +20,8 @@ export const BRIDGE_METHODS = {
   pluginSyncToDevice: 'plugin.syncToDevice',
   externalOpen: 'external.open',
   clipboardRead: 'clipboard.read',
+  clipboardReadSelection: 'clipboard.readSelection',
+  clipboardWrite: 'clipboard.write',
   fileRead: 'file.read',
   discoveryStart: 'discovery.start',
   discoveryStop: 'discovery.stop',

@@ -114,6 +114,7 @@ export {
   type PluginFetchRequest,
   type PluginReadFileRequest
 } from './plugin-bridge'
+export { type PluginClipboardHandle } from './clipboard'
 
 // ─── Page path helpers (used by host + plugins; pure functions, no runtime) ──
 

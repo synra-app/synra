@@ -1,12 +1,32 @@
 import {
   createPluginBridge,
   type PluginBridge,
+  type PluginClipboardHandle,
   type SynraUiManifestMetadata
 } from '@synra/plugin-sdk'
+import { SynraClipboard } from '@synra/capacitor-clipboard'
 import type { Router } from 'vue-router'
 import type { PluginRuntimeState } from './types'
 import { PluginRegistry } from './plugin-registry'
 import { PluginRouteBinder } from './plugin-route-binder'
+
+/**
+ * Thin adapter from `@synra/capacitor-clipboard`'s `SynraClipboard`
+ * plugin to the `PluginClipboardHandle` shape that `PluginBridge`
+ * exposes. We pass this into every `createPluginBridge(...)` call so
+ * any v3 plugin can call `bridge.useClipboard().writeText(text)` and
+ * have it land on the host OS clipboard — sidestepping the Android
+ * WebView's `navigator.clipboard.writeText` permission gate.
+ */
+const hostClipboardHandle: PluginClipboardHandle = {
+  async readText(): Promise<string> {
+    const result = await SynraClipboard.read()
+    return result.text
+  },
+  async writeText(text: string): Promise<void> {
+    await SynraClipboard.write({ text })
+  }
+}
 
 /**
  * Owns the lifecycle of plugin bridges (one per plugin). The bridge is
@@ -51,7 +71,11 @@ export class PluginLifecycleManager {
     // Build the bridge once per activate; the binder holds it so the
     // lazy loader can `provide(SYNRA_BRIDGE_KEY, bridge)` at navigation time.
     const capabilities = metadata.capabilities ?? []
-    const bridge = createPluginBridge({ pluginId, capabilities })
+    const bridge = createPluginBridge({
+      pluginId,
+      capabilities,
+      clipboard: hostClipboardHandle
+    })
     this.bridgesByPluginId.set(pluginId, bridge)
     this.routeBinder.setBridge(pluginId, bridge)
 

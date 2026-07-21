@@ -57,7 +57,11 @@ describe('bridge/main runtime e2e flow', () => {
     const handlers = createBridgeHandlers({
       runtimeInfoService: createRuntimeInfoService(),
       externalLinkService: { openExternal },
-      clipboardService: { readText: vi.fn(async () => ({ text: '' })) },
+      clipboardService: {
+        readText: vi.fn(async () => ({ text: '' })),
+        readSelection: vi.fn(async () => ({ text: '' })),
+        writeText: vi.fn(async () => undefined)
+      },
       fileService: {
         readFile: vi.fn(async () => ({ content: '', encoding: 'utf-8' as BufferEncoding }))
       },
@@ -243,7 +247,11 @@ describe('bridge/main runtime e2e flow', () => {
     const handlers = createBridgeHandlers({
       runtimeInfoService: createRuntimeInfoService(),
       externalLinkService: { openExternal },
-      clipboardService: { readText: vi.fn(async () => ({ text: '' })) },
+      clipboardService: {
+        readText: vi.fn(async () => ({ text: '' })),
+        readSelection: vi.fn(async () => ({ text: '' })),
+        writeText: vi.fn(async () => undefined)
+      },
       fileService: {
         readFile: vi.fn(async () => ({ content: '', encoding: 'utf-8' as BufferEncoding }))
       },

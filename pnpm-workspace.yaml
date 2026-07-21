@@ -61,9 +61,8 @@ catalogs:
     unplugin-auto-import: ^21.0.0
     unplugin-vue: ^7.2.0
     unplugin-vue-components: ^32.1.0
-    vite: npm:@voidzero-dev/vite-plus-core@0.1.16
+    vite: npm:@voidzero-dev/vite-plus-core@0.2.5
     vite-plus: ^0.2.5
-    vitest: npm:@voidzero-dev/vite-plus-test@0.1.16
     vue-tsc: ^3.3.7
   vue:
     '@vue/runtime-core': ^3.5.40
@@ -72,14 +71,11 @@ catalogs:
     vue-router: ^5.2.0
 overrides:
   vite: 'catalog:vite'
-  vitest: 'catalog:vite'
 peerDependencyRules:
   allowAny:
     - vite
-    - vitest
   allowedVersions:
     vite: '*'
-    vitest: '*'
 
 packageExtensions:
   plist:

@@ -33,6 +33,7 @@ import {
   type ConnectionRuntime,
   type PairedDeviceRow
 } from '@synra/hooks'
+import type { PluginClipboardHandle } from './clipboard'
 
 // ─── Public types ────────────────────────────────────────────────────────────
 
@@ -69,6 +70,17 @@ export type PluginBridgeOptions = {
    * and introspection; not used for any access control.
    */
   capabilities: ReadonlyArray<string>
+  /**
+   * Optional host-supplied clipboard handle. When omitted, calls to
+   * `bridge.useClipboard()` throw a clear "not wired" error. The host
+   * (`apps/frontend`) typically wires this to a thin adapter that
+   * delegates to `@synra/capacitor-clipboard`'s `SynraClipboard.read` /
+   * `SynraClipboard.write` so plugin code can use the OS clipboard on
+   * every platform — Android WebView forbids `navigator.clipboard.writeText`
+   * outside an explicit user gesture, which the v3 plugin-bridge response
+   * path does not have.
+   */
+  clipboard?: PluginClipboardHandle
 }
 
 /** Return shape of `@synra/hooks#useSynraPluginEnvelope`. */
@@ -82,6 +94,8 @@ export type PluginBridge = {
   // ── Host singleton state via closure ──
   usePairedDevices(): UsePairedDevicesResult
   useSynraPluginEnvelope(): PluginEnvelopeHandle
+  /** Host-supplied clipboard handle (read/write OS clipboard). */
+  useClipboard(): PluginClipboardHandle
 
   // ── Capability-free capability calls (trust boundary is the host runtime) ──
   send<T = unknown>(request: PluginSendRequest<T>): Promise<void>
@@ -111,7 +125,7 @@ export function createPluginBridge(options: PluginBridgeOptions): PluginBridge {
   // activated a plugin before `configureHooksRuntime(...)` ran.
   const runtime = getConnectionRuntime() as ConnectionRuntime
   void runtime // referenced for clarity; the hooks close over it themselves
-  const { pluginId, capabilities } = options
+  const { pluginId, capabilities, clipboard: clipboardOption } = options
 
   // Cached hook so multiple `bridge.usePairedDevices()` calls share refs.
   let pairedDevicesCache: UsePairedDevicesResult | null = null
@@ -120,6 +134,17 @@ export function createPluginBridge(options: PluginBridgeOptions): PluginBridge {
       pairedDevicesCache = usePairedDevices()
     }
     return pairedDevicesCache
+  }
+
+  function bridgeUseClipboard(): PluginClipboardHandle {
+    if (!clipboardOption) {
+      throw new Error(
+        `[synra] PluginBridge.useClipboard is not wired on the current host runtime. ` +
+          `The host must pass \`clipboard\` to createPluginBridge(...) so plugin code can read/write ` +
+          `the OS clipboard (the Android WebView's navigator.clipboard is permission-gated).`
+      )
+    }
+    return clipboardOption
   }
 
   // Plugin envelope is created once so subscribe handlers + send share state.
@@ -195,6 +220,7 @@ export function createPluginBridge(options: PluginBridgeOptions): PluginBridge {
     capabilities,
     usePairedDevices: bridgeUsePairedDevices,
     useSynraPluginEnvelope: () => envelope,
+    useClipboard: bridgeUseClipboard,
     send,
     broadcast,
     fetch,

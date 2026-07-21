@@ -1,0 +1,73 @@
+{
+  "name": "@synra/capacitor-clipboard",
+  "version": "0.0.7",
+  "description": "Lightweight Capacitor clipboard plugin (read/write) with Web + Electron + Android + iOS support. Reads/writes the host OS clipboard so plugin authors do not have to fall back to navigator.clipboard (which is permission-restricted inside the Capacitor Android WebView).",
+  "keywords": [
+    "capacitor",
+    "clipboard",
+    "plugin"
+  ],
+  "bugs": {
+    "url": "https://github.com/imba97/synra/issues"
+  },
+  "license": "MIT",
+  "author": "imba97",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/imba97/synra.git"
+  },
+  "files": [
+    "android/src/main/",
+    "android/build.gradle",
+    "android/src/test/",
+    "android/src/androidTest/",
+    "dist/",
+    "ios/Sources",
+    "ios/Tests",
+    "Package.swift",
+    "SynraCapacitorClipboard.podspec"
+  ],
+  "type": "module",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": "./dist/index.mjs",
+      "./package.json": "./package.json"
+    },
+    "access": "public"
+  },
+  "scripts": {
+    "clean": "node -e \"require('fs').rmSync('./dist', { recursive: true, force: true, maxRetries: process.platform === 'win32' ? 10 : 0 })\"",
+    "build": "vp pack",
+    "dev": "vp pack --watch",
+    "test": "vp test --passWithNoTests",
+    "check": "vp check",
+    "prepublishOnly": "vp run build"
+  },
+  "devDependencies": {
+    "@capacitor/android": "catalog:capacitor",
+    "@capacitor/core": "catalog:capacitor",
+    "@capacitor/docgen": "catalog:capacitor",
+    "@capacitor/ios": "catalog:capacitor",
+    "@types/node": "catalog:types",
+    "@typescript/native-preview": "catalog:types",
+    "esbuild": "catalog:build",
+    "typescript": "catalog:types",
+    "vite-plus": "catalog:vite"
+  },
+  "peerDependencies": {
+    "@capacitor/core": ">=8.0.0"
+  },
+  "capacitor": {
+    "ios": {
+      "src": "ios"
+    },
+    "android": {
+      "src": "android"
+    }
+  }
+}

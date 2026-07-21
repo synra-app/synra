@@ -8,6 +8,9 @@ project(':capacitor-app').projectDir = new File('../../../node_modules/.pnpm/@ca
 include ':capacitor-filesystem'
 project(':capacitor-filesystem').projectDir = new File('../../../node_modules/.pnpm/@capacitor+filesystem@8.1.2_@capacitor+core@8.4.2/node_modules/@capacitor/filesystem/android')
 
+include ':synra-capacitor-clipboard'
+project(':synra-capacitor-clipboard').projectDir = new File('../../../packages/capacitor-clipboard/android')
+
 include ':synra-capacitor-device-connection'
 project(':synra-capacitor-device-connection').projectDir = new File('../../../packages/capacitor-device-connection/android')
 

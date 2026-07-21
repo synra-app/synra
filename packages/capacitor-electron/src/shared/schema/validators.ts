@@ -81,6 +81,8 @@ export function isSupportedMethod(method: string): boolean {
     method === BRIDGE_METHODS.pluginSyncToDevice ||
     method === BRIDGE_METHODS.externalOpen ||
     method === BRIDGE_METHODS.clipboardRead ||
+    method === BRIDGE_METHODS.clipboardReadSelection ||
+    method === BRIDGE_METHODS.clipboardWrite ||
     method === BRIDGE_METHODS.fileRead ||
     method === BRIDGE_METHODS.discoveryStart ||
     method === BRIDGE_METHODS.discoveryStop ||
@@ -152,6 +154,18 @@ export function validateReadClipboardPayload(payload: unknown): payload is Recor
     return true
   }
   return isObject(payload) && Object.keys(payload).length === 0
+}
+
+export function validateReadSelectionPayload(payload: unknown): payload is Record<string, never> {
+  // clipboard.readSelection takes no arguments; same semantics as
+  // validateReadClipboardPayload but kept as a separate validator so the
+  // dispatch table can grow methods with their own (future) arguments
+  // without colliding with the simpler read path.
+  return validateReadClipboardPayload(payload)
+}
+
+export function validateWriteClipboardPayload(payload: unknown): payload is { text: string } {
+  return isObject(payload) && typeof payload.text === 'string'
 }
 
 export function validateReadFilePayload(

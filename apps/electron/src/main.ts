@@ -10,6 +10,7 @@ import {
   SYNRA_HOST_ENVELOPE_PUSH_CHANNEL,
   type SynraMessageEnvelope
 } from '@synra/hooks/electron'
+import { captureOsTextSelection } from './os-selection'
 import { BRIDGE_HOST_EVENT_CHANNEL, setupBridgeMainRuntime } from './bridge/main'
 import type {
   DeviceDiscoveryHostEvent,
@@ -251,9 +252,28 @@ function registerCapacitorElectronBridge(): void {
       // so the bridge shape stays consistent. Backs the
       // `_plugin.<slug>.copy-selection` host handler — the phone sends
       // "send me whatever is in your OS clipboard", the Electron
-      // host reads it here and replies with the text.
+      // host reads it here and replies with the text. Also backs
+      // `clipboard.write` so a plugin on this Electron host can mirror
+      // text into the OS clipboard via the bridge.
       async readText(): Promise<string> {
         return clipboard.readText()
+      },
+      // Captures the host's current text selection (not clipboard).
+      // Triggers the platform's native copy shortcut (Ctrl+C / Cmd+C /
+      // xdotool ctrl+c) via `os-selection.ts`, reads the resulting
+      // clipboard, then restores the original clipboard content. See
+      // that module for the per-platform implementation details.
+      async readSelection(): Promise<string> {
+        return captureOsTextSelection({
+          platform: process.platform,
+          readClipboard: () => clipboard.readText(),
+          writeClipboard: (text) => {
+            clipboard.writeText(text)
+          }
+        })
+      },
+      async writeText(text: string): Promise<void> {
+        clipboard.writeText(text)
       }
     },
     allowedFileRoots: [app.getAppPath(), PLUGIN_ROOT_DIR],

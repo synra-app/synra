@@ -160,6 +160,11 @@ export function createBridgeHandlers(deps: BridgeHandlerDependencies): BridgeHan
     [BRIDGE_METHODS.externalOpen]: async (request) =>
       deps.externalLinkService.openExternal(request.payload.url),
     [BRIDGE_METHODS.clipboardRead]: async () => deps.clipboardService.readText(),
+    [BRIDGE_METHODS.clipboardReadSelection]: async () => deps.clipboardService.readSelection(),
+    [BRIDGE_METHODS.clipboardWrite]: async (request) => {
+      await deps.clipboardService.writeText(request.payload.text)
+      return { success: true as const }
+    },
     [BRIDGE_METHODS.fileRead]: async (request) =>
       deps.fileService.readFile(request.payload.path, request.payload.encoding),
     [BRIDGE_METHODS.discoveryStart]: async (request) =>

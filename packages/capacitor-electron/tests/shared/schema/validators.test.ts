@@ -9,6 +9,7 @@ import {
   validateRuntimeExecutePayload,
   validateExternalOpenPayload,
   validateReadClipboardPayload,
+  validateWriteClipboardPayload,
   validateDiscoverySendMessagePayload,
   validateDiscoveryStartPayload,
   validateReadFilePayload
@@ -48,6 +49,7 @@ describe('shared/schema/validators', () => {
     expect(isSupportedProtocolVersion('9.9')).toBe(false)
     expect(isSupportedMethod(BRIDGE_METHODS.fileRead)).toBe(true)
     expect(isSupportedMethod(BRIDGE_METHODS.clipboardRead)).toBe(true)
+    expect(isSupportedMethod(BRIDGE_METHODS.clipboardWrite)).toBe(true)
     expect(isSupportedMethod(BRIDGE_METHODS.discoveryStart)).toBe(true)
     expect(isSupportedMethod(BRIDGE_METHODS.pluginRegisterInstalled)).toBe(true)
     expect(isSupportedMethod(BRIDGE_METHODS.connectionOpenTransport)).toBe(true)
@@ -68,6 +70,10 @@ describe('shared/schema/validators', () => {
     expect(validateReadClipboardPayload(undefined)).toBe(true)
     expect(validateReadClipboardPayload(null)).toBe(true)
     expect(validateReadClipboardPayload({ extra: 'no' })).toBe(false)
+    expect(validateWriteClipboardPayload({ text: 'hello' })).toBe(true)
+    expect(validateWriteClipboardPayload({ text: '' })).toBe(true)
+    expect(validateWriteClipboardPayload({})).toBe(false)
+    expect(validateWriteClipboardPayload({ text: 1 })).toBe(false)
     expect(validateReadFilePayload({ path: 'a.txt' })).toBe(true)
     expect(validateReadFilePayload({})).toBe(false)
   })

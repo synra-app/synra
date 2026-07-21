@@ -21,7 +21,11 @@ function createHandlers() {
   return createBridgeHandlers({
     runtimeInfoService: { getRuntimeInfo: vi.fn(async () => createRuntimeInfo()) },
     externalLinkService: { openExternal: vi.fn(async () => ({ success: true as const })) },
-    clipboardService: { readText: vi.fn(async () => ({ text: '' })) },
+    clipboardService: {
+      readText: vi.fn(async () => ({ text: '' })),
+      readSelection: vi.fn(async () => ({ text: '' })),
+      writeText: vi.fn(async () => undefined)
+    },
     fileService: {
       readFile: vi.fn(async () => ({ content: 'ok', encoding: 'utf-8' as BufferEncoding }))
     },
@@ -214,7 +218,11 @@ describe('bridge/main/dispatch', () => {
         )
       },
       externalLinkService: { openExternal: vi.fn(async () => ({ success: true as const })) },
-      clipboardService: { readText: vi.fn(async () => ({ text: '' })) },
+      clipboardService: {
+        readText: vi.fn(async () => ({ text: '' })),
+        readSelection: vi.fn(async () => ({ text: '' })),
+        writeText: vi.fn(async () => undefined)
+      },
       fileService: {
         readFile: vi.fn(async () => ({ content: '', encoding: 'utf-8' as BufferEncoding }))
       },
