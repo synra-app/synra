@@ -226,6 +226,87 @@ const PLUGIN_VERB_HANDLERS: ReadonlyArray<PluginVerbHandler> = [
     }
   },
 
+  // "Phone tapped the dock add button" — host enumerates installed
+  // apps via `apps.listInstalled` and replies with
+  // `_plugin.<slug>.dock-list-apps.reply` carrying
+  // `{ apps, platform }`. Same envelope-reply boilerplate as
+  // `open-url`; payload is `Record<string, never>`.
+  //
+  // Mirrors the `open-url` shape so the dock picker dialog stays in
+  // sync with the existing device-picker dialog visually.
+  {
+    verb: 'dock-list-apps',
+    logPrefix: 'dock-list',
+    replyEventFor: (slug) => `_plugin.${slug}.dock-list-apps.reply`,
+    async dispatch() {
+      const capElectron = (globalThis as { __synraCapElectron?: { invoke?: unknown } })
+        .__synraCapElectron
+      if (!capElectron || typeof capElectron.invoke !== 'function') {
+        // Plain-web host (no Electron shell): empty list, no platform.
+        // Plugin UI shows an "host unavailable" hint instead of the
+        // app list dialog.
+        return {
+          ok: false,
+          reason: 'no apps capability on this host',
+          payload: { apps: [], platform: '' }
+        }
+      }
+      const result = await (
+        capElectron.invoke as (
+          method: string,
+          payload: unknown
+        ) => Promise<{ apps?: unknown; platform?: unknown } | undefined>
+      )('apps.listInstalled', {})
+      const apps = Array.isArray(result?.apps) ? (result.apps as unknown[]) : []
+      const platform = typeof result?.platform === 'string' ? result.platform : ''
+      return { ok: true, payload: { apps, platform } }
+    }
+  },
+
+  // "Phone tapped a dock tile" — host launches the resolved app via
+  // `apps.launch` and replies with
+  // `_plugin.<slug>.dock-launch-app.reply` carrying `{ ok, reason }`.
+  // Mirrors `open-url`'s reply shape so the plugin UI's status pill
+  // can reuse the same code path for confirmation/error messaging.
+  {
+    verb: 'dock-launch-app',
+    logPrefix: 'dock-launch',
+    replyEventFor: (slug) => `_plugin.${slug}.dock-launch-app.reply`,
+    async dispatch({ payload }) {
+      const candidate = (payload ?? {}) as { appId?: unknown }
+      const appId = typeof candidate.appId === 'string' ? candidate.appId.trim() : ''
+      if (!appId) {
+        return {
+          ok: false,
+          reason: 'missing appId',
+          payload: { ok: false, reason: 'missing appId' }
+        }
+      }
+      const capElectron = (globalThis as { __synraCapElectron?: { invoke?: unknown } })
+        .__synraCapElectron
+      if (!capElectron || typeof capElectron.invoke !== 'function') {
+        return {
+          ok: false,
+          reason: 'no apps capability on this host',
+          payload: { ok: false, reason: 'no apps capability on this host' }
+        }
+      }
+      const result = await (
+        capElectron.invoke as (
+          method: string,
+          payload: unknown
+        ) => Promise<{ ok?: unknown; reason?: unknown } | undefined>
+      )('apps.launch', { appId })
+      const ok = result?.ok === true
+      const reason = typeof result?.reason === 'string' ? result.reason : ''
+      return {
+        ok,
+        reason: ok ? '' : reason,
+        payload: { ok, reason }
+      }
+    }
+  },
+
   // Plugin debug "ping" — used by the starter plugin's Ping tab to
   // round-trip a single envelope through the LAN transport. The host
   // logs the receive, then immediately sends back

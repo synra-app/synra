@@ -62,5 +62,10 @@ export type {
   RuntimeExecuteResult,
   RuntimeInfo,
   PluginRegisterFailure,
-  PluginRegisterFailureReason
+  PluginRegisterFailureReason,
+  AppListInstalledOptions,
+  AppListInstalledResult,
+  AppLaunchOptions,
+  AppLaunchResult,
+  InstalledApp
 } from '@synra/bridge-schema'

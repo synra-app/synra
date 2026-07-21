@@ -178,6 +178,10 @@ describe('bridge/main runtime e2e flow', () => {
         set: vi.fn(),
         remove: vi.fn(),
         ensureDeviceInstanceUuid: vi.fn(() => '00000000-0000-4000-8000-000000000001')
+      },
+      appsService: {
+        listInstalled: vi.fn(async () => ({ apps: [] })),
+        launch: vi.fn(async () => ({ ok: true as const, appId: 'mock' }))
       }
     })
     const dispatch = createMainDispatcher(handlers)
@@ -366,6 +370,10 @@ describe('bridge/main runtime e2e flow', () => {
         set: vi.fn(),
         remove: vi.fn(),
         ensureDeviceInstanceUuid: vi.fn(() => '00000000-0000-4000-8000-000000000001')
+      },
+      appsService: {
+        listInstalled: vi.fn(async () => ({ apps: [] })),
+        launch: vi.fn(async () => ({ ok: true as const, appId: 'mock' }))
       }
     })
     const dispatch = createMainDispatcher(handlers)

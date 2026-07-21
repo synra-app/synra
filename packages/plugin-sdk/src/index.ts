@@ -115,6 +115,7 @@ export {
   type PluginReadFileRequest
 } from './plugin-bridge'
 export { type PluginClipboardHandle } from './clipboard'
+export { type PluginPreferencesHandle } from './preferences'
 
 // ─── Page path helpers (used by host + plugins; pure functions, no runtime) ──
 

@@ -9,6 +9,7 @@ import type { PluginCatalogService } from '../../host/services/plugin-catalog.se
 import type { PluginManagementService } from '../../host/services/plugin-management.service'
 import type { PluginRuntimeService } from '../../host/services/plugin-runtime.service'
 import type { PreferencesService } from '../../host/services/preferences.service'
+import type { AppsService } from '../../host/services/apps.service'
 import { fileTransferChunkCount, iteratePluginBundleChunks } from '@synra/protocol'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'pathe'
@@ -28,6 +29,7 @@ export type BridgeHandlerDependencies = {
   deviceDiscoveryService: DeviceDiscoveryService
   connectionService: ConnectionService
   preferencesService: PreferencesService
+  appsService: AppsService
 }
 
 export type BridgeHandlerMap = {
@@ -191,6 +193,8 @@ export function createBridgeHandlers(deps: BridgeHandlerDependencies): BridgeHan
     [BRIDGE_METHODS.preferencesRemove]: async (request) => {
       deps.preferencesService.remove(request.payload.key)
       return { success: true as const }
-    }
+    },
+    [BRIDGE_METHODS.appListInstalled]: async () => deps.appsService.listInstalled(),
+    [BRIDGE_METHODS.appLaunch]: async (request) => deps.appsService.launch(request.payload.appId)
   }
 }

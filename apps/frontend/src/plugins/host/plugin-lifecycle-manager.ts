@@ -2,9 +2,11 @@ import {
   createPluginBridge,
   type PluginBridge,
   type PluginClipboardHandle,
+  type PluginPreferencesHandle,
   type SynraUiManifestMetadata
 } from '@synra/plugin-sdk'
 import { SynraClipboard } from '@synra/capacitor-clipboard'
+import { SynraPreferences } from '@synra/capacitor-preferences'
 import type { Router } from 'vue-router'
 import type { PluginRuntimeState } from './types'
 import { PluginRegistry } from './plugin-registry'
@@ -42,6 +44,43 @@ function getHostClipboardHandle(): PluginClipboardHandle {
     hostClipboardHandleCache = createHostClipboardHandle()
   }
   return hostClipboardHandleCache
+}
+
+/**
+ * Thin adapter from `@synra/capacitor-preferences`'s `SynraPreferences`
+ * plugin object to the `PluginPreferencesHandle` shape that
+ * `PluginBridge` exposes. Plugins never import
+ * `@synra/capacitor-preferences` directly — they call
+ * `bridge.usePreferences().get(key)` / `set(key, value)` / `remove(key)`
+ * and the host routes to the native Capacitor preferences plugin on
+ * Android / iOS, or to the Electron-side `preferences.*` IPC bridge
+ * on Electron (which lands in `~/.synra/synra-preferences-store.json`).
+ *
+ * Built lazily via a memoized factory so repeated
+ * `bridge.usePreferences()` calls share the same handle (and the same
+ * `SynraPreferences` proxy) across every plugin instance.
+ */
+function createHostPreferencesHandle(): PluginPreferencesHandle {
+  return {
+    async get(key: string): Promise<string | null> {
+      const result = await SynraPreferences.get({ key })
+      return result.value ?? null
+    },
+    async set(key: string, value: string): Promise<void> {
+      await SynraPreferences.set({ key, value })
+    },
+    async remove(key: string): Promise<void> {
+      await SynraPreferences.remove({ key })
+    }
+  }
+}
+
+let hostPreferencesHandleCache: PluginPreferencesHandle | null = null
+function getHostPreferencesHandle(): PluginPreferencesHandle {
+  if (!hostPreferencesHandleCache) {
+    hostPreferencesHandleCache = createHostPreferencesHandle()
+  }
+  return hostPreferencesHandleCache
 }
 
 /**
@@ -90,7 +129,8 @@ export class PluginLifecycleManager {
     const bridge = createPluginBridge({
       pluginId,
       capabilities,
-      clipboard: getHostClipboardHandle()
+      clipboard: getHostClipboardHandle(),
+      preferences: getHostPreferencesHandle()
     })
     this.bridgesByPluginId.set(pluginId, bridge)
     this.routeBinder.setBridge(pluginId, bridge)

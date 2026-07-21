@@ -158,6 +158,10 @@ function createHandlers() {
       set: vi.fn(),
       remove: vi.fn(),
       ensureDeviceInstanceUuid: vi.fn(() => '00000000-0000-4000-8000-000000000001')
+    },
+    appsService: {
+      listInstalled: vi.fn(async () => ({ apps: [] })),
+      launch: vi.fn(async () => ({ ok: true as const, appId: 'mock' }))
     }
   })
 }
@@ -351,6 +355,10 @@ describe('bridge/main/dispatch', () => {
         set: vi.fn(),
         remove: vi.fn(),
         ensureDeviceInstanceUuid: vi.fn(() => '00000000-0000-4000-8000-000000000001')
+      },
+      appsService: {
+        listInstalled: vi.fn(async () => ({ apps: [] })),
+        launch: vi.fn(async () => ({ ok: true as const, appId: 'mock' }))
       }
     })
     const dispatch = createMainDispatcher(slowHandlers, { defaultTimeoutMs: 1 })

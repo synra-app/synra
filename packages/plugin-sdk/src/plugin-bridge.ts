@@ -34,6 +34,7 @@ import {
   type PairedDeviceRow
 } from '@synra/hooks'
 import type { PluginClipboardHandle } from './clipboard'
+import type { PluginPreferencesHandle } from './preferences'
 
 // ─── Public types ────────────────────────────────────────────────────────────
 
@@ -81,6 +82,17 @@ export type PluginBridgeOptions = {
    * path does not have.
    */
   clipboard?: PluginClipboardHandle
+  /**
+   * Optional host-supplied KV preferences handle. When omitted, calls
+   * to `bridge.usePreferences()` throw a clear "not wired" error. The
+   * host (`apps/frontend`) wires this to a thin adapter that
+   * delegates to `@synra/capacitor-preferences`'s `SynraPreferences.get` /
+   * `set` / `remove` on native, and to the Electron-side
+   * `preferences.{get,set,remove}` IPC bridge on Electron so the
+   * plugin's stored values land in the same JSON store every other
+   * host component reads.
+   */
+  preferences?: PluginPreferencesHandle
 }
 
 /** Return shape of `@synra/hooks#useSynraPluginEnvelope`. */
@@ -96,6 +108,8 @@ export type PluginBridge = {
   useSynraPluginEnvelope(): PluginEnvelopeHandle
   /** Host-supplied clipboard handle (read/write OS clipboard). */
   useClipboard(): PluginClipboardHandle
+  /** Host-supplied KV preferences handle (per-device plugin state). */
+  usePreferences(): PluginPreferencesHandle
 
   // ── Capability-free capability calls (trust boundary is the host runtime) ──
   send<T = unknown>(request: PluginSendRequest<T>): Promise<void>
@@ -125,7 +139,12 @@ export function createPluginBridge(options: PluginBridgeOptions): PluginBridge {
   // activated a plugin before `configureHooksRuntime(...)` ran.
   const runtime = getConnectionRuntime() as ConnectionRuntime
   void runtime // referenced for clarity; the hooks close over it themselves
-  const { pluginId, capabilities, clipboard: clipboardOption } = options
+  const {
+    pluginId,
+    capabilities,
+    clipboard: clipboardOption,
+    preferences: preferencesOption
+  } = options
 
   // Cached hook so multiple `bridge.usePairedDevices()` calls share refs.
   let pairedDevicesCache: UsePairedDevicesResult | null = null
@@ -145,6 +164,18 @@ export function createPluginBridge(options: PluginBridgeOptions): PluginBridge {
       )
     }
     return clipboardOption
+  }
+
+  function bridgeUsePreferences(): PluginPreferencesHandle {
+    if (!preferencesOption) {
+      throw new Error(
+        `[synra] PluginBridge.usePreferences is not wired on the current host runtime. ` +
+          `The host must pass \`preferences\` to createPluginBridge(...) so plugin code can read/write ` +
+          `KV state through the same store the host uses (SynraPreferences on native, ` +
+          `preferences.* IPC bridge on Electron).`
+      )
+    }
+    return preferencesOption
   }
 
   // Plugin envelope is created once so subscribe handlers + send share state.
@@ -221,6 +252,7 @@ export function createPluginBridge(options: PluginBridgeOptions): PluginBridge {
     usePairedDevices: bridgeUsePairedDevices,
     useSynraPluginEnvelope: () => envelope,
     useClipboard: bridgeUseClipboard,
+    usePreferences: bridgeUsePreferences,
     send,
     broadcast,
     fetch,

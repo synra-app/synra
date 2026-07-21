@@ -47,7 +47,9 @@ export function createRuntimeInfoService(options: RuntimeInfoServiceOptions = {}
           'connection.getTransportState',
           'preferences.get',
           'preferences.set',
-          'preferences.remove'
+          'preferences.remove',
+          'apps.listInstalled',
+          'apps.launch'
         ]
       }
     }

@@ -102,6 +102,25 @@ export function validateWriteClipboardPayload(payload: unknown): payload is { te
   return isObject(payload) && typeof payload.text === 'string'
 }
 
+// `apps.listInstalled` takes no arguments — mirror the
+// `validateReadClipboardPayload` "accept undefined / empty object"
+// convention so renderer callers can omit the payload without
+// rejection.
+export function validateAppListInstalledPayload(
+  payload: unknown
+): payload is Record<string, never> {
+  if (payload === undefined || payload === null) return true
+  return isObject(payload) && Object.keys(payload).length === 0
+}
+
+// `apps.launch` takes a single non-empty string `appId`. We do NOT
+// validate the structure of `appId` (no path-traversal blocking
+// here) — the apps-service treats it as an opaque lookup key into a
+// list it itself produced via `apps.listInstalled`.
+export function validateAppLaunchPayload(payload: unknown): payload is { appId: string } {
+  return isObject(payload) && typeof payload.appId === 'string' && payload.appId.trim().length > 0
+}
+
 export function validateReadFilePayload(
   payload: unknown
 ): payload is { path: string; encoding?: BufferEncoding } {

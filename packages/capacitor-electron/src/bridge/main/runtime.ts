@@ -3,6 +3,10 @@ import {
   type FileSystemAdapter
 } from '../../host/adapters/file-system.adapter'
 import { createShellAdapter, type ShellAdapter } from '../../host/adapters/electron-shell.adapter'
+import {
+  createElectronAppsAdapter,
+  type AppsAdapter
+} from '../../host/adapters/electron-apps.adapter'
 import { type ClipboardAdapter } from '../../host/adapters/electron-clipboard.adapter'
 import { createExternalLinkService } from '../../host/services/external-link.service'
 import { createClipboardService } from '../../host/services/clipboard.service'
@@ -14,6 +18,7 @@ import { createPluginManagementService } from '../../host/services/plugin-manage
 import { createPluginRuntimeService } from '../../host/services/plugin-runtime.service'
 import { createRuntimeInfoService } from '../../host/services/runtime-info.service'
 import { createPreferencesService } from '../../host/services/preferences.service'
+import { createAppsService } from '../../host/services/apps.service'
 import type { DeviceDiscoveryHostEvent } from '../../shared/protocol/types'
 import type { BridgeLogger } from '../../shared/observability/logger'
 import { homedir } from 'node:os'
@@ -40,6 +45,11 @@ export type BridgeRuntimeOptions = {
   onDiscoveryHostEvent?: (event: DeviceDiscoveryHostEvent) => void
   /** JSON KV store path for SynraPreferences bridge (defaults to ~/.synra/synra-preferences-store.json). */
   preferencesStorePath?: string
+  /**
+   * Optional: cross-OS installed-app adapter. Defaults to a real
+   * `child_process`-backed implementation. Tests may inject a mock.
+   */
+  appsAdapter?: AppsAdapter
 }
 
 export type BridgeMainRuntime = {
@@ -83,6 +93,8 @@ export function setupBridgeMainRuntime(
   const pluginRuntimeService = createPluginRuntimeService()
   const pluginCatalogService = createPluginCatalogService(pluginRuntimeService)
   const pluginManagementService = createPluginManagementService()
+  const appsAdapter = options.appsAdapter ?? createElectronAppsAdapter()
+  const appsService = createAppsService(appsAdapter)
 
   const handlers = createBridgeHandlers({
     runtimeInfoService,
@@ -94,7 +106,8 @@ export function setupBridgeMainRuntime(
     pluginManagementService,
     deviceDiscoveryService,
     connectionService,
-    preferencesService
+    preferencesService,
+    appsService
   })
 
   const dispatch = createMainDispatcher(handlers, { logger: options.logger })

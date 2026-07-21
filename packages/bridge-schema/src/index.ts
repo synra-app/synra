@@ -53,7 +53,9 @@ export const BRIDGE_METHODS = {
   connectionGetTransportState: 'connection.getTransportState',
   preferencesGet: 'preferences.get',
   preferencesSet: 'preferences.set',
-  preferencesRemove: 'preferences.remove'
+  preferencesRemove: 'preferences.remove',
+  appListInstalled: 'apps.listInstalled',
+  appLaunch: 'apps.launch'
 } as const
 
 export type BridgeMethod = (typeof BRIDGE_METHODS)[keyof typeof BRIDGE_METHODS]
@@ -258,6 +260,51 @@ export type ReadFileResult = {
   content: string
   encoding: BufferEncoding
 }
+
+/**
+ * Apps capability — phone-as-controller asks the paired Electron host
+ * to enumerate installed applications and to launch one of them by its
+ * stable `appId`. Wire shape mirrors `external.open` (one
+ * host capability surface, one transport-neutral payload / result).
+ *
+ * `appId` is opaque on the wire: each OS resolves it differently —
+ *   - Windows: absolute path to the `.exe`
+ *   - macOS:   CFBundleIdentifier
+ *   - Linux:   basename (without `.desktop`) of an XDG `.desktop` entry
+ *
+ * `platform` is included in the result so the phone can refuse
+ * unsupported launches without trusting the wire (the dock tab only
+ * needs to know which icon set / hint to render).
+ */
+export type AppListInstalledOptions = Record<string, never>
+
+export type InstalledApp = {
+  /** Stable OS-agnostic id used by `apps.launch`. */
+  appId: string
+  /** User-visible label. */
+  name: string
+  /** Optional: phone may fall back to a generic lucide icon. */
+  iconUrl?: string
+  /** Host OS the entry was enumerated on. */
+  platform: NodeJS.Platform
+}
+
+export type AppListInstalledResult = {
+  apps: InstalledApp[]
+}
+
+export type AppLaunchOptions = {
+  appId: string
+}
+
+/**
+ * Discriminated union so the phone only reads `reason` when `ok` is
+ * false. `ok: true` carries the resolved `appId` so the reply is
+ * self-identifying without re-reading the request envelope.
+ */
+export type AppLaunchResult =
+  | { ok: true; appId: string }
+  | { ok: false; appId: string; reason: 'notFound' | 'spawnFailed' | 'unsupportedPlatform' }
 
 export type RuntimeActionCandidate = {
   pluginId: string
@@ -563,6 +610,8 @@ export type MethodPayloadMap = {
   'preferences.get': { key: string }
   'preferences.set': { key: string; value: string }
   'preferences.remove': { key: string }
+  'apps.listInstalled': AppListInstalledOptions
+  'apps.launch': AppLaunchOptions
 }
 
 export type MethodResultMap = {
@@ -592,4 +641,6 @@ export type MethodResultMap = {
   'preferences.get': { value: string | null }
   'preferences.set': OperationResult
   'preferences.remove': OperationResult
+  'apps.listInstalled': AppListInstalledResult
+  'apps.launch': AppLaunchResult
 }
