@@ -11,6 +11,11 @@ import {
   PAIRING_PROTOCOL_KEY,
   type PairingProtocolContext
 } from './composables/use-pairing-protocol-context'
+// v3 plugin contract — keep every Vue public API alive in the host's
+// tree-shake so plugin bundles can resolve them through importmap.
+// `@/plugins/host/synra-vue-reexport.ts` — see that file for context.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+import './plugins/host/synra-vue-reexport'
 
 const router = createRouter({
   history: createWebHistory(),

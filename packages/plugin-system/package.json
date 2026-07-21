@@ -15,13 +15,13 @@
     "./package.json": "./package.json"
   },
   "publishConfig": {
-    "access": "public",
     "exports": {
       ".": "./dist/index.mjs",
       "./browser": "./dist/browser.mjs",
       "./node": "./dist/node.mjs",
       "./package.json": "./package.json"
-    }
+    },
+    "access": "public"
   },
   "scripts": {
     "build": "vp pack",

@@ -33,5 +33,5 @@
 
 - 本目录只定义产品页面和前端规范，不直接定义协议字段。
 - 协议与运行时能力仍以 `ai-docs/main` 与 `packages/*` 为准。
-- 第一个插件与 SDK 生命周期改造文档已拆分到 `ai-docs/plugin-chat-sdk`。
+- 第一个插件与 SDK 生命周期改造文档已并入 [plugin-system/](../plugin-system/)（v3 单 bundle 模型）。
 - 本次文档重构不讨论 demo 兼容，仅以产品目标为导向。

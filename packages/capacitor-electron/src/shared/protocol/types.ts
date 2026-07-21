@@ -62,6 +62,11 @@ export type OpenExternalOptions = {
   url: string
 }
 
+export type ReadClipboardResult = {
+  /** Plain-text clipboard content from the host OS clipboard. */
+  text: string
+}
+
 export type ReadFileOptions = {
   path: string
   encoding?: BufferEncoding
@@ -359,6 +364,7 @@ export type MethodPayloadMap = {
   'plugin.registerInstalled': PluginRegisterInstalledOptions
   'plugin.syncToDevice': PluginSyncToDeviceOptions
   'external.open': OpenExternalOptions
+  'clipboard.read': Record<string, never>
   'file.read': ReadFileOptions
   'discovery.start': DeviceDiscoveryStartOptions
   'discovery.stop': Record<string, never>
@@ -385,6 +391,7 @@ export type MethodResultMap = {
   'plugin.registerInstalled': PluginRegisterInstalledResult
   'plugin.syncToDevice': PluginSyncToDeviceResult
   'external.open': OperationResult
+  'clipboard.read': ReadClipboardResult
   'file.read': ReadFileResult
   'discovery.start': DeviceDiscoveryStartResult
   'discovery.stop': OperationResult

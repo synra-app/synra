@@ -57,6 +57,7 @@ describe('bridge/main runtime e2e flow', () => {
     const handlers = createBridgeHandlers({
       runtimeInfoService: createRuntimeInfoService(),
       externalLinkService: { openExternal },
+      clipboardService: { readText: vi.fn(async () => ({ text: '' })) },
       fileService: {
         readFile: vi.fn(async () => ({ content: '', encoding: 'utf-8' as BufferEncoding }))
       },
@@ -242,6 +243,7 @@ describe('bridge/main runtime e2e flow', () => {
     const handlers = createBridgeHandlers({
       runtimeInfoService: createRuntimeInfoService(),
       externalLinkService: { openExternal },
+      clipboardService: { readText: vi.fn(async () => ({ text: '' })) },
       fileService: {
         readFile: vi.fn(async () => ({ content: '', encoding: 'utf-8' as BufferEncoding }))
       },

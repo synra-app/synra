@@ -11,7 +11,7 @@
 | 文档                                                                                                                                          | 关系                                                                                            |
 | --------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | [cross-platform-communication-map/message-envelope-and-validation.md](../cross-platform-communication-map/message-envelope-and-validation.md) | 信封字段白名单；文件元数据、分块内容均在 **`payload`** 内表达。                                 |
-| [plugin-system/05-sync-to-mobile.md](../plugin-system/05-sync-to-mobile.md)                                                                   | 插件同步是本文「业务会话」层的一类用法；实现上应对齐通用传输会话，而非单独造一套分块规则。      |
+| [plugin-system/06-install-and-load.md](../plugin-system/06-install-and-load.md)                                                               | 插件同步是本文「业务会话」层的一类用法；实现上应对齐通用传输会话，而非单独造一套分块规则。      |
 | [communication-use-event-refactor/README.md](../communication-use-event-refactor/README.md)                                                   | 渲染侧收发路径仍以 `useSynraEnvelope` / `useSynraSystemEnvelope` 等为表面；文件封装构建在其上。 |
 
 ## 文档索引

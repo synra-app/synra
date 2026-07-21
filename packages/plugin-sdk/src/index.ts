@@ -1,12 +1,40 @@
+/**
+ * @synra/plugin-sdk — public surface.
+ *
+ * v3 redesign (see `ai-docs/plugin-system/09-runtime-redesign.md`):
+ *   - This package is now types-only for plugin authors. The only runtime
+ *     export is `createPluginBridge`, which is consumed by the HOST (the
+ *     monorepo's `apps/frontend`), never by a plugin bundle.
+ *   - Plugin bundles import only `import type { ... } from '@synra/plugin-sdk'`;
+ *     TypeScript erases these imports so the bundle ships zero bare
+ *     specifiers and works in any host (Electron, web, Android WebView).
+ *   - The host `provide(SYNRA_BRIDGE_KEY, bridge)` at the plugin route so
+ *     that any nested plugin component can `inject(SYNRA_BRIDGE_KEY)` and
+ *     call `bridge.send(...)`, `bridge.usePairedDevices()`, etc.
+ */
 import type { SynraActionReceipt, SynraActionRequest } from '@synra/protocol'
 import {
   getSynraPluginManifestMetadata,
   parsePluginIdFromPackageName,
-  type SynraPluginEntryKind,
   type SynraPluginManifest,
   type SynraPluginManifestEntries,
-  type SynraPluginPackageName
+  type SynraPluginManifestMetadata
 } from '@synra/plugin-system'
+
+// ─── Plugin lifecycle abstract class ─────────────────────────────────────────
+
+/**
+ * Optional base class for plugin lifecycle hooks. Host currently does NOT
+ * call `onPluginEnter`/`onPluginExit` (state sharing happens via the
+ * `PluginBridge`), but reserved for future use (e.g., background scans,
+ * graceful shutdown of plugin-spawned workers).
+ */
+export abstract class SynraPlugin {
+  onPluginEnter(): void | Promise<void> {}
+  onPluginExit(): void | Promise<void> {}
+}
+
+// ─── Plugin manifest metadata (host-facing utility) ──────────────────────────
 
 export type ShareInputType = 'text' | 'url' | 'file'
 
@@ -48,23 +76,12 @@ export type SynraActionPlugin = {
   execute(action: PluginAction, context: ExecuteContext): Promise<SynraActionReceipt>
 }
 
-export type SynraUiManifestMetadata = {
-  pluginId: string
-  packageName: SynraPluginPackageName
-  version: string
-  title: string
-  builtin: boolean
-  defaultPage: string
-  icon?: string
-  entries: SynraPluginManifestEntries
-}
+export type SynraUiManifestMetadata = SynraPluginManifestMetadata
 
-export abstract class SynraPlugin {
-  onPluginEnter(): void | Promise<void> {}
-  onPluginExit(): void | Promise<void> {}
-}
-
-export function getSynraUiManifestMetadata(manifest: SynraPluginManifest): SynraUiManifestMetadata {
+/** Build host UI metadata from a raw `synra.*` manifest. Used by the host facade. */
+export function getSynraUiManifestMetadata(
+  manifest: SynraPluginManifest
+): SynraPluginManifestMetadata {
   return getSynraPluginManifestMetadata(manifest)
 }
 
@@ -82,10 +99,27 @@ export function getSynraPluginMetaFromManifest(
   }
 }
 
-export type { SynraPluginManifest, SynraPluginManifestEntries, SynraPluginEntryKind }
-export { parsePluginIdFromPackageName }
+// ─── Plugin bridge (provided/injected; host-only runtime export) ─────────────
+
+export const SYNRA_BRIDGE_KEY: unique symbol = Symbol.for('synra.plugin.bridge')
+
+export {
+  createPluginBridge,
+  type PluginBridge,
+  type PluginBridgeOptions,
+  type PluginEnvelopeHandle,
+  type UsePairedDevicesResult,
+  type PluginSendRequest,
+  type PluginBroadcastRequest,
+  type PluginFetchRequest,
+  type PluginReadFileRequest
+} from './plugin-bridge'
+
+// ─── Page path helpers (used by host + plugins; pure functions, no runtime) ──
 
 export { normalizePluginPagePath, pluginFilePathToPagePath } from './page-path'
+
+// ─── Worker client (composer pattern; reserved for future use) ───────────────
 
 export type {
   PluginWorkerActionInvokeInput,
@@ -103,3 +137,8 @@ export {
   invokePluginAction,
   WorkerProxyRuntime
 } from './worker-runtime'
+
+// ─── Re-exports ──────────────────────────────────────────────────────────────
+
+export type { SynraPluginManifest, SynraPluginManifestEntries }
+export { parsePluginIdFromPackageName }

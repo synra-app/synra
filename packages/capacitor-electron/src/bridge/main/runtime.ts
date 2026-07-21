@@ -3,7 +3,12 @@ import {
   type FileSystemAdapter
 } from '../../host/adapters/file-system.adapter'
 import { createShellAdapter, type ShellAdapter } from '../../host/adapters/electron-shell.adapter'
+import {
+  createClipboardAdapter,
+  type ClipboardAdapter
+} from '../../host/adapters/electron-clipboard.adapter'
 import { createExternalLinkService } from '../../host/services/external-link.service'
+import { createClipboardService } from '../../host/services/clipboard.service'
 import { createFileService } from '../../host/services/file.service'
 import { createConnectionService } from '../../host/services/connection.service'
 import { createDeviceDiscoveryService } from '../../host/services/device-discovery.service'
@@ -22,6 +27,7 @@ import { registerBridgeHandlers, type IpcMainLike } from './register'
 
 export type BridgeRuntimeOptions = {
   shellAdapter?: ShellAdapter
+  clipboardAdapter?: ClipboardAdapter
   fileSystemAdapter?: FileSystemAdapter
   allowedFileRoots?: string[]
   logger?: BridgeLogger
@@ -42,6 +48,7 @@ export function setupBridgeMainRuntime(
   options: BridgeRuntimeOptions = {}
 ): BridgeMainRuntime {
   const shellAdapter = options.shellAdapter ?? createShellAdapter()
+  const clipboardAdapter = options.clipboardAdapter ?? createClipboardAdapter()
   const fileSystemAdapter = options.fileSystemAdapter ?? createFileSystemAdapter()
 
   const runtimeInfoService = createRuntimeInfoService({
@@ -49,6 +56,7 @@ export function setupBridgeMainRuntime(
     electronVersion: options.electronVersion
   })
   const externalLinkService = createExternalLinkService(shellAdapter)
+  const clipboardService = createClipboardService(clipboardAdapter)
   const fileService = createFileService(fileSystemAdapter, {
     allowedRoots: options.allowedFileRoots
   })
@@ -68,6 +76,7 @@ export function setupBridgeMainRuntime(
   const handlers = createBridgeHandlers({
     runtimeInfoService,
     externalLinkService,
+    clipboardService,
     fileService,
     pluginRuntimeService,
     pluginCatalogService,

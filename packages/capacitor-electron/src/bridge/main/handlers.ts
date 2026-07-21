@@ -1,6 +1,7 @@
 import { BRIDGE_METHODS } from '../../shared/protocol/constants'
 import type { BridgeRequest, MethodPayloadMap, MethodResultMap } from '../../shared/protocol/types'
 import type { ExternalLinkService } from '../../host/services/external-link.service'
+import type { ClipboardService } from '../../host/services/clipboard.service'
 import type { FileService } from '../../host/services/file.service'
 import type { ConnectionService } from '../../host/services/connection.service'
 import type { DeviceDiscoveryService } from '../../host/services/device-discovery.service'
@@ -19,6 +20,7 @@ type RuntimeInfoService = ReturnType<
 export type BridgeHandlerDependencies = {
   runtimeInfoService: RuntimeInfoService
   externalLinkService: ExternalLinkService
+  clipboardService: ClipboardService
   fileService: FileService
   pluginRuntimeService: PluginRuntimeService
   pluginCatalogService: PluginCatalogService
@@ -157,6 +159,7 @@ export function createBridgeHandlers(deps: BridgeHandlerDependencies): BridgeHan
     },
     [BRIDGE_METHODS.externalOpen]: async (request) =>
       deps.externalLinkService.openExternal(request.payload.url),
+    [BRIDGE_METHODS.clipboardRead]: async () => deps.clipboardService.readText(),
     [BRIDGE_METHODS.fileRead]: async (request) =>
       deps.fileService.readFile(request.payload.path, request.payload.encoding),
     [BRIDGE_METHODS.discoveryStart]: async (request) =>

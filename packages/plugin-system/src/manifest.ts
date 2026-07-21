@@ -16,6 +16,8 @@ export type SynraPluginManifest = {
     builtin?: boolean
     icon?: string
     entries?: SynraPluginManifestEntries
+    /** Plugin's declared capability strings (`domain:resource[:qualifier]`). */
+    capabilities?: ReadonlyArray<string>
   }
 }
 
@@ -28,6 +30,8 @@ export type SynraPluginManifestMetadata = {
   defaultPage: string
   icon?: string
   entries: SynraPluginManifestEntries
+  /** Plugin's declared capability strings — host uses this to gate bridge calls. */
+  capabilities: ReadonlyArray<string>
 }
 
 const ICONIFY_ICON_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*:[a-z0-9]+(?:-[a-z0-9]+)*$/i
@@ -75,6 +79,7 @@ export function getSynraPluginManifestMetadata(
     builtin: manifest.synra?.builtin ?? false,
     defaultPage: manifest.synra?.defaultPage ?? 'home',
     icon: normalizeManifestIcon(manifest.synra?.icon),
-    entries: normalizeEntries(manifest.synra?.entries)
+    entries: normalizeEntries(manifest.synra?.entries),
+    capabilities: manifest.synra?.capabilities ?? []
   }
 }

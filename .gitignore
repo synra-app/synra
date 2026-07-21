@@ -24,3 +24,10 @@ dist-ssr
 # AI agent worktrees
 .claude/worktrees/
 .auto-generated/
+
+# Scratch / temp verification scripts
+.scratch/
+
+# Generated type declarations next to source
+scripts/vite/config.d.ts
+packages/transport-core/src/index.d.ts

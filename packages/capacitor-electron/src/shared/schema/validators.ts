@@ -80,6 +80,7 @@ export function isSupportedMethod(method: string): boolean {
     method === BRIDGE_METHODS.pluginRegisterInstalled ||
     method === BRIDGE_METHODS.pluginSyncToDevice ||
     method === BRIDGE_METHODS.externalOpen ||
+    method === BRIDGE_METHODS.clipboardRead ||
     method === BRIDGE_METHODS.fileRead ||
     method === BRIDGE_METHODS.discoveryStart ||
     method === BRIDGE_METHODS.discoveryStop ||
@@ -142,6 +143,15 @@ export function validateRuntimeExecutePayload(payload: unknown): payload is {
 
 export function validateExternalOpenPayload(payload: unknown): payload is { url: string } {
   return isObject(payload) && typeof payload.url === 'string' && payload.url.length > 0
+}
+
+export function validateReadClipboardPayload(payload: unknown): payload is Record<string, never> {
+  // clipboard.read takes no arguments; accept either an empty object or undefined/null
+  // so the host does not reject the call when the caller omits the payload.
+  if (payload === undefined || payload === null) {
+    return true
+  }
+  return isObject(payload) && Object.keys(payload).length === 0
 }
 
 export function validateReadFilePayload(

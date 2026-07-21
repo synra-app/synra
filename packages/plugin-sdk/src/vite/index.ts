@@ -447,6 +447,83 @@ function createUnoCssGeneratePlugin(cwd: string, hasUnoConfig: boolean, unoConfi
   }
 }
 
+/**
+ * v3 single-bundle plugin vite config helper.
+ *
+ * The chat plugin at `D:/Projects/synra-plugin-chat` uses the v3 contract:
+ * a single `src/index.ts` → `dist/synra/index.js` bundle, no `pages.json`,
+ * no pages enumeration, no dist/ui outputs.
+ *
+ * v3 design note — `vue` is treated as EXTERNAL on purpose. The plugin
+ * bundle ships `import { defineComponent, inject, ... } from 'vue'` as a
+ * bare specifier, and the host resolves it via an importmap at page load
+ * time. This guarantees the plugin and the host share a single Vue
+ * runtime instance, so `provide` / `inject` cross the host→plugin
+ * component boundary correctly. Inlining Vue into the plugin bundle (the
+ * old `alwaysBundle: every-regex` strategy) gave the plugin its own Vue
+ * instance — `provide(SYNRA_BRIDGE_KEY, ...)` in the host became invisible
+ * to plugin components, and host patches of the plugin subtree crashed
+ * with `Cannot read properties of null (reading 'refs')`.
+ *
+ * Other runtime deps are still always-inlined so the bundle ships zero
+ * bare specifiers (Android WebView has no node_modules to resolve from).
+ *
+ * Use `defineConfig()` from chat plugin's `vite.config.ts` for the v3 path.
+ *
+ * @see ai-docs/plugin-system/05-build-and-bundle.md
+ * @see ai-docs/plugin-system/09-runtime-redesign.md
+ */
+export function defineConfig(options: { outDir?: string } = {}): UserConfig {
+  const cwd = process.cwd()
+  const entry = resolve(cwd, 'src/index.ts')
+  const unoConfigPath = resolve(cwd, 'uno.config.ts')
+  const hasUnoConfig = existsSync(unoConfigPath)
+
+  const plugins = [
+    Vue(),
+    ...(hasUnoConfig ? [UnoCSS({ configFile: unoConfigPath })] : [])
+  ] as unknown as UserConfig['plugins']
+
+  return {
+    build: {
+      minify: true,
+      target: 'es2022'
+    },
+    fmt: {
+      singleQuote: true,
+      semi: false,
+      trailingComma: 'none'
+    },
+    plugins,
+    pack: {
+      entry: { 'synra/index': entry },
+      outDir: options.outDir ?? resolve(cwd, 'dist'),
+      format: 'esm',
+      platform: 'browser',
+      dts: false,
+      minify: true,
+      sourcemap: false,
+      clean: true,
+      treeshake: true,
+      css: { minify: true },
+      exports: { devExports: true },
+      deps: {
+        // Force-inline every node_modules dep EXCEPT `vue`. `vue` stays
+        // as a bare specifier so the host's importmap can redirect
+        // `import ... from 'vue'` to its own Vue runtime chunk. Without
+        // this, the plugin gets its own Vue instance — `provide` /
+        // `inject` cross the host→plugin boundary fails, and Android
+        // WebView patches crash with `Cannot read properties of null`.
+        // Everything else is inlined so the bundle works in Android
+        // WebView / file:// / custom protocols without a node_modules
+        // tree to resolve from.
+        alwaysBundle: [/^(?!vue$).+/]
+      },
+      plugins: [VueRolldown({ isProduction: true })]
+    } as TsdownPackUserConfig
+  } as unknown as UserConfig
+}
+
 export function synraVitePluginConfig(): UserConfig {
   const cwd = process.cwd()
   const pagesPattern = 'pages/**/index.vue'

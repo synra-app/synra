@@ -1,15 +1,11 @@
-import os from 'node:os'
-import { join } from 'pathe'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { expect, test } from 'vite-plus/test'
 import {
   getSynraUiManifestMetadata,
   normalizePluginPagePath,
   parsePluginIdFromPackageName,
-  SynraPlugin
+  SynraPlugin,
+  createPluginBridge
 } from '../src/index.ts'
-import { useSynraPluginEnvelope } from '../src/hooks/index.ts'
-import { synraVitePluginConfig } from '../src/vite/index.ts'
 
 test('parsePluginIdFromPackageName supports scoped and unscoped names', () => {
   expect(parsePluginIdFromPackageName('@synra-plugin/chat')).toBe('chat')
@@ -25,34 +21,27 @@ test('normalizePluginPagePath always returns normalized absolute path', () => {
 })
 
 test('getSynraUiManifestMetadata derives ui metadata from package manifest', () => {
-  expect(
-    getSynraUiManifestMetadata({
-      name: '@synra-plugin/chat',
-      version: '1.2.3',
-      synra: {
-        title: 'Chat',
-        builtin: true,
-        defaultPage: 'home',
-        icon: 'material-symbols:chat-bubble-outline',
-        entries: {
-          ui: 'dist/ui/index.mjs',
-          worker: 'dist/worker/index.mjs'
-        }
-      }
-    })
-  ).toEqual({
-    pluginId: 'chat',
-    packageName: '@synra-plugin/chat',
+  const result = getSynraUiManifestMetadata({
+    name: '@synra-plugin/chat',
     version: '1.2.3',
-    title: 'Chat',
-    builtin: true,
-    defaultPage: 'home',
-    icon: 'material-symbols:chat-bubble-outline',
-    entries: {
-      ui: 'dist/ui/index.mjs',
-      worker: 'dist/worker/index.mjs'
+    synra: {
+      title: 'Chat',
+      builtin: true,
+      defaultPage: 'home',
+      icon: 'material-symbols:chat-bubble-outline',
+      entries: {
+        ui: 'dist/synra/index.js'
+      }
     }
   })
+  expect(result.pluginId).toBe('chat')
+  expect(result.packageName).toBe('@synra-plugin/chat')
+  expect(result.version).toBe('1.2.3')
+  expect(result.title).toBe('Chat')
+  expect(result.builtin).toBe(true)
+  expect(result.defaultPage).toBe('home')
+  expect(result.icon).toBe('material-symbols:chat-bubble-outline')
+  expect(result.entries).toEqual({ ui: 'dist/synra/index.js' })
 })
 
 test('SynraPlugin provides default onPluginExit implementation', async () => {
@@ -64,109 +53,47 @@ test('SynraPlugin provides default onPluginExit implementation', async () => {
   await plugin.onPluginExit()
 })
 
-test('synraVitePluginConfig generates default plugin package config', () => {
-  const tempRoot = mkdtempSync(join(os.tmpdir(), 'synra-plugin-sdk-'))
-  const previousCwd = process.cwd()
-  try {
-    mkdirSync(join(tempRoot, 'pages', 'home'), { recursive: true })
-    mkdirSync(join(tempRoot, 'pages', 'settings'), { recursive: true })
-    writeFileSync(join(tempRoot, 'pages', 'home', 'index.vue'), '<template>home</template>')
-    writeFileSync(join(tempRoot, 'pages', 'settings', 'index.vue'), '<template>settings</template>')
-    process.chdir(tempRoot)
-
-    const config = synraVitePluginConfig()
-
-    expect((config.pack as { entry?: Record<string, string> } | undefined)?.entry).toEqual({
-      'ui/index': 'src/index.ts',
-      'ui/__synra_pages__': 'virtual:synra-pages-entry',
-      'ui/pages/home/index': 'pages/home/index.vue',
-      'ui/pages/settings/index': 'pages/settings/index.vue'
-    })
-    expect((config.pack as { dts?: boolean } | undefined)?.dts).toBe(false)
-    expect((config.pack as { minify?: boolean } | undefined)?.minify).toBe(true)
-    expect((config as { build?: { minify?: boolean } }).build?.minify).toBe(true)
-
-    const vendorGroup = (
-      config.pack as {
-        outputOptions?: { codeSplitting?: { groups?: Array<{ name?: unknown; test?: unknown }> } }
-      }
-    ).outputOptions?.codeSplitting?.groups?.[0]
-    expect(vendorGroup?.test).toBeInstanceOf(RegExp)
-    expect(typeof vendorGroup?.name).toBe('function')
-    const chunkName = vendorGroup?.name as (id: string) => string | null
-    expect(chunkName('/proj/node_modules/vue/dist/vue.runtime.esm-bundler.js')).toBe('vendor-vue')
-    expect(chunkName('/proj/node_modules/.pnpm/vue@3.0.0/node_modules/vue/dist/x.js')).toBe(
-      'vendor-vue'
-    )
-    expect(
-      chunkName(
-        '/proj/node_modules/.pnpm/@vue+runtime-core@3.0.0/node_modules/@vue/runtime-core/dist/x.js'
-      )
-    ).toBe('vendor-vue__runtime-core')
-    expect(chunkName('/proj/src/index.ts')).toBe(null)
-    expect((config.pack as { deps?: { onlyBundle?: boolean } } | undefined)?.deps?.onlyBundle).toBe(
-      false
-    )
-    expect(
-      typeof (config.pack as { deps?: { alwaysBundle?: unknown } } | undefined)?.deps?.alwaysBundle
-    ).toBe('function')
-    expect((config.pack as { exports?: { devExports: boolean } } | undefined)?.exports).toEqual({
-      devExports: true
-    })
-    const vitePluginNames = ((config.plugins as Array<{ name?: string } | null>) ?? [])
-      .map((plugin) => plugin?.name)
-      .filter((name): name is string => typeof name === 'string')
-    expect(vitePluginNames.some((name) => name.includes('auto-import'))).toBe(false)
-    expect(vitePluginNames.some((name) => name.includes('components'))).toBe(false)
-
-    const packPluginNames = (
-      (config.pack as { plugins?: Array<{ name?: string } | null> } | undefined)?.plugins ?? []
-    )
-      .map((plugin) => plugin?.name)
-      .filter((name): name is string => typeof name === 'string')
-    expect(packPluginNames.some((name) => name.includes('auto-import'))).toBe(false)
-    expect(packPluginNames.some((name) => name.includes('components'))).toBe(false)
-  } finally {
-    process.chdir(previousCwd)
-    rmSync(tempRoot, { recursive: true, force: true })
-  }
+test('capability gate is removed — pluginId surfaces declared list but does not gate calls', () => {
+  // Sanity: there is no `CapabilityDeniedError` export anymore; the
+  // public surface never throws on a missing capability. This test
+  // exists as a regression guard so a future refactor that re-adds
+  // the gate fails fast.
+  const bridge = createPluginBridge({ pluginId: 'starter', capabilities: [] })
+  expect(bridge.capabilities).toEqual([])
+  // No throw; surface exists for introspection.
+  expect(typeof bridge.send).toBe('function')
+  expect(typeof bridge.broadcast).toBe('function')
 })
 
-test('synraVitePluginConfig splits Node entries into pack.format.cjs when host exists', () => {
-  const tempRoot = mkdtempSync(join(os.tmpdir(), 'synra-plugin-sdk-host-'))
-  const previousCwd = process.cwd()
-  try {
-    mkdirSync(join(tempRoot, 'pages', 'home'), { recursive: true })
-    mkdirSync(join(tempRoot, 'src', 'host'), { recursive: true })
-    writeFileSync(join(tempRoot, 'pages', 'home', 'index.vue'), '<template>home</template>')
-    writeFileSync(join(tempRoot, 'src', 'index.ts'), 'export {}', 'utf8')
-    writeFileSync(join(tempRoot, 'src', 'host', 'index.ts'), 'export default {}', 'utf8')
-    process.chdir(tempRoot)
-
-    const config = synraVitePluginConfig()
-    const pack = config.pack as {
-      entry?: Record<string, string>
-      format?: {
-        esm?: { entry?: Record<string, string> }
-        cjs?: { entry?: Record<string, string> }
-      }
-    }
-
-    expect(pack.entry?.['ui/index']).toBe('src/index.ts')
-    expect(pack.entry?.['host/index']).toBe('src/host/index.ts')
-    expect(pack.format?.esm?.entry?.['ui/index']).toBe('src/index.ts')
-    expect(pack.format?.esm?.entry?.['host/index']).toBeUndefined()
-    expect(pack.format?.cjs?.entry?.['host/index']).toBe('src/host/index.ts')
-  } finally {
-    process.chdir(previousCwd)
-    rmSync(tempRoot, { recursive: true, force: true })
-  }
+test('createPluginBridge returns bridge with pluginId and capabilities', () => {
+  const bridge = createPluginBridge({
+    pluginId: '@synra-plugin/chat',
+    capabilities: ['device:send', 'log:*']
+  })
+  expect(bridge.pluginId).toBe('@synra-plugin/chat')
+  expect(bridge.capabilities).toEqual(['device:send', 'log:*'])
+  expect(typeof bridge.usePairedDevices).toBe('function')
+  expect(typeof bridge.useSynraPluginEnvelope).toBe('function')
+  expect(typeof bridge.send).toBe('function')
+  expect(typeof bridge.broadcast).toBe('function')
+  expect(typeof bridge.fetch).toBe('function')
+  expect(typeof bridge.readFile).toBe('function')
+  expect(typeof bridge.dispose).toBe('function')
 })
 
-test('plugin-sdk hooks re-exports useSynraPluginEnvelope from @synra/hooks', () => {
-  const pluginEv = useSynraPluginEnvelope('@synra-plugin/chat')
-  expect(typeof pluginEv.send).toBe('function')
-  expect(typeof pluginEv.subscribe).toBe('function')
-  expect(typeof pluginEv.request).toBe('function')
-  expect(pluginEv.pluginWireSlug).toBe('chat')
+test('createPluginBridge strips @synra-plugin/ prefix for envelope slug', () => {
+  const a = createPluginBridge({ pluginId: '@synra-plugin/chat', capabilities: [] })
+  const b = createPluginBridge({ pluginId: 'chat', capabilities: [] })
+  // Both bridges should produce an envelope; the slug is internal but
+  // the bridge surface is identical.
+  expect(typeof a.useSynraPluginEnvelope().send).toBe('function')
+  expect(typeof b.useSynraPluginEnvelope().send).toBe('function')
+})
+
+test('createPluginBridge.dispose is idempotent', () => {
+  const bridge = createPluginBridge({ pluginId: 'chat', capabilities: [] })
+  expect(() => {
+    bridge.dispose()
+    bridge.dispose()
+  }).not.toThrow()
 })

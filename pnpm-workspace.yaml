@@ -12,7 +12,7 @@ catalogMode: prefer
 
 catalogs:
   build:
-    '@tsdown/css': ^0.22.11
+    '@tsdown/css': ^0.22.12
     esbuild: ^0.28.1
     fflate: ^0.8.3
     pathe: ^2.0.3
@@ -66,6 +66,8 @@ catalogs:
     vitest: npm:@voidzero-dev/vite-plus-test@0.1.16
     vue-tsc: ^3.3.7
   vue:
+    '@vue/runtime-core': ^3.5.40
+    '@vue/runtime-dom': ^3.5.40
     vue: ^3.5.40
     vue-router: ^5.2.0
 overrides:

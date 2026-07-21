@@ -25,14 +25,14 @@
     "./package.json": "./package.json"
   },
   "publishConfig": {
-    "access": "public",
     "exports": {
       ".": "./dist/index.mjs",
       "./capacitor": "./dist/capacitor.mjs",
       "./plugin": "./dist/plugin.mjs",
       "./protocol": "./dist/protocol.mjs",
       "./package.json": "./package.json"
-    }
+    },
+    "access": "public"
   },
   "scripts": {
     "build": "vp pack",

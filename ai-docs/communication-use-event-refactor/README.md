@@ -1,6 +1,6 @@
 # 通讯层重构方向：从 useSynraEnvelope 到 useSynraSystemEnvelope / useSynraPluginEnvelope
 
-本文记录 **Synra 跨端通讯** 的长期重构方向：业务侧 **不再维护多套并行收发入口**，逐步 **完全迁移** 到以 **`useSynraSystemEnvelope`（系统）/ `useSynraPluginEnvelope`（插件）** 为**日常对外**形态；**底层**统一由 **`useSynraEnvelope`** 实现真实 `send` / `subscribe` / `request`（`event` 为**线上一真名**）。`useSynraSystemEnvelope` / `useSynraPluginEnvelope` 与 `useSynraEnvelope` 的差异仅为 **给 `event` 自动加/去前缀**（详见 [plugin-system/10-synra-envelope-hooks-and-prefixes.md](../plugin-system/10-synra-envelope-hooks-and-prefixes.md)），不引入单独的 system / plugin 类型或 `channel` 字段。底层仍遵守 [消息信封白名单](../cross-platform-communication-map/message-envelope-and-validation.md)，不擅自增加线上一帧字段。信封解析、前缀与路由见 **`@synra/envelope`**。
+本文记录 **Synra 跨端通讯** 的长期重构方向：业务侧 **不再维护多套并行收发入口**，逐步 **完全迁移** 到以 **`useSynraSystemEnvelope`（系统）/ `useSynraPluginEnvelope`（插件）** 为**日常对外**形态；**底层**统一由 **`useSynraEnvelope`** 实现真实 `send` / `subscribe` / `request`（`event` 为**线上一真名**）。`useSynraSystemEnvelope` / `useSynraPluginEnvelope` 与 `useSynraEnvelope` 的差异仅为 **给 `event` 自动加/去前缀**（详见 [plugin-system/00-plugin-runtime-model.md §3](../plugin-system/00-plugin-runtime-model.md)），不引入单独的 system / plugin 类型或 `channel` 字段。底层仍遵守 [消息信封白名单](../cross-platform-communication-map/message-envelope-and-validation.md)，不擅自增加线上一帧字段。信封解析、前缀与路由见 **`@synra/envelope`**。
 
 > 与实现计划（含 Electron 主↔渲 **仅方案 B** 等）配套：见工作区 `.cursor/plans` 中相关计划；代码级规范仍以 `SYNRA-COMM` 注释与 `ai-docs/cross-platform-communication-map` 为准。
 
@@ -10,7 +10,7 @@
 2. **移除并行路径**：删除或私有化 **store / composable 上直接暴露的 `sendLanEvent`、零散订阅**，避免「同一语义两套 API」。
 3. **Electron 宿主**：主进程 ↔ 渲染进程侧 **仅保留**「专用 IPC + 白名单信封」一条路（方案 B），与发现广播等旧通道 **分阶段** 收敛或拆除（不在单 PR 强求一次删光底层 native，但 **对外调用形态** 以唯一为准）。
 4. **移动端**：Capacitor iOS/Android 上与宿主推送能对齐的 **尽量合并进** 连接层 `onMessage`；缺口在原生侧补发，仍走信封白名单。
-5. **系统 / 插件事件命名**：不增加信封字段；在 **`event` 字符串**上用 **`_synra.`** 与 **`_plugin.{slug}.`** 区分（与 hooks 中 `useSynraSystemEnvelope` / `useSynraPluginEnvelope` 一致）；说明见 [10-synra-envelope-hooks-and-prefixes.md](../plugin-system/10-synra-envelope-hooks-and-prefixes.md)。
+5. **系统 / 插件事件命名**：不增加信封字段；在 **`event` 字符串**上用 **`_synra.`** 与 **`_plugin.{slug}.`** 区分（与 hooks 中 `useSynraSystemEnvelope` / `useSynraPluginEnvelope` 一致）；说明见 [plugin-system/00-plugin-runtime-model.md §3](../plugin-system/00-plugin-runtime-model.md)。
 
 ## 涉及代码（便于检索，非穷举）
 

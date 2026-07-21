@@ -2,7 +2,7 @@ import { extname } from 'node:path'
 import { homedir } from 'node:os'
 import { existsSync, readFileSync } from 'node:fs'
 import { join, normalize, resolve } from 'pathe'
-import { app, BrowserWindow, ipcMain, protocol, shell } from 'electron'
+import { app, BrowserWindow, clipboard, ipcMain, protocol, shell } from 'electron'
 import {
   parseSynraMessageEnvelope,
   setSynraHostEnvelopeMainDispatch,
@@ -244,6 +244,16 @@ function registerCapacitorElectronBridge(): void {
     shellAdapter: {
       async openExternal(url: string): Promise<void> {
         await shell.openExternal(url)
+      }
+    },
+    clipboardAdapter: {
+      // Synchronous on Electron's `clipboard` module; wrap in a Promise
+      // so the bridge shape stays consistent. Backs the
+      // `_plugin.<slug>.copy-selection` host handler — the phone sends
+      // "send me whatever is in your OS clipboard", the Electron
+      // host reads it here and replies with the text.
+      async readText(): Promise<string> {
+        return clipboard.readText()
       }
     },
     allowedFileRoots: [app.getAppPath(), PLUGIN_ROOT_DIR],

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { createSocket, type Socket as UdpSocket } from 'node:dgram'
 import { createServer, type Server, type Socket } from 'node:net'
 import { networkInterfaces } from 'node:os'
-import { Bonjour, type Service as BonjourService } from 'bonjour-service'
+import Bonjour from 'bonjour-service'
 import { isLanWireEventName } from '@synra/protocol'
 import { createLogger } from '@synra/utils'
 import type {
@@ -119,8 +119,8 @@ export function createInboundHostTransport(
   const decoders = new WeakMap<Socket, LengthPrefixedJsonCodec>()
   let server: Server | undefined
   let responder: UdpSocket | undefined
-  let bonjour: Bonjour | undefined
-  let published: BonjourService | undefined
+  let bonjour: InstanceType<typeof Bonjour> | undefined
+  let published: ReturnType<InstanceType<typeof Bonjour>['publish']> | undefined
 
   const collectUdpBroadcastDestinations = (): string[] => {
     const destinations = new Set<string>(['255.255.255.255'])

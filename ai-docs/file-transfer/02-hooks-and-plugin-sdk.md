@@ -35,4 +35,4 @@
 
 ## 与插件系统文档
 
-插件同步的高层步骤仍以 [plugin-system/05-sync-to-mobile.md](../plugin-system/05-sync-to-mobile.md) 为准；落地时发送侧应**委托会话封装**（`file.transfer.*`），避免与 Chat 等场景分裂两套 chunk 实现。
+插件同步的高层步骤仍以 [plugin-system/06-install-and-load.md](../plugin-system/06-install-and-load.md) 为准；落地时发送侧应**委托会话封装**（`file.transfer.*`），避免与 Chat 等场景分裂两套 chunk 实现。

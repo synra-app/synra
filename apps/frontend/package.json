@@ -36,6 +36,8 @@
     "@unocss/reset": "catalog:unocss",
     "@unocss/vite": "catalog:unocss",
     "@vitejs/plugin-vue": "catalog:vite",
+    "@vue/runtime-core": "catalog:vue",
+    "@vue/runtime-dom": "catalog:vue",
     "pathe": "catalog:build",
     "sass": "catalog:style",
     "typescript": "catalog:types",

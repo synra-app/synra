@@ -16,14 +16,14 @@
     "./package.json": "./package.json"
   },
   "publishConfig": {
-    "access": "public",
     "exports": {
       ".": "./dist/index.mjs",
       "./hooks": "./dist/hooks.mjs",
       "./unocss": "./dist/unocss.mjs",
       "./vite": "./dist/vite.mjs",
       "./package.json": "./package.json"
-    }
+    },
+    "access": "public"
   },
   "scripts": {
     "build": "vp pack",

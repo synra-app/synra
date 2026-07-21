@@ -35,6 +35,7 @@ export function createRuntimeInfoService(options: RuntimeInfoServiceOptions = {}
           'plugin.registerInstalled',
           'plugin.syncToDevice',
           'external.open',
+          'clipboard.read',
           'file.read',
           'discovery.start',
           'discovery.stop',

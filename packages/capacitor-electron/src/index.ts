@@ -137,6 +137,7 @@ export {
   validateResolveActionsPayload,
   validateRuntimeExecutePayload,
   validateExternalOpenPayload,
+  validateReadClipboardPayload,
   validateReadFilePayload,
   validateDiscoveryStartPayload,
   validateDiscoveryOpenTransportPayload,

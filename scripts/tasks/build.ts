@@ -80,7 +80,7 @@ const stepsByTarget: Record<BuildTarget, BuildStep[]> = {
     {
       title: 'Sync Android project',
       command: VP_COMMAND,
-      args: ['exec', 'cap', 'sync', 'android'],
+      args: ['exec', 'esno', './scripts/cap.ts', 'sync', 'android'],
       cwd: MOBILE_DIR
     }
   ],
@@ -100,7 +100,7 @@ const stepsByTarget: Record<BuildTarget, BuildStep[]> = {
     {
       title: 'Sync iOS project',
       command: VP_COMMAND,
-      args: ['exec', 'cap', 'sync', 'ios'],
+      args: ['exec', 'esno', './scripts/cap.ts', 'sync', 'ios'],
       cwd: MOBILE_DIR
     }
   ],
@@ -135,7 +135,7 @@ const stepsByTarget: Record<BuildTarget, BuildStep[]> = {
     {
       title: 'Sync Android project',
       command: VP_COMMAND,
-      args: ['exec', 'cap', 'sync', 'android'],
+      args: ['exec', 'esno', './scripts/cap.ts', 'sync', 'android'],
       cwd: MOBILE_DIR
     },
     {
@@ -147,7 +147,7 @@ const stepsByTarget: Record<BuildTarget, BuildStep[]> = {
     {
       title: 'Sync iOS project',
       command: VP_COMMAND,
-      args: ['exec', 'cap', 'sync', 'ios'],
+      args: ['exec', 'esno', './scripts/cap.ts', 'sync', 'ios'],
       cwd: MOBILE_DIR
     }
   ]

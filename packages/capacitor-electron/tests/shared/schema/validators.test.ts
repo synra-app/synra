@@ -8,6 +8,7 @@ import {
   validateResolveActionsPayload,
   validateRuntimeExecutePayload,
   validateExternalOpenPayload,
+  validateReadClipboardPayload,
   validateDiscoverySendMessagePayload,
   validateDiscoveryStartPayload,
   validateReadFilePayload
@@ -46,6 +47,7 @@ describe('shared/schema/validators', () => {
     expect(isSupportedProtocolVersion(BRIDGE_PROTOCOL_VERSION)).toBe(true)
     expect(isSupportedProtocolVersion('9.9')).toBe(false)
     expect(isSupportedMethod(BRIDGE_METHODS.fileRead)).toBe(true)
+    expect(isSupportedMethod(BRIDGE_METHODS.clipboardRead)).toBe(true)
     expect(isSupportedMethod(BRIDGE_METHODS.discoveryStart)).toBe(true)
     expect(isSupportedMethod(BRIDGE_METHODS.pluginRegisterInstalled)).toBe(true)
     expect(isSupportedMethod(BRIDGE_METHODS.connectionOpenTransport)).toBe(true)
@@ -62,6 +64,10 @@ describe('shared/schema/validators', () => {
   test('validates external.open and file.read payloads', () => {
     expect(validateExternalOpenPayload({ url: 'https://synra.dev' })).toBe(true)
     expect(validateExternalOpenPayload({ url: '' })).toBe(false)
+    expect(validateReadClipboardPayload({})).toBe(true)
+    expect(validateReadClipboardPayload(undefined)).toBe(true)
+    expect(validateReadClipboardPayload(null)).toBe(true)
+    expect(validateReadClipboardPayload({ extra: 'no' })).toBe(false)
     expect(validateReadFilePayload({ path: 'a.txt' })).toBe(true)
     expect(validateReadFilePayload({})).toBe(false)
   })
