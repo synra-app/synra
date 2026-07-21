@@ -14,7 +14,7 @@ import {
   validateDiscoveryStartPayload,
   validateReadFilePayload
 } from '../../../src/shared/schema/validators'
-import { BRIDGE_METHODS, BRIDGE_PROTOCOL_VERSION } from '../../../src/shared/protocol/constants'
+import { BRIDGE_METHODS, BRIDGE_PROTOCOL_VERSION } from '@synra/bridge-schema'
 import {
   DEVICE_PAIRING_REQUEST_EVENT,
   DEVICE_TCP_ACK_EVENT,
@@ -49,6 +49,7 @@ describe('shared/schema/validators', () => {
     expect(isSupportedProtocolVersion('9.9')).toBe(false)
     expect(isSupportedMethod(BRIDGE_METHODS.fileRead)).toBe(true)
     expect(isSupportedMethod(BRIDGE_METHODS.clipboardRead)).toBe(true)
+    expect(isSupportedMethod(BRIDGE_METHODS.clipboardReadSelection)).toBe(true)
     expect(isSupportedMethod(BRIDGE_METHODS.clipboardWrite)).toBe(true)
     expect(isSupportedMethod(BRIDGE_METHODS.discoveryStart)).toBe(true)
     expect(isSupportedMethod(BRIDGE_METHODS.pluginRegisterInstalled)).toBe(true)

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vite-plus/test'
 import { createPreloadInvoker } from '../../../src/bridge/preload/invoke'
 import { BRIDGE_ERROR_CODES } from '../../../src/shared/errors/codes'
-import { BRIDGE_METHODS, BRIDGE_PROTOCOL_VERSION } from '../../../src/shared/protocol/constants'
+import { BRIDGE_METHODS, BRIDGE_PROTOCOL_VERSION } from '@synra/bridge-schema'
 
 describe('bridge/preload/invoke', () => {
   test('sends request to fixed invoke channel', async () => {

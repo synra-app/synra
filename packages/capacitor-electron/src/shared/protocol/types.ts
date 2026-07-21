@@ -1,416 +1,66 @@
-import type { PluginAction, ShareInput } from '@synra/plugin-sdk'
-import type { SynraPluginInstallSource, SynraPluginManifestEntries } from '@synra/plugin-system'
-import type {
-  LanWireEventName,
-  PluginCatalogItem,
-  PluginCatalogRequestPayload,
-  SynraActionReceipt,
-  SynraRuntimeMessage
-} from '@synra/protocol'
-import type { BridgeErrorCode } from '../errors/codes'
-import type { BridgeMethod } from './constants'
-
-export type BridgeRequestMeta = {
-  timeoutMs?: number
-  source?: 'capacitor-webview'
-  traceId?: string
-}
-
-export type BridgeRequest<TPayload = unknown> = {
-  protocolVersion: string
-  requestId: string
-  method: BridgeMethod | (string & {})
-  payload: TPayload
-  meta?: BridgeRequestMeta
-}
-
-export type BridgeSuccessResponse<TData = unknown> = {
-  ok: true
-  requestId: string
-  data: TData
-}
-
-export type BridgeErrorResponse = {
-  ok: false
-  requestId: string
-  error: {
-    code: BridgeErrorCode
-    message: string
-    details?: unknown
-  }
-}
-
-export type BridgeResponse<TData = unknown> = BridgeSuccessResponse<TData> | BridgeErrorResponse
-
-export type RuntimeInfo = {
-  protocolVersion: string
-  supportedProtocolVersions: string[]
-  capacitorVersion: string
-  electronVersion: string
-  nodeVersion: string
-  platform: NodeJS.Platform
-  capabilities: string[]
-  /** Prefer non-link-local IPv4 for LAN pairing (Electron main). */
-  primaryDiscoveryIpv4?: string
-}
-
-export type OperationResult = {
-  success: true
-}
-
-export type OpenExternalOptions = {
-  url: string
-}
-
-export type ReadClipboardResult = {
-  /** Plain-text clipboard content from the host OS clipboard. */
-  text: string
-}
-
-export type WriteClipboardOptions = {
-  /** Plain-text content to put on the host OS clipboard. */
-  text: string
-}
-
-export type ReadFileOptions = {
-  path: string
-  encoding?: BufferEncoding
-}
-
-export type ReadFileResult = {
-  content: string
-  encoding: BufferEncoding
-}
-
-export type RuntimeActionCandidate = {
-  pluginId: string
-  pluginVersion: string
-  pluginLabel: string
-  score: number
-  reason?: string
-  action: PluginAction
-}
-
-export type ResolveRuntimeActionsOptions = {
-  input: ShareInput
-}
-
-export type ResolveRuntimeActionsResult = {
-  candidates: RuntimeActionCandidate[]
-}
-
-export type RuntimeExecuteOptions = {
-  requestId: string
-  sourceDeviceId: string
-  targetDeviceId: string
-  replyToRequestId?: string
-  input: ShareInput
-  action: PluginAction
-  messageId?: string
-  traceId?: string
-  timeoutMs?: number
-}
-
-export type RuntimeExecuteResult = {
-  messages: SynraRuntimeMessage[]
-  receipt: SynraActionReceipt
-}
-
-export type PluginCatalogResult = {
-  plugins: PluginCatalogItem[]
-  generatedAt: number
-}
-
-export type InstalledPluginSummary = {
-  pluginId: string
-  packageName: string
-  version: string
-  title: string
-  defaultPage: string
-  builtin: boolean
-  icon?: string
-  installedAt: number
-  artifactRoot: string
-  entries: SynraPluginManifestEntries
-  installSource: SynraPluginInstallSource
-  localSourcePath?: string
-}
-
-export type PluginInstallOptions = {
-  packageName: string
-  version?: string
-  registryUrl?: string
-}
-
-export type PluginInstallResult = InstalledPluginSummary
-
-export type PluginInstallLocalOptions = {
-  path: string
-}
-
-export type PluginUninstallOptions = {
-  pluginId: string
-}
-
-export type PluginUninstallResult = {
-  success: boolean
-}
-
-export type PluginListInstalledOptions = Record<string, never>
-
-export type PluginListInstalledResult = {
-  plugins: InstalledPluginSummary[]
-}
-
-export type PluginRegisterFailureReason = 'artifactBroken' | 'registrationFailed'
-
-export type PluginRegisterFailure = {
-  pluginId: string
-  reason: PluginRegisterFailureReason
-  message: string
-  cleanupRecommended: boolean
-}
-
-export type PluginRegisterInstalledOptions = {
-  plugins: InstalledPluginSummary[]
-  requestId?: string
-}
-
-export type PluginRegisterInstalledResult = {
-  registeredPluginIds: string[]
-  failedPlugins: PluginRegisterFailure[]
-}
-
-export type PluginSyncToDeviceOptions = {
-  pluginId: string
-  deviceId: string
-}
-
-/** Bridge result for pushing a plugin bundle to a peer (includes tarball transfer on Electron). */
-export type PluginSyncToDeviceResult =
-  | {
-      success: true
-      pluginId: string
-      version: string
-      deviceId: string
-      artifactRoot: string
-      /** Number of file.transfer.chunk messages sent (set after transfer completes). */
-      transmittedChunks?: number
-    }
-  | {
-      success: false
-      /** e.g. missingPackageTarball, or prefixed missingPackageTarball: … */
-      reason: string
-    }
-
-export type DiscoverySource = 'mdns' | 'probe' | 'manual' | 'transport'
-export type DiscoveryMode = 'hybrid' | 'mdns' | 'subnet' | 'manual'
-
-export type DiscoveryState = 'idle' | 'scanning'
-
-export type DiscoveredDevice = {
-  deviceId: string
-  name: string
-  ipAddress: string
-  port?: number
-  source: DiscoverySource
-  connectable: boolean
-  connectCheckAt?: number
-  connectCheckError?: string
-  discoveredAt: number
-  lastSeenAt: number
-}
-
-export type DeviceDiscoveryStartOptions = {
-  includeLoopback?: boolean
-  manualTargets?: string[]
-  enableProbeFallback?: boolean
-  discoveryMode?: DiscoveryMode
-  mdnsServiceType?: string
-  subnetCidrs?: string[]
-  maxProbeHosts?: number
-  concurrency?: number
-  /** Single wall-clock budget (ms) for strategy browse + Synra TCP probe. */
-  scanBudgetMs?: number
-  reset?: boolean
-  port?: number
-  /** Merged into each Synra TCP probe `connect` payload during this discovery run. */
-  probeConnectWirePayload?: Record<string, unknown>
-}
-
-export type DeviceDiscoveryStartResult = {
-  requestId: string
-  state: DiscoveryState
-  devices: DiscoveredDevice[]
-}
-
-export type DeviceDiscoveryListResult = {
-  state: DiscoveryState
-  devices: DiscoveredDevice[]
-}
-
-export type SynraLanConnectType = 'fresh' | 'paired'
-
-export type DeviceTransportOpenOptions = {
-  deviceId: string
-  host: string
-  port: number
-  token?: string
-  /** Sent on Synra `connect` payload as `connectType`; caller must set. */
-  connectType: SynraLanConnectType
-  transport?: ConnectionTransport
-}
-
-export type DeviceTransportState = 'idle' | 'connecting' | 'open' | 'closed' | 'error'
-export type ConnectionTransport = 'tcp'
-
-export type DeviceTransportSnapshot = {
-  deviceId?: string
-  host?: string
-  port?: number
-  state: DeviceTransportState
-  direction?: 'inbound' | 'outbound'
-  transport?: ConnectionTransport
-  lastError?: string
-  openedAt?: number
-  closedAt?: number
-}
-
-export type DeviceTransportOpenResult = {
-  success: true
-  deviceId: string
-  state: DeviceTransportState
-  transport?: ConnectionTransport
-}
-
-export type DeviceTransportCloseOptions = {
-  target?: string
-  transport?: ConnectionTransport
-}
-
-export type DeviceTransportCloseResult = {
-  success: true
-  target?: string
-  transport?: ConnectionTransport
-}
-
-export type DeviceTransportSendMessageOptions = {
-  requestId: string
-  event: string
-  target: string
-  from: string
-  replyRequestId?: string
-  payload: unknown
-  timestamp?: number
-  transport?: ConnectionTransport
-}
-
-export type DeviceTransportSendMessageResult = {
-  success: true
-  target: string
-  transport?: ConnectionTransport
-}
-
-export type DeviceTransportSendLanEventOptions = {
-  requestId: string
-  event: LanWireEventName
-  target: string
-  from: string
-  replyRequestId?: string
-  payload?: unknown
-  timestamp?: number
-  transport?: ConnectionTransport
-}
-
-export type DeviceTransportSendLanEventResult = {
-  success: true
-  target: string
-  transport?: ConnectionTransport
-}
-
-export type DeviceTransportGetStateOptions = {
-  target?: string
-  transport?: ConnectionTransport
-}
-
-export type DeviceDiscoveryHostEvent = {
-  id: number
-  timestamp: number
-  type:
-    | 'transport.opened'
-    | 'transport.closed'
-    | 'transport.message.received'
-    | 'transport.lan.event.received'
-    | 'transport.message.ack'
-    | 'transport.error'
-    | 'host.member.online'
-    | 'host.retire'
-    | 'host.member.offline'
-    | 'host.heartbeat.timeout'
-  event?: string
-  target?: string
-  from?: string
-  replyRequestId?: string
-  deviceId?: string
-  code?: string
-  payload?: unknown
-  transport?: ConnectionTransport
-}
-
-export type MethodPayloadMap = {
-  'runtime.getInfo': Record<string, never>
-  'runtime.resolveActions': ResolveRuntimeActionsOptions
-  'runtime.execute': RuntimeExecuteOptions
-  'plugin.catalog.get': PluginCatalogRequestPayload
-  'plugin.install': PluginInstallOptions
-  'plugin.installLocal': PluginInstallLocalOptions
-  'plugin.uninstall': PluginUninstallOptions
-  'plugin.listInstalled': PluginListInstalledOptions
-  'plugin.registerInstalled': PluginRegisterInstalledOptions
-  'plugin.syncToDevice': PluginSyncToDeviceOptions
-  'external.open': OpenExternalOptions
-  'clipboard.read': Record<string, never>
-  'clipboard.readSelection': Record<string, never>
-  'clipboard.write': WriteClipboardOptions
-  'file.read': ReadFileOptions
-  'discovery.start': DeviceDiscoveryStartOptions
-  'discovery.stop': Record<string, never>
-  'discovery.list': Record<string, never>
-  'connection.openTransport': DeviceTransportOpenOptions
-  'connection.closeTransport': DeviceTransportCloseOptions
-  'connection.sendMessage': DeviceTransportSendMessageOptions
-  'connection.sendLanEvent': DeviceTransportSendLanEventOptions
-  'connection.getTransportState': DeviceTransportGetStateOptions
-  'preferences.get': { key: string }
-  'preferences.set': { key: string; value: string }
-  'preferences.remove': { key: string }
-}
-
-export type MethodResultMap = {
-  'runtime.getInfo': RuntimeInfo
-  'runtime.resolveActions': ResolveRuntimeActionsResult
-  'runtime.execute': RuntimeExecuteResult
-  'plugin.catalog.get': PluginCatalogResult
-  'plugin.install': PluginInstallResult
-  'plugin.installLocal': PluginInstallResult
-  'plugin.uninstall': PluginUninstallResult
-  'plugin.listInstalled': PluginListInstalledResult
-  'plugin.registerInstalled': PluginRegisterInstalledResult
-  'plugin.syncToDevice': PluginSyncToDeviceResult
-  'external.open': OperationResult
-  'clipboard.read': ReadClipboardResult
-  'clipboard.readSelection': ReadClipboardResult
-  'clipboard.write': OperationResult
-  'file.read': ReadFileResult
-  'discovery.start': DeviceDiscoveryStartResult
-  'discovery.stop': OperationResult
-  'discovery.list': DeviceDiscoveryListResult
-  'connection.openTransport': DeviceTransportOpenResult
-  'connection.closeTransport': DeviceTransportCloseResult
-  'connection.sendMessage': DeviceTransportSendMessageResult
-  'connection.sendLanEvent': DeviceTransportSendLanEventResult
-  'connection.getTransportState': DeviceTransportSnapshot
-  'preferences.get': { value: string | null }
-  'preferences.set': OperationResult
-  'preferences.remove': OperationResult
-}
+/**
+ * Re-export shim for the canonical bridge wire schema.
+ *
+ * The actual definitions live in `@synra/bridge-schema` (a leaf package
+ * with no runtime dependencies on plugin-sdk / plugin-system). We
+ * re-export here so existing internal imports
+ * (`from '../shared/protocol/types'`) keep working without churn and
+ * the public API surface (`@synra/capacitor-electron`) stays stable.
+ */
+export type {
+  BridgeErrorResponse,
+  BridgeMethod,
+  BridgeRequest,
+  BridgeRequestMeta,
+  BridgeResponse,
+  BridgeSuccessResponse,
+  MethodPayloadMap,
+  MethodResultMap,
+  OpenExternalOptions,
+  DiscoveryMode,
+  DiscoverySource,
+  DiscoveryState,
+  DiscoveredDevice,
+  DeviceDiscoveryListResult,
+  DeviceTransportOpenOptions,
+  DeviceTransportOpenResult,
+  SynraLanConnectType,
+  ConnectionTransport,
+  DeviceTransportCloseOptions,
+  DeviceTransportCloseResult,
+  DeviceTransportSendMessageOptions,
+  DeviceTransportSendMessageResult,
+  DeviceTransportSendLanEventOptions,
+  DeviceTransportSendLanEventResult,
+  DeviceTransportGetStateOptions,
+  DeviceTransportSnapshot,
+  DeviceDiscoveryStartOptions,
+  DeviceDiscoveryStartResult,
+  DeviceDiscoveryHostEvent,
+  PluginCatalogResult,
+  PluginInstallOptions,
+  PluginInstallLocalOptions,
+  PluginInstallResult,
+  PluginListInstalledOptions,
+  PluginListInstalledResult,
+  PluginRegisterInstalledOptions,
+  PluginRegisterInstalledResult,
+  PluginSyncToDeviceOptions,
+  PluginSyncToDeviceResult,
+  PluginUninstallOptions,
+  PluginUninstallResult,
+  InstalledPluginSummary,
+  OperationResult,
+  ReadClipboardResult,
+  ReadFileOptions,
+  ReadFileResult,
+  ResolveRuntimeActionsOptions,
+  WriteClipboardOptions,
+  ResolveRuntimeActionsResult,
+  RuntimeActionCandidate,
+  RuntimeExecuteOptions,
+  RuntimeExecuteResult,
+  RuntimeInfo,
+  PluginRegisterFailure,
+  PluginRegisterFailureReason
+} from '@synra/bridge-schema'

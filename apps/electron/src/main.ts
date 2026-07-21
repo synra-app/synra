@@ -10,7 +10,7 @@ import {
   SYNRA_HOST_ENVELOPE_PUSH_CHANNEL,
   type SynraMessageEnvelope
 } from '@synra/hooks/electron'
-import { captureOsTextSelection } from './os-selection'
+import { captureOsTextSelection } from './lib/os-selection'
 import { BRIDGE_HOST_EVENT_CHANNEL, setupBridgeMainRuntime } from './bridge/main'
 import type {
   DeviceDiscoveryHostEvent,

@@ -1,21 +1,26 @@
 import { SYNRA_BRIDGE_KEY, type PluginBridge, normalizePluginPagePath } from '@synra/plugin-sdk'
-import { join } from 'pathe'
+import { dirname, join } from 'pathe'
 import { defineComponent, h, provide, ref, type Component } from 'vue'
 import type { Router } from 'vue-router'
 import { tryGetSynraPluginRuntimeBridge } from '../bridge/synra-plugin-host-bridge'
 import type { PagesManifest, RegisteredPage } from './types'
 
 /**
- * v3 plugin bundles ship a single ESM module (`dist/synra/index.js`) whose
- * source references bare specifiers such as `import ... from 'vue'`. The
- * host exposes the Vue runtime via `<script type="importmap">` so static
+ * v3 plugin bundles normally ship a single ESM module (`dist/synra/index.js`),
+ * but the v2-bundler pipeline (Rolldown manual code-splitting) and any plugin
+ * whose `pack.output.codeSplitting` is left enabled will emit a chunked
+ * graph: an entry + a few sibling `dist-*.js` / `web-*.js` / `electron-*.js`
+ * files. Their sources reference both bare specifiers (`import ... from 'vue'`)
+ * AND relative specifiers (`import "../dist-BrPzbUTp.js"`).
+ *
+ * The host exposes the Vue runtime via `<script type="importmap">` so static
  * `<script type="module">` resolves it, but per the HTML module-loader spec
  * `import()` does NOT inherit the document importmap. Without rewriting,
  * a plugin bundle's `import 'vue'` falls through to "Failed to resolve
  * module specifier" on every platform.
  *
  * The fix is uniform across Electron and Capacitor:
- *   1. Read the bundle source through the host bridge (`bridge.readFile`).
+ *   1. Read each chunk's source through the host bridge (`bridge.readFile`).
  *      `synra-plugin://` custom scheme looked tempting but `fetch()` from
  *      a renderer against a custom scheme is unreliable across Chromium
  *      versions (returns HTML error pages instead of the file body, hence
@@ -23,12 +28,18 @@ import type { PagesManifest, RegisteredPage } from './types'
  *      the IPC path the host already uses for `pages.json`, so we reuse
  *      it — Electron renderer → preload IPC → `file.read`, Capacitor
  *      native → `@capacitor/filesystem`.
- *   2. Replace any bare specifier the importmap has an answer for with
- *      the resolved absolute URL.
- *   3. Hand the rewritten bytes to a blob URL and `import()` the blob.
- *      Blob URLs also don't honour the importmap, but since the rewritten
- *      source already references absolute URLs there is nothing left to
- *      resolve.
+ *   2. Walk the chunk graph recursively. For each chunk:
+ *      a) Replace bare specifiers (`vue`, `@synra/plugin-sdk`, …) with the
+ *         absolute URL from the document importmap.
+ *      b) Replace relative specifiers (`./foo.js`, `../dist-*.js`, even
+ *         dynamic `import("../web-*.js")` calls) with the dependency
+ *         chunk's blob URL — this preserves lazy semantics while letting
+ *         the blob-URL loader resolve nested chunks without hitting the
+ *         network.
+ *   3. Hand the entry's rewritten bytes to a blob URL and `import()` the
+ *      blob. The blob's opaque base URL is fine because every remaining
+ *      specifier is already an absolute URL (host asset) or a sibling
+ *      blob URL (chunk dep).
  */
 function readSynraDocumentImportMap(): Record<string, string> {
   if (typeof document === 'undefined') return {}
@@ -88,6 +99,21 @@ function readSynraDocumentImportMap(): Record<string, string> {
 const FROM_CLAUSE_RE = /\b(import|export)([^"'`;\n]*?)\s*\bfrom\s*([`'"])([^`'"]+?)\3/g
 const SIDE_EFFECT_IMPORT_RE = /\b(import)(\s*)([`'"])([^`'"]+?)\3/g
 
+/**
+ * Relative-import forms. Each variant captures the specifier (group 2 for
+ * from-clauses, group 4 for side-effect, group 2 for dynamic `import(...)`)
+ * starting with `./` or `../`. We need a dedicated sweep before the
+ * importmap rewrite because the importmap only knows about bare specifiers
+ * (`vue`, `@synra/plugin-sdk`, etc.); relative paths fall through unchanged
+ * and the blob-URL base is opaque, so the loader has to redirect them to
+ * other chunk blobs instead. Without this sweep Chromium throws
+ * "Failed to resolve module specifier '../dist-BrPzbUTp.js'" because the
+ * relative path would be resolved against `blob:https://localhost/<uuid>`.
+ */
+const RELATIVE_FROM_RE = /\b(import|export)([^"'`;\n]*?)\s*\bfrom\s*([`'"])(\.\.?\/[^`'"]+?)\3/g
+const RELATIVE_SIDE_RE = /\b(import)(\s*)([`'"])(\.\.?\/[^`'"]+?)\3/g
+const RELATIVE_DYN_RE = /\bimport\s*\(\s*([`'"])(\.\.?\/[^`'"]+?)\1\s*\)/g
+
 function rewriteBareSpecifiers(
   source: string,
   importMap: Record<string, string>,
@@ -143,6 +169,27 @@ function rewriteBareSpecifiers(
 }
 
 /**
+ * Resolve `./foo` / `../bar` against a POSIX directory path. Pure-string,
+ * no filesystem access. Parts that resolve to an empty dir return the
+ * spec literally (e.g. `dist/synra/../dist-BrPzbUTp.js` → `dist/dist-BrPzbUTp.js`).
+ */
+function resolveRelativeImport(fromDir: string, spec: string): string {
+  const parts = fromDir.split('/').filter((segment) => segment.length > 0)
+  for (const segment of spec.split('/')) {
+    if (segment === '..') {
+      parts.pop()
+    } else if (segment !== '.' && segment.length > 0) {
+      parts.push(segment)
+    }
+  }
+  return parts.join('/')
+}
+
+function escapeRegexLiteral(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/**
  * Read plugin bundle source via the host bridge — the same path the
  * loader already uses for `pages.json`. Returns the file as a UTF-8
  * string. Both Capacitor native (`Filesystem.readFile`) and Electron
@@ -162,21 +209,116 @@ async function readPluginBundleSource(artifactRoot: string, relativePath: string
   return fileResult.content
 }
 
-async function importPluginBundleContentWithImportMap(
-  source: string
+/**
+ * Walk the plugin bundle's chunk graph and emit one blob URL per chunk.
+ * Each chunk source is rewritten in two passes:
+ *
+ *   1. Bare specifiers (`vue`, `@synra/plugin-sdk`, …) → absolute URL from
+ *      the document importmap, just like the entry already does. Bare
+ *      specs never collide with chunk specs because chunk paths always
+ *      start with `./` or `../`.
+ *   2. Relative specifiers (`./foo.js`, `../dist-BrPzbUTp.js`, even
+ *      `import("../web-C_Bi8r_H.js")` inside an async factory) → the
+ *      dependency chunk's blob URL. Keeps dynamic imports lazy: the
+ *      relative path becomes a `blob:` URL, but the surrounding `()`
+ *      call form is preserved, so the runtime still defers the load
+ *      until the factory invokes it.
+ *
+ * The output is a DAG map: `chunkRelPath → blobUrl`. The entry's blob URL
+ * is the one the caller will `import()`. Cycle detection guards
+ * `inProgress` against pathological self-references; legitimate v3
+ * plugin chunks form a DAG so the guard mostly stays a defensive guardrail.
+ */
+async function loadPluginModuleGraph(
+  artifactRoot: string,
+  entryRelPath: string,
+  importMap: Record<string, string>,
+  baseUrl: string
+): Promise<{ entryBlobUrl: string; blobUrls: string[] }> {
+  const blobByRelPath = new Map<string, string>()
+  const blobUrls: string[] = []
+  const inProgress = new Set<string>()
+
+  async function collectRelativeSpecs(source: string): Promise<string[]> {
+    const out: string[] = []
+    let match: RegExpExecArray | null
+    for (const re of [RELATIVE_FROM_RE, RELATIVE_SIDE_RE, RELATIVE_DYN_RE]) {
+      re.lastIndex = 0
+      while ((match = re.exec(source))) {
+        const spec = match[re === RELATIVE_DYN_RE ? 2 : 4]
+        out.push(spec)
+      }
+    }
+    return out
+  }
+
+  async function ensureChunkBlob(relPath: string): Promise<string> {
+    const cached = blobByRelPath.get(relPath)
+    if (cached) return cached
+    if (inProgress.has(relPath)) {
+      throw new Error(`[synra-plugin-loader] cyclic relative import detected for chunk: ${relPath}`)
+    }
+    inProgress.add(relPath)
+
+    const source = await readPluginBundleSource(artifactRoot, relPath)
+    const chunkDir = dirname(relPath).replaceAll('\\', '/')
+
+    // Recurse into deps first so their blob URLs exist when we rewrite
+    // this chunk's source.
+    const specs = await collectRelativeSpecs(source)
+    const specToBlob = new Map<string, string>()
+    for (const spec of specs) {
+      const abs = resolveRelativeImport(chunkDir, spec)
+      const blobUrl = await ensureChunkBlob(abs)
+      specToBlob.set(spec, blobUrl)
+    }
+
+    let rewritten = rewriteBareSpecifiers(source, importMap, baseUrl)
+    for (const [spec, blobUrl] of specToBlob) {
+      // Quote-delimited spec regex: ([`"'])<escaped-spec>\1. String
+      // concatenation is required because a regex literal that includes
+      // a backtick would otherwise close the surrounding template literal
+      // mid-string (oxfmt surfaces this as "Unterminated string").
+      const pattern = new RegExp('([' + '`' + `'"` + '])' + escapeRegexLiteral(spec) + '\\1', 'g')
+      rewritten = rewritten.replace(pattern, (_match, quote) => quote + blobUrl + quote)
+    }
+
+    const blob = new Blob([rewritten], { type: 'application/javascript' })
+    const blobUrl = URL.createObjectURL(blob)
+    blobUrls.push(blobUrl)
+    blobByRelPath.set(relPath, blobUrl)
+    inProgress.delete(relPath)
+    return blobUrl
+  }
+
+  const entryBlobUrl = await ensureChunkBlob(entryRelPath)
+  return { entryBlobUrl, blobUrls }
+}
+
+async function importPluginBundle(
+  artifactRoot: string,
+  entryRelPath: string
 ): Promise<{ default: unknown }> {
   const importMap = readSynraDocumentImportMap()
   const baseUrl = window.location.origin + '/'
-  const rewritten = rewriteBareSpecifiers(source, importMap, baseUrl)
-  const blob = new Blob([rewritten], { type: 'application/javascript' })
-  const blobUrl = URL.createObjectURL(blob)
+  const { entryBlobUrl, blobUrls } = await loadPluginModuleGraph(
+    artifactRoot,
+    entryRelPath,
+    importMap,
+    baseUrl
+  )
   try {
-    return (await import(/* @vite-ignore */ blobUrl)) as { default: unknown }
+    return (await import(/* @vite-ignore */ entryBlobUrl)) as { default: unknown }
   } finally {
-    // Keep the blob alive until the import resolves. Earlier version
-    // revoked before the network/parse finished caused "Cannot find
-    // module" races on slower devices.
-    queueMicrotask(() => URL.revokeObjectURL(blobUrl))
+    // Keep every chunk blob alive until the entry import resolves. Earlier
+    // versions revoked just the entry blob via queueMicrotask, but with a
+    // multi-chunk graph each chunk's blob is referenced by sibling modules
+    // imported during the entry's parse. Revoking them all in the same
+    // microtask preserves the "no long-lived global state" property while
+    // not racing the parser on slower devices.
+    queueMicrotask(() => {
+      for (const url of blobUrls) URL.revokeObjectURL(url)
+    })
   }
 }
 
@@ -377,8 +519,7 @@ export class PluginRouteBinder {
     void pluginId
     const normalizedFilePath = pageFilePath.replace(/^\/+/, '').replace(/^\.\//, '')
     return async () => {
-      const source = await readPluginBundleSource(artifactRoot, normalizedFilePath)
-      return await importPluginBundleContentWithImportMap(source)
+      return await importPluginBundle(artifactRoot, normalizedFilePath)
     }
   }
 

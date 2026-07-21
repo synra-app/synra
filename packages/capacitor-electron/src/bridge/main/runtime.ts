@@ -3,10 +3,7 @@ import {
   type FileSystemAdapter
 } from '../../host/adapters/file-system.adapter'
 import { createShellAdapter, type ShellAdapter } from '../../host/adapters/electron-shell.adapter'
-import {
-  createClipboardAdapter,
-  type ClipboardAdapter
-} from '../../host/adapters/electron-clipboard.adapter'
+import { type ClipboardAdapter } from '../../host/adapters/electron-clipboard.adapter'
 import { createExternalLinkService } from '../../host/services/external-link.service'
 import { createClipboardService } from '../../host/services/clipboard.service'
 import { createFileService } from '../../host/services/file.service'
@@ -27,7 +24,14 @@ import { registerBridgeHandlers, type IpcMainLike } from './register'
 
 export type BridgeRuntimeOptions = {
   shellAdapter?: ShellAdapter
-  clipboardAdapter?: ClipboardAdapter
+  /**
+   * Required: the host must wire a real clipboard adapter (typically
+   * `{ readText, readSelection, writeText }` backed by Electron's
+   * `clipboard` module plus `os-selection.ts`). Defaults are
+   * intentionally not provided — see `electron-clipboard.adapter.ts`
+   * for why.
+   */
+  clipboardAdapter: ClipboardAdapter
   fileSystemAdapter?: FileSystemAdapter
   allowedFileRoots?: string[]
   logger?: BridgeLogger
@@ -45,10 +49,17 @@ export type BridgeMainRuntime = {
 
 export function setupBridgeMainRuntime(
   ipcMainLike: IpcMainLike,
-  options: BridgeRuntimeOptions = {}
+  options: BridgeRuntimeOptions
 ): BridgeMainRuntime {
+  if (!options.clipboardAdapter) {
+    throw new Error(
+      '[synra:bridge] setupBridgeMainRuntime requires options.clipboardAdapter. ' +
+        "The host must wire a ClipboardAdapter backed by Electron's clipboard module + " +
+        'os-selection.ts so clipboard.read / clipboard.readSelection / clipboard.write resolve.'
+    )
+  }
   const shellAdapter = options.shellAdapter ?? createShellAdapter()
-  const clipboardAdapter = options.clipboardAdapter ?? createClipboardAdapter()
+  const clipboardAdapter = options.clipboardAdapter
   const fileSystemAdapter = options.fileSystemAdapter ?? createFileSystemAdapter()
 
   const runtimeInfoService = createRuntimeInfoService({

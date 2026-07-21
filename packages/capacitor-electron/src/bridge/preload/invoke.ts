@@ -1,17 +1,15 @@
 import { BridgeError } from '../../shared/errors/bridge-error'
 import { BRIDGE_ERROR_CODES } from '../../shared/errors/codes'
+import { BRIDGE_INVOKE_CHANNEL } from '../../shared/protocol/constants'
 import {
-  BRIDGE_INVOKE_CHANNEL,
   BRIDGE_METHODS,
-  BRIDGE_PROTOCOL_VERSION
-} from '../../shared/protocol/constants'
-import type { BridgeMethod } from '../../shared/protocol/constants'
-import type {
-  BridgeRequest,
-  BridgeResponse,
-  MethodPayloadMap,
-  MethodResultMap
-} from '../../shared/protocol/types'
+  BRIDGE_PROTOCOL_VERSION,
+  type BridgeMethod,
+  type BridgeRequest,
+  type BridgeResponse,
+  type MethodPayloadMap,
+  type MethodResultMap
+} from '@synra/bridge-schema'
 import {
   isBridgeResponse,
   validateResolveActionsPayload,

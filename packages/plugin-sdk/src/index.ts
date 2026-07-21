@@ -120,6 +120,22 @@ export { type PluginClipboardHandle } from './clipboard'
 
 export { normalizePluginPagePath, pluginFilePathToPagePath } from './page-path'
 
+// ─── Host-side runtime helpers (small, plugin-bundle-friendly) ──────────────
+//
+// Tiny runtime helpers that plugin authors reach for but that don't
+// deserve their own package: cross-platform host detection and the
+// renderer-side Electron preload bridge shape. The full
+// `createPluginBridge` contract remains the only "heavy" runtime
+// export; these are pure leaf utilities that bundlers tree-shake
+// when unused.
+export {
+  detectHostRuntime,
+  getElectronBridgeInvoker,
+  type HostRuntime,
+  type PreloadBridgeApi,
+  type PreloadBridgeInvoke
+} from './host-utils'
+
 // ─── Worker client (composer pattern; reserved for future use) ───────────────
 
 export type {

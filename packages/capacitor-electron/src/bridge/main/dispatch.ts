@@ -1,6 +1,6 @@
 import { BridgeError, toBridgeError } from '../../shared/errors/bridge-error'
 import { BRIDGE_ERROR_CODES } from '../../shared/errors/codes'
-import { BRIDGE_SUPPORTED_PROTOCOL_VERSIONS } from '../../shared/protocol/constants'
+import { BRIDGE_PLUGIN_SYNC_TO_DEVICE_TIMEOUT_MS } from '../../shared/protocol/constants'
 import type { BridgeResponse } from '../../shared/protocol/types'
 import {
   isBridgeRequest,
@@ -8,10 +8,7 @@ import {
   isSupportedProtocolVersion
 } from '../../shared/schema/validators'
 import { noopBridgeLogger, type BridgeLogger } from '../../shared/observability/logger'
-import {
-  BRIDGE_METHODS,
-  BRIDGE_PLUGIN_SYNC_TO_DEVICE_TIMEOUT_MS
-} from '../../shared/protocol/constants'
+import { BRIDGE_METHODS, BRIDGE_SUPPORTED_PROTOCOL_VERSIONS } from '@synra/bridge-schema'
 import type { BridgeHandlerMap } from './handlers'
 
 export type MainDispatcherOptions = {

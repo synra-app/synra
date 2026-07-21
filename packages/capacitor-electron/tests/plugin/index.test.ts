@@ -5,7 +5,7 @@ import {
   createElectronBridgePluginFromGlobal
 } from '../../src/plugin'
 import { BRIDGE_ERROR_CODES } from '../../src/shared/errors/codes'
-import { BRIDGE_METHODS, BRIDGE_PROTOCOL_VERSION } from '../../src/shared/protocol/constants'
+import { BRIDGE_METHODS, BRIDGE_PROTOCOL_VERSION } from '@synra/bridge-schema'
 import type { MethodResultMap } from '../../src/shared/protocol/types'
 
 describe('plugin', () => {

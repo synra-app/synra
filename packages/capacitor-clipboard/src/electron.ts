@@ -1,4 +1,5 @@
 import { WebPlugin } from '@capacitor/core'
+import type { MethodPayloadMap, MethodResultMap } from '@synra/bridge-schema'
 import type {
   SynraClipboardPlugin,
   SynraClipboardReadResult,
@@ -15,9 +16,22 @@ type ElectronBridgeTarget = {
   }
 }
 
+/**
+ * Map of method names this plugin speaks to `{ payload, result }` shape.
+ * Both keys and payload/result types come from `@synra/bridge-schema`'s
+ * canonical `MethodPayloadMap` / `MethodResultMap`. Adding a method here
+ * is a one-line table entry that also extends the type — there's no
+ * parallel schema to keep in sync.
+ */
 type ClipboardBridgeMethods = {
-  'clipboard.read': { payload: Record<string, never>; result: SynraClipboardReadResult }
-  'clipboard.write': { payload: SynraClipboardWriteOptions; result: void }
+  'clipboard.read': {
+    payload: MethodPayloadMap['clipboard.read']
+    result: MethodResultMap['clipboard.read']
+  }
+  'clipboard.write': {
+    payload: MethodPayloadMap['clipboard.write']
+    result: MethodResultMap['clipboard.write']
+  }
 }
 
 export class SynraClipboardElectron extends WebPlugin implements SynraClipboardPlugin {

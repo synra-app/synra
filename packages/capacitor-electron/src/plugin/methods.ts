@@ -1,4 +1,4 @@
-import { BRIDGE_METHODS } from '../shared/protocol/constants'
+import { BRIDGE_METHODS } from '@synra/bridge-schema'
 
 export const API_METHODS = {
   getRuntimeInfo: BRIDGE_METHODS.runtimeGetInfo,

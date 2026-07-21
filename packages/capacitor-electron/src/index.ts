@@ -71,12 +71,15 @@ export {
   BRIDGE_CHANNEL_WHITELIST,
   BRIDGE_HOST_EVENT_CHANNEL,
   BRIDGE_INVOKE_CHANNEL,
+  BRIDGE_PLUGIN_SYNC_TO_DEVICE_TIMEOUT_MS
+} from './shared/protocol/constants'
+
+export {
   BRIDGE_METHODS,
-  BRIDGE_PLUGIN_SYNC_TO_DEVICE_TIMEOUT_MS,
   BRIDGE_PROTOCOL_VERSION,
   BRIDGE_SUPPORTED_PROTOCOL_VERSIONS,
   type BridgeMethod
-} from './shared/protocol/constants'
+} from '@synra/bridge-schema'
 export type {
   BridgeErrorResponse,
   BridgeRequest,
@@ -139,7 +142,6 @@ export {
   validateRuntimeExecutePayload,
   validateExternalOpenPayload,
   validateReadClipboardPayload,
-  validateReadSelectionPayload,
   validateWriteClipboardPayload,
   validateReadFilePayload,
   validateDiscoveryStartPayload,

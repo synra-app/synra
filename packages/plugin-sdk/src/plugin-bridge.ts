@@ -25,7 +25,7 @@
  * see what was actually matched). Trust is replaced with host-level
  * invariants (e.g. `RuntimeSandbox` / WebView isolation).
  */
-import type { ComputedRef, Ref } from 'vue'
+import type { ComputedRef } from 'vue'
 import {
   getConnectionRuntime,
   usePairedDevices,
@@ -228,7 +228,3 @@ export function createPluginBridge(options: PluginBridgeOptions): PluginBridge {
     dispose
   }
 }
-
-// Suppress unused import complaints under bundler tree-shaking.
-void (null as unknown as Ref<unknown>)
-void (null as unknown as ComputedRef<unknown>)

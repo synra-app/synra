@@ -38,7 +38,6 @@ setupBridgeMainRuntime(ipcMain, {
 ### Preload bridge exposure
 
 ```ts
-import { contextBridge, ipcRenderer } from 'electron'
 import { createPreloadInvoker, exposePreloadBridge } from '@synra/capacitor-electron'
 
 const invoke = createPreloadInvoker((channel, request) => ipcRenderer.invoke(channel, request))

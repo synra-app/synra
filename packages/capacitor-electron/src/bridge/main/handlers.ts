@@ -1,4 +1,4 @@
-import { BRIDGE_METHODS } from '../../shared/protocol/constants'
+import { BRIDGE_METHODS } from '@synra/bridge-schema'
 import type { BridgeRequest, MethodPayloadMap, MethodResultMap } from '../../shared/protocol/types'
 import type { ExternalLinkService } from '../../host/services/external-link.service'
 import type { ClipboardService } from '../../host/services/clipboard.service'

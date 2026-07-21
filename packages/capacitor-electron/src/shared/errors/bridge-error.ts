@@ -1,32 +1,9 @@
-import { BRIDGE_ERROR_CODES, type BridgeErrorCode } from './codes'
-
-export type BridgeErrorDetails = {
-  retryable?: boolean
-  supportedVersions?: string[]
-  capabilityKey?: string
-  [key: string]: unknown
-}
-
-export class BridgeError extends Error {
-  public readonly code: BridgeErrorCode
-  public readonly details?: BridgeErrorDetails
-
-  public constructor(code: BridgeErrorCode, message: string, details?: BridgeErrorDetails) {
-    super(message)
-    this.name = 'BridgeError'
-    this.code = code
-    this.details = details
-  }
-}
-
-export function toBridgeError(error: unknown): BridgeError {
-  if (error instanceof BridgeError) {
-    return error
-  }
-
-  if (error instanceof Error) {
-    return new BridgeError(BRIDGE_ERROR_CODES.internalError, error.message)
-  }
-
-  return new BridgeError(BRIDGE_ERROR_CODES.internalError, 'Unexpected error.')
-}
+/**
+ * Re-export shim for the canonical `BridgeError` class & helpers.
+ *
+ * The actual definitions (`BridgeError`, `BridgeErrorDetails`,
+ * `toBridgeError`) live in `@synra/bridge-schema`. We re-export here so
+ * internal imports (`from '../shared/errors/bridge-error'`) keep
+ * working.
+ */
+export { BridgeError, toBridgeError, type BridgeErrorDetails } from '@synra/bridge-schema'

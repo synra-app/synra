@@ -1,5 +1,20 @@
-import { BRIDGE_METHODS, BRIDGE_PROTOCOL_VERSION } from '../protocol/constants'
-import type { BridgeRequest, BridgeResponse } from '../protocol/types'
+/**
+ * Re-export the wire-schema validators from `@synra/bridge-schema`,
+ * then keep the runtime-specific payload validators here.
+ *
+ * The runtime validators (`validateResolveActionsPayload`,
+ * `validateReadFilePayload`, etc.) are *not* part of the wire contract —
+ * they exist to type-guard an `unknown` payload coming from
+ * `connectionService.sendMessage` callers before it crosses the IPC
+ * bridge, so they stay alongside the dispatch logic in this package.
+ */
+export {
+  isBridgeRequest,
+  isBridgeResponse,
+  isSupportedProtocolVersion,
+  isSupportedMethod
+} from '@synra/bridge-schema'
+
 import {
   DEVICE_TCP_ACK_EVENT,
   DEVICE_TCP_CLOSE_EVENT,
@@ -17,85 +32,6 @@ function isObject(value: unknown): value is Record<string, unknown> {
 
 function isUuidLike(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
-}
-
-export function isBridgeRequest(value: unknown): value is BridgeRequest {
-  if (!isObject(value)) {
-    return false
-  }
-
-  if (typeof value.protocolVersion !== 'string') {
-    return false
-  }
-
-  if (typeof value.requestId !== 'string' || value.requestId.length === 0) {
-    return false
-  }
-
-  if (typeof value.method !== 'string' || value.method.length === 0) {
-    return false
-  }
-
-  return 'payload' in value
-}
-
-export function isBridgeResponse(value: unknown): value is BridgeResponse {
-  if (!isObject(value)) {
-    return false
-  }
-
-  if (typeof value.requestId !== 'string') {
-    return false
-  }
-
-  if (value.ok === true) {
-    return 'data' in value
-  }
-
-  if (value.ok === false) {
-    return (
-      isObject(value.error) &&
-      typeof value.error.code === 'string' &&
-      typeof value.error.message === 'string'
-    )
-  }
-
-  return false
-}
-
-export function isSupportedProtocolVersion(protocolVersion: string): boolean {
-  return protocolVersion === BRIDGE_PROTOCOL_VERSION
-}
-
-export function isSupportedMethod(method: string): boolean {
-  return (
-    method === BRIDGE_METHODS.runtimeGetInfo ||
-    method === BRIDGE_METHODS.runtimeResolveActions ||
-    method === BRIDGE_METHODS.runtimeExecute ||
-    method === BRIDGE_METHODS.pluginCatalogGet ||
-    method === BRIDGE_METHODS.pluginInstall ||
-    method === BRIDGE_METHODS.pluginInstallLocal ||
-    method === BRIDGE_METHODS.pluginUninstall ||
-    method === BRIDGE_METHODS.pluginListInstalled ||
-    method === BRIDGE_METHODS.pluginRegisterInstalled ||
-    method === BRIDGE_METHODS.pluginSyncToDevice ||
-    method === BRIDGE_METHODS.externalOpen ||
-    method === BRIDGE_METHODS.clipboardRead ||
-    method === BRIDGE_METHODS.clipboardReadSelection ||
-    method === BRIDGE_METHODS.clipboardWrite ||
-    method === BRIDGE_METHODS.fileRead ||
-    method === BRIDGE_METHODS.discoveryStart ||
-    method === BRIDGE_METHODS.discoveryStop ||
-    method === BRIDGE_METHODS.discoveryList ||
-    method === BRIDGE_METHODS.connectionOpenTransport ||
-    method === BRIDGE_METHODS.connectionCloseTransport ||
-    method === BRIDGE_METHODS.connectionSendMessage ||
-    method === BRIDGE_METHODS.connectionSendLanEvent ||
-    method === BRIDGE_METHODS.connectionGetTransportState ||
-    method === BRIDGE_METHODS.preferencesGet ||
-    method === BRIDGE_METHODS.preferencesSet ||
-    method === BRIDGE_METHODS.preferencesRemove
-  )
 }
 
 export function validateResolveActionsPayload(
@@ -156,13 +92,11 @@ export function validateReadClipboardPayload(payload: unknown): payload is Recor
   return isObject(payload) && Object.keys(payload).length === 0
 }
 
-export function validateReadSelectionPayload(payload: unknown): payload is Record<string, never> {
-  // clipboard.readSelection takes no arguments; same semantics as
-  // validateReadClipboardPayload but kept as a separate validator so the
-  // dispatch table can grow methods with their own (future) arguments
-  // without colliding with the simpler read path.
-  return validateReadClipboardPayload(payload)
-}
+// NOTE: `clipboard.readSelection` shares the empty-payload contract
+// with `clipboard.read`; it deliberately reuses `validateReadClipboardPayload`
+// rather than introducing a parallel function. If selection ever grows
+// its own arguments, add a dedicated validator here and route the new
+// method through it.
 
 export function validateWriteClipboardPayload(payload: unknown): payload is { text: string } {
   return isObject(payload) && typeof payload.text === 'string'

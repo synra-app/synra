@@ -12,21 +12,17 @@ export type ClipboardAdapter = {
   writeText(text: string): Promise<void>
 }
 
-export function createClipboardAdapter(
-  implementation: Pick<ClipboardAdapter, 'readText' | 'readSelection' | 'writeText'> = {
-    async readText() {
-      return ''
-    },
-    async readSelection() {
-      // default no-op; adapter host (Electron main) supplies a real
-      // implementation that triggers the OS copy shortcut.
-      return ''
-    },
-    async writeText() {
-      // default no-op; adapter host (Electron main) supplies a real implementation
-    }
-  }
-): ClipboardAdapter {
+/**
+ * Wrap a platform-provided clipboard implementation as a `ClipboardAdapter`.
+ *
+ * The implementation must be supplied explicitly — there is intentionally
+ * no default fallback. Silently returning `''` from a forgotten
+ * `clipboardAdapter` looked like the bridge was working but always
+ * failed, which was hard to diagnose. Callers that don't have a real
+ * host (unit tests) should pass `vi.fn(async () => '')` from their test
+ * file; production callers must wire the platform's actual clipboard.
+ */
+export function createClipboardAdapter(implementation: ClipboardAdapter): ClipboardAdapter {
   return {
     async readText(): Promise<string> {
       return await implementation.readText()

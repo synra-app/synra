@@ -2,7 +2,21 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "module": "esnext",
-    "moduleResolution": "bundler"
+    "moduleResolution": "bundler",
+    "paths": {
+      "@synra/bridge-schema": ["../bridge-schema/dist/index.d.mts"],
+      "@synra/capacitor-device-connection": ["../capacitor-device-connection/dist/index.d.mts"],
+      "@synra/capacitor-lan-discovery": ["../capacitor-lan-discovery/dist/index.d.mts"],
+      "@synra/capacitor-preferences": ["../capacitor-preferences/dist/index.d.mts"],
+      "@synra/envelope": ["../envelope/dist/index.d.mts"],
+      "@synra/hooks": ["../hooks/dist/index.d.mts"],
+      "@synra/plugin-sdk": ["../plugin-sdk/dist/index.d.mts"],
+      "@synra/plugin-system": ["../plugin-system/dist/index.d.mts"],
+      "@synra/protocol": ["../protocol/dist/index.d.mts"],
+      "@synra/transport-core": ["../transport-core/dist/index.d.mts"],
+      "@synra/transport-events": ["../transport-events/dist/index.d.mts"],
+      "@synra/utils": ["../utils/dist/index.d.mts"]
+    }
   },
   "include": ["src", "tests"]
 }

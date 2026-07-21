@@ -37,7 +37,7 @@ const execFileAsync = promisify(execFile)
  * macOS / xdotool typically finish in <20ms but we leave headroom
  * for slow / loaded machines.
  */
-const POST_COPY_DELAY_MS = 120
+export const POST_COPY_DELAY_MS = 120
 
 /**
  * Read the host's current text selection by triggering Ctrl+C (or
@@ -58,20 +58,37 @@ const POST_COPY_DELAY_MS = 120
  * the host logs `[synra][cb-sel-fail]` and surfaces
  * `ok: true, text: ''` to the phone (consistent with the existing
  * `clipboard.read` semantics).
+ *
+ * The optional `dispatcher` override lets unit tests inject a fake
+ * `execFile`-like function without touching the real platform.
  */
 export async function captureOsTextSelection(args: {
   platform: NodeJS.Platform
   readClipboard: () => string
   writeClipboard: (text: string) => void
+  dispatcher?: OsCopyDispatcher
+  delayMs?: number
 }): Promise<string> {
-  const { platform, readClipboard, writeClipboard } = args
-  const snapshot = readClipboard()
+  const {
+    platform,
+    readClipboard,
+    writeClipboard,
+    dispatcher = defaultOsCopyDispatcher,
+    delayMs = POST_COPY_DELAY_MS
+  } = args
+  let snapshot = ''
   try {
-    const fired = await dispatchCopyShortcut(platform)
+    snapshot = readClipboard()
+  } catch {
+    // clipboard snapshot failed; restore path will write empty string
+    // which is harmless — better than aborting the whole capture.
+  }
+  try {
+    const fired = await dispatchCopyShortcut(platform, dispatcher)
     if (!fired) {
       return ''
     }
-    await sleep(POST_COPY_DELAY_MS)
+    await sleep(delayMs)
     return readClipboard()
   } catch {
     return ''
@@ -88,18 +105,31 @@ export async function captureOsTextSelection(args: {
   }
 }
 
-async function dispatchCopyShortcut(platform: NodeJS.Platform): Promise<boolean> {
+/**
+ * `execFile`-compatible dispatcher shape. `node:child_process.execFile`
+ * returns `ChildProcess`; the dispatcher abstraction is intentionally
+ * narrower so tests can pass a `vi.fn` without typing the rest.
+ */
+export type OsCopyDispatcher = (command: string, args: string[]) => Promise<unknown>
+
+export const defaultOsCopyDispatcher: OsCopyDispatcher = (command, args) =>
+  execFileAsync(command, args)
+
+async function dispatchCopyShortcut(
+  platform: NodeJS.Platform,
+  dispatcher: OsCopyDispatcher
+): Promise<boolean> {
   if (platform === 'win32') {
-    return dispatchWindowsCopy()
+    return dispatchWindowsCopy(dispatcher)
   }
   if (platform === 'darwin') {
-    return dispatchMacCopy()
+    return dispatchMacCopy(dispatcher)
   }
   // Linux + every other unix: try xdotool.
-  return dispatchLinuxCopy()
+  return dispatchLinuxCopy(dispatcher)
 }
 
-async function dispatchWindowsCopy(): Promise<boolean> {
+async function dispatchWindowsCopy(dispatcher: OsCopyDispatcher): Promise<boolean> {
   // `^c` is Ctrl+C in SendKeys syntax. The script loads WinForms
   // (SendKeys lives there) and fires the keystroke. `-NoProfile`
   // keeps the shell startup cheap; `-NonInteractive` avoids
@@ -108,33 +138,33 @@ async function dispatchWindowsCopy(): Promise<boolean> {
     'Add-Type -AssemblyName System.Windows.Forms; ' +
     '[System.Windows.Forms.SendKeys]::SendWait("^c")'
   try {
-    await execFileAsync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script])
+    await dispatcher('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script])
     return true
   } catch {
     return false
   }
 }
 
-async function dispatchMacCopy(): Promise<boolean> {
+async function dispatchMacCopy(dispatcher: OsCopyDispatcher): Promise<boolean> {
   // AppleScript fires "Cmd+C" via System Events. Requires the
   // Electron app to have Accessibility permission under
   // System Settings → Privacy & Security → Accessibility.
   const script = 'tell application "System Events" to keystroke "c" using {command down}'
   try {
-    await execFileAsync('osascript', ['-e', script])
+    await dispatcher('osascript', ['-e', script])
     return true
   } catch {
     return false
   }
 }
 
-async function dispatchLinuxCopy(): Promise<boolean> {
+async function dispatchLinuxCopy(dispatcher: OsCopyDispatcher): Promise<boolean> {
   // `--clearmodifiers` releases any held modifier keys (Shift, Ctrl,
   // Alt) before firing the combo, so the keystroke is recognised even
   // if the user happened to be holding Shift from a prior selection
   // drag. ENOENT (xdotool missing) → false.
   try {
-    await execFileAsync('xdotool', ['key', '--clearmodifiers', 'ctrl+c'])
+    await dispatcher('xdotool', ['key', '--clearmodifiers', 'ctrl+c'])
     return true
   } catch {
     return false

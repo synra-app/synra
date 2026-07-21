@@ -53,6 +53,7 @@
     "@capacitor/core": "catalog:capacitor",
     "@capacitor/docgen": "catalog:capacitor",
     "@capacitor/ios": "catalog:capacitor",
+    "@synra/bridge-schema": "workspace:*",
     "@types/node": "catalog:types",
     "@typescript/native-preview": "catalog:types",
     "esbuild": "catalog:build",
@@ -69,5 +70,13 @@
     "android": {
       "src": "android"
     }
+  },
+  "inlinedDependencies": {
+    "@vue/reactivity": "3.5.40",
+    "@vue/runtime-core": "3.5.40",
+    "@vue/runtime-dom": "3.5.40",
+    "@vue/shared": "3.5.40",
+    "csstype": "3.2.3",
+    "vue": "3.5.40"
   }
 }

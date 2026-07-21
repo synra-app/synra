@@ -12,7 +12,8 @@
     "package:linux": "vp run build && vp exec electron-builder --linux AppImage --publish never --config.directories.output=release/linux",
     "package:macos": "vp run build && vp exec electron-builder --mac dmg --publish never --config.directories.output=release/macos",
     "dev": "vp dev --config vite.config.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vp test"
   },
   "dependencies": {
     "@capacitor/core": "catalog:capacitor",

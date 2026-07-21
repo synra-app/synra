@@ -17,15 +17,31 @@ import { PluginRouteBinder } from './plugin-route-binder'
  * any v3 plugin can call `bridge.useClipboard().writeText(text)` and
  * have it land on the host OS clipboard — sidestepping the Android
  * WebView's `navigator.clipboard.writeText` permission gate.
+ *
+ * Built lazily via a memoized factory so repeated `bridge.useClipboard()`
+ * calls share the same handle (and the same `SynraClipboard` proxy)
+ * across every plugin instance. Module-load construction is fine too,
+ * but the lazy path keeps tests free to override `SynraClipboard.read`
+ * by simply not invoking the factory until needed.
  */
-const hostClipboardHandle: PluginClipboardHandle = {
-  async readText(): Promise<string> {
-    const result = await SynraClipboard.read()
-    return result.text
-  },
-  async writeText(text: string): Promise<void> {
-    await SynraClipboard.write({ text })
+function createHostClipboardHandle(): PluginClipboardHandle {
+  return {
+    async readText(): Promise<string> {
+      const result = await SynraClipboard.read()
+      return result.text
+    },
+    async writeText(text: string): Promise<void> {
+      await SynraClipboard.write({ text })
+    }
   }
+}
+
+let hostClipboardHandleCache: PluginClipboardHandle | null = null
+function getHostClipboardHandle(): PluginClipboardHandle {
+  if (!hostClipboardHandleCache) {
+    hostClipboardHandleCache = createHostClipboardHandle()
+  }
+  return hostClipboardHandleCache
 }
 
 /**
@@ -74,7 +90,7 @@ export class PluginLifecycleManager {
     const bridge = createPluginBridge({
       pluginId,
       capabilities,
-      clipboard: hostClipboardHandle
+      clipboard: getHostClipboardHandle()
     })
     this.bridgesByPluginId.set(pluginId, bridge)
     this.routeBinder.setBridge(pluginId, bridge)

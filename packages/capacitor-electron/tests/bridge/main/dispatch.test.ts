@@ -2,8 +2,9 @@ import { describe, expect, test, vi } from 'vite-plus/test'
 import { createBridgeHandlers } from '../../../src/bridge/main/handlers'
 import { createMainDispatcher } from '../../../src/bridge/main/dispatch'
 import { BRIDGE_ERROR_CODES } from '../../../src/shared/errors/codes'
-import { BRIDGE_METHODS, BRIDGE_PROTOCOL_VERSION } from '../../../src/shared/protocol/constants'
+import { BRIDGE_METHODS, BRIDGE_PROTOCOL_VERSION } from '@synra/bridge-schema'
 import type { MethodResultMap, RuntimeInfo } from '../../../src/shared/protocol/types'
+import { createClipboardServiceMock } from '../../support/clipboard-service-mock'
 
 function createRuntimeInfo(): RuntimeInfo {
   return {
@@ -21,11 +22,7 @@ function createHandlers() {
   return createBridgeHandlers({
     runtimeInfoService: { getRuntimeInfo: vi.fn(async () => createRuntimeInfo()) },
     externalLinkService: { openExternal: vi.fn(async () => ({ success: true as const })) },
-    clipboardService: {
-      readText: vi.fn(async () => ({ text: '' })),
-      readSelection: vi.fn(async () => ({ text: '' })),
-      writeText: vi.fn(async () => undefined)
-    },
+    clipboardService: createClipboardServiceMock(),
     fileService: {
       readFile: vi.fn(async () => ({ content: 'ok', encoding: 'utf-8' as BufferEncoding }))
     },
@@ -218,11 +215,7 @@ describe('bridge/main/dispatch', () => {
         )
       },
       externalLinkService: { openExternal: vi.fn(async () => ({ success: true as const })) },
-      clipboardService: {
-        readText: vi.fn(async () => ({ text: '' })),
-        readSelection: vi.fn(async () => ({ text: '' })),
-        writeText: vi.fn(async () => undefined)
-      },
+      clipboardService: createClipboardServiceMock(),
       fileService: {
         readFile: vi.fn(async () => ({ content: '', encoding: 'utf-8' as BufferEncoding }))
       },

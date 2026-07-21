@@ -507,6 +507,22 @@ export function defineConfig(options: { outDir?: string } = {}): UserConfig {
       treeshake: true,
       css: { minify: true },
       exports: { devExports: true },
+      /**
+       * Force a single-file bundle. The host loader is chunk-aware (it
+       * walks sibling `dist-*.js` / `web-*.js` / `electron-*.js` chunks
+       * and rewrites each relative import into the dep's blob URL), but
+       * the v3 contract is a single `dist/synra/index.js` — any plugin
+       * whose dynamic `import(...)` calls produce a chunk graph forces
+       * the host to spin up one blob per chunk and rewrite relative
+       * paths on every page mount, which the loader does support but
+       * the v3 helper doesn't want. `codeSplitting: false` inlines every
+       * dynamic import into the entry (equivalent to the deprecated
+       * `inlineDynamicImports: true`); the single-entry shape is a
+       * documented requirement of that flag.
+       */
+      outputOptions: {
+        codeSplitting: false
+      },
       deps: {
         // Force-inline every node_modules dep EXCEPT `vue`. `vue` stays
         // as a bare specifier so the host's importmap can redirect

@@ -1,8 +1,8 @@
 import {
   BRIDGE_PROTOCOL_VERSION,
-  BRIDGE_SUPPORTED_PROTOCOL_VERSIONS
-} from '../../shared/protocol/constants'
-import type { RuntimeInfo } from '../../shared/protocol/types'
+  BRIDGE_SUPPORTED_PROTOCOL_VERSIONS,
+  type RuntimeInfo
+} from '@synra/bridge-schema'
 import { pickPrimarySourceHostIp } from './device-discovery/core/network'
 
 export type RuntimeInfoServiceOptions = {

@@ -5,10 +5,11 @@ import { createLoopbackTransportPair } from '../../../../transport-core/src/inde
 import { createBridgeHandlers } from '../../../src/bridge/main/handlers'
 import { createMainDispatcher } from '../../../src/bridge/main/dispatch'
 import { createOpenUrlRuntimeFixturePlugin } from '../../support/open-url-runtime-fixture.plugin'
+import { createClipboardServiceMock } from '../../support/clipboard-service-mock'
 import { createPluginCatalogService } from '../../../src/host/services/plugin-catalog.service'
 import { createPluginRuntimeService } from '../../../src/host/services/plugin-runtime.service'
 import { createRuntimeInfoService } from '../../../src/host/services/runtime-info.service'
-import { BRIDGE_METHODS, BRIDGE_PROTOCOL_VERSION } from '../../../src/shared/protocol/constants'
+import { BRIDGE_METHODS, BRIDGE_PROTOCOL_VERSION } from '@synra/bridge-schema'
 import type { MethodResultMap } from '../../../src/shared/protocol/types'
 import type { RuntimeExecuteOptions } from '../../../src/shared/protocol/types'
 
@@ -57,11 +58,7 @@ describe('bridge/main runtime e2e flow', () => {
     const handlers = createBridgeHandlers({
       runtimeInfoService: createRuntimeInfoService(),
       externalLinkService: { openExternal },
-      clipboardService: {
-        readText: vi.fn(async () => ({ text: '' })),
-        readSelection: vi.fn(async () => ({ text: '' })),
-        writeText: vi.fn(async () => undefined)
-      },
+      clipboardService: createClipboardServiceMock(),
       fileService: {
         readFile: vi.fn(async () => ({ content: '', encoding: 'utf-8' as BufferEncoding }))
       },
@@ -247,11 +244,7 @@ describe('bridge/main runtime e2e flow', () => {
     const handlers = createBridgeHandlers({
       runtimeInfoService: createRuntimeInfoService(),
       externalLinkService: { openExternal },
-      clipboardService: {
-        readText: vi.fn(async () => ({ text: '' })),
-        readSelection: vi.fn(async () => ({ text: '' })),
-        writeText: vi.fn(async () => undefined)
-      },
+      clipboardService: createClipboardServiceMock(),
       fileService: {
         readFile: vi.fn(async () => ({ content: '', encoding: 'utf-8' as BufferEncoding }))
       },
